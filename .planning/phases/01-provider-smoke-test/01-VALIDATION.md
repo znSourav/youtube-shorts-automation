@@ -1,8 +1,8 @@
 ---
 phase: "01"
 slug: "provider-smoke-test"
-status: draft
-nyquist_compliant: false
+status: planned
+nyquist_compliant: true
 wave_0_complete: false
 created: "2026-09-12"
 ---
@@ -36,14 +36,19 @@ created: "2026-09-12"
 
 ## Per-Task Verification Map
 
-Phase 1 carries no formal requirement IDs (technical spike). Its four roadmap success criteria stand in for requirement IDs here; Task ID/Wave columns are filled in once `/gsd-plan-phase` produces `01-PLAN.md`.
+Phase 1 carries no formal requirement IDs (technical spike). Its four roadmap success criteria stand in for requirement IDs here. Task ID/Wave columns filled in by `/gsd-plan-phase` on 2026-09-12 against the four plans it produced.
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | 01 | TBD | SC-1 (image produced, viewable) | — | Script writes a non-empty PNG to `storage/_smoketest/` | smoke | script asserts `fs.statSync(path).size > 0`, operator opens file manually | ❌ W0 | ⬜ pending |
-| TBD | 01 | TBD | SC-2 (image animated to playable MP4) | — | Script writes a non-empty MP4, image bytes fed forward from SC-1 | smoke | script asserts file size > 0 and video-container magic bytes; operator plays manually | ❌ W0 | ⬜ pending |
-| TBD | 01 | TBD | SC-3 (real per-call cost logged) | — | Script prints a cost line after each call | smoke | `node --env-file=.env.local src/scripts/smoke-test.ts` — read stdout | ❌ W0 | ⬜ pending |
-| TBD | 01 | TBD | SC-4 (provider errors surface clearly) | T-01-01 (API key leak) | Script classifies `promptFeedback`/`finishReason`/`raiMediaFilteredReasons` before declaring success or failure | smoke | same script/run — validated by the D-01 child-scene probe call itself | ❌ W0 | ⬜ pending |
+| T1 (scaffold) | 01-01 | 1 | — (Wave 0 gap) | T-01-01 (API key leak), T-01-03 | `.gitignore` excludes `.env.local` before the key file can exist; the spend ledger is deliberately tracked | unit/static | `git check-ignore -q .env.local && ! git check-ignore -q storage/_smoketest/spend-ledger.json` | ❌ W0 | ⬜ pending |
+| T2 (legitimacy), T3 (install) | 01-01 | 1 | — (Wave 0 gap) | T-01-SC, T-01-06 | `[SUS]` verdict cleared by a blocking-human checkpoint before install; EOL SDK asserted absent | unit/static | `node -e "…import('@google/genai')…"` asserting the `GoogleGenAI` export and a 2.x version | ❌ W0 | ⬜ pending |
+| T1 (ledger) | 01-02 | 2 | D-04/D-05 ceiling (pre-req for SC-3) | T-01-02, T-01-04 | Refuses a call crossing $3.00; a corrupted ledger halts rather than reading as $0 | unit | `node --test src/lib/spend-ledger.test.ts` | ❌ W0 | ⬜ pending |
+| T2 (redacting logger) | 01-02 | 2 | pre-req for SC-4 | T-01-01 | Base64 payloads and key/token/authorization fields never reach a log | unit | `node --test src/lib/log-response.test.ts` | ❌ W0 | ⬜ pending |
+| T2 (tracer) | 01-03 | 3 | SC-1 (image produced, viewable) | T-01-01 | Script writes a non-empty PNG to `storage/_smoketest/` | smoke | `node --env-file=.env.local src/scripts/smoke-test.ts --probe=generic --image-only`; then `fs.statSync(path).size > 0`; operator opens the file manually | ❌ W0 | ⬜ pending |
+| T2 (tracer) | 01-03 | 3 | SC-2 (image animated to playable MP4) | T-01-07, T-01-08 | Script writes a non-empty MP4, image bytes fed forward from SC-1 | smoke | `node --env-file=.env.local src/scripts/smoke-test.ts --probe=generic`; then a `node -e` check asserting size > 10000 B and `ftyp` at bytes 4-8; operator plays it manually | ❌ W0 | ⬜ pending |
+| T2 (tracer) | 01-03 | 3 | SC-3 (real per-call cost logged) | T-01-02 | Script prints an `IMAGE COST $` / `VIDEO COST $` line after each call and appends a ledger entry | smoke | same run — read stdout and `storage/_smoketest/generic-run.log` | ❌ W0 | ⬜ pending |
+| T1 (child probe) | 01-04 | 4 | SC-4 (provider errors surface clearly) | T-01-02 (retry path) | Script classifies `promptFeedback`/`finishReason`/`raiMediaFilteredReasons` before declaring success or failure; a Veo block is retried exactly once through the same ceiling gate | smoke | `node --env-file=.env.local src/scripts/smoke-test.ts --probe=childscene`; then a `node -e` check asserting one `CHILD PROBE:` outcome line with a non-empty reason where blocked | ❌ W0 | ⬜ pending |
+| T2 (reconciliation) | 01-04 | 4 | SC-3 (pricing established, not assumed) | T-01-10 | Hardcoded price constants reconciled against observed `usageMetadata`; unresolved is an allowed, explicit answer | unit/static | `node src/scripts/smoke-test.ts --report` (no key, no network); then a `node -e` ledger-integrity check asserting the phase total is at or below 3.00 | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -70,11 +75,11 @@ Phase 1 carries no formal requirement IDs (technical spike). Its four roadmap su
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 300s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies — 18 automated commands across 4 plans; `check verify-failure-directions 1` reports 0 blockers, 0 warnings
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify — the only tasks without one are the two checkpoints (01-01 T2, 01-03 T1), each adjacent to an automated task
+- [x] Wave 0 covers all MISSING references — `package.json`/`tsconfig.json`/`.gitignore`/`.env.local.example` in plan 01-01, `src/scripts/smoke-test.ts` in plan 01-03
+- [x] No watch-mode flags
+- [x] Feedback latency < 300s — the dominant cost is Veo polling, bounded at a 10-minute ceiling in plan 01-03; the 4-second tracer clip is the cheapest real proof available and every non-paid check (`node --test`, `npm run typecheck`, `--report`) runs in seconds
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** planned 2026-09-12 — `wave_0_complete` stays false until the plans execute and the files exist.

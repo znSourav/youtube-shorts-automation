@@ -31,7 +31,13 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. That same image is submitted to Veo 3.1 Lite and produces one playable local MP4 clip (9:16, 720p) via image-to-video.
   3. The actual/estimated cost of both calls is printed or logged, so real per-call pricing is known before the budget system is built on assumptions.
   4. A provider error (auth failure, rate limit, malformed response) surfaces as a clear message in the output, not a silent hang or an uncaught crash.
-**Plans**: TBD
+**Plans:** 4 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Project scaffold, secrets hygiene, and gated SDK install
+- [ ] 01-02-PLAN.md — $3.00 spend-ceiling ledger and secret-safe response logger (no paid calls)
+- [ ] 01-03-PLAN.md — Tracer: one generic prompt through image → video, end to end
+- [ ] 01-04-PLAN.md — D-01 child-protagonist safety probe and empirical cost reconciliation
 
 ### Phase 2: Core Generation Pipeline
 **Goal**: A wife-typed idea flows automatically through the Story Director to a full set of local scene images and video clips for one story, proving the entire creative chain works before persistence, uniqueness checking, or polish are added.
@@ -106,7 +112,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Provider Smoke Test | 0/TBD | Not started | - |
+| 1. Provider Smoke Test | 0/4 | Planned | - |
 | 2. Core Generation Pipeline | 0/TBD | Not started | - |
 | 3. Persistence & Structural Uniqueness | 0/TBD | Not started | - |
 | 4. Wife-Facing Review & Approval Flow | 0/TBD | Not started | - |
