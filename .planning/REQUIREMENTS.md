@@ -115,8 +115,46 @@ Explicitly excluded from this project, not just this milestone. Documented to pr
 
 ## Traceability
 
-Populated during roadmap creation.
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| STARTUP-01 | Phase 2 | Pending |
+| STARTUP-02 | Phase 6 | Pending |
+| STORY-01 | Phase 2 | Pending |
+| STORY-02 | Phase 2 | Pending |
+| STORY-03 | Phase 2 | Pending |
+| STORY-04 | Phase 2 | Pending |
+| STORY-05 | Phase 2 | Pending |
+| UNIQUE-01 | Phase 3 | Pending |
+| UNIQUE-02 | Phase 3 | Pending |
+| UNIQUE-03 | Phase 3 | Pending |
+| SCENE-01 | Phase 2 | Pending |
+| SCENE-02 | Phase 2 | Pending |
+| IMAGE-01 | Phase 3 | Pending |
+| IMAGE-02 | Phase 4 | Pending |
+| IMAGE-03 | Phase 3 | Pending |
+| APPROVAL-01 | Phase 4 | Pending |
+| VIDEO-01 | Phase 2 | Pending |
+| VIDEO-02 | Phase 4 | Pending |
+| VIDEO-03 | Phase 3 | Pending (soft — documented limitation acceptable if time-constrained) |
+| VIDEO-04 | Phase 4 | Pending |
+| BUDGET-01 | Phase 5 | Pending |
+| BUDGET-02 | Phase 5 | Pending |
+| BUDGET-03 | Phase 5 | Pending |
+| BUDGET-04 | Phase 5 | Pending |
+| BUDGET-05 | Phase 5 | Pending |
+| RELIABILITY-01 | Phase 6 | Pending |
+| SECURITY-01 | Phase 6 | Pending |
+| PERSIST-01 | Phase 3 | Pending |
+| LIBRARY-01 | Phase 4 | Pending (soft — documented limitation acceptable if time-constrained) |
+| OUTPUT-01 | Phase 4 | Pending |
+| OUTPUT-02 | Phase 6 | Pending |
+| OUTPUT-03 | Phase 4 | Pending |
+| UI-01 | Phase 4 | Pending |
+
+**Coverage:** 33/33 v1 requirements mapped. No orphans, no duplicates.
+
+Phase 1 (Provider Smoke Test) intentionally carries no requirement mappings — it is a technical spike that de-risks the AI provider integrations before any wife-facing capability is built on top of them, per explicit project sequencing guidance.
 
 ---
 *Requirements defined: 2026-09-12*
-*Last updated: 2026-09-12 after initial definition*
+*Last updated: 2026-09-12 after roadmap creation*
