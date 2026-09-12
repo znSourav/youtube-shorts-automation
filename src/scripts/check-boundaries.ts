@@ -5,9 +5,15 @@
 // 1. No file under src/components/ imports a provider module or the spend
 //    ledger -- this is what keeps GEMINI_API_KEY out of the client bundle
 //    (T-02-01).
-// 2. Every file under src/app/actions/ reaches a provider only by importing
-//    from src/core/, never directly -- keeps runStoryDirector's ceiling
-//    gate as the single dispatch point (T-02-04).
+// 2. Every file under src/app/actions/ reaches the LLM provider only by
+//    importing from src/core/, never directly -- keeps runStoryDirector's
+//    ceiling gate as the LLM's single dispatch point (T-02-04). Image and
+//    video providers are deliberately NOT included in this invariant: per
+//    02-RESEARCH.md's Architecture Patterns (Pattern 3) and this phase's own
+//    plan, a Server Action IS the single call site for generateImage/
+//    generateVideo (one scene, sequentially, no fan-out), so the ceiling
+//    gate living directly inside that same action file is already the
+//    single dispatch point -- there is no second call site to guard against.
 //
 // Run with: node src/scripts/check-boundaries.ts
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -73,19 +79,19 @@ function main(): void {
   for (const file of actionFiles) {
     const specifiers = importSpecifiers(readFileSync(file, "utf8"));
     for (const spec of specifiers) {
-      if (spec.includes("/providers/")) {
+      if (spec.includes("/providers/llm/")) {
         offenders2.push(`${file} -> "${spec}"`);
       }
     }
   }
   if (offenders2.length > 0) {
     failed = true;
-    console.log("BOUNDARY CHECK FAILED (invariant 2 -- src/app/actions/ must reach providers only through src/core/):");
+    console.log("BOUNDARY CHECK FAILED (invariant 2 -- src/app/actions/ must reach the LLM provider only through src/core/):");
     for (const offender of offenders2) {
       console.log(`  ${offender}`);
     }
   } else {
-    console.log("OK: src/app/actions/ files reach providers only through src/core/");
+    console.log("OK: src/app/actions/ files reach the LLM provider only through src/core/");
   }
 
   if (failed) {
