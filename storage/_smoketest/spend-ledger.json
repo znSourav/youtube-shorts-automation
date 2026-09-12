@@ -386,6 +386,167 @@
       },
       "billed": false,
       "at": "2026-09-12T19:12:10.206Z"
+    },
+    {
+      "call": "story:5-scene",
+      "model": "gemini-3.1-pro-preview",
+      "estimatedUsd": 0.05,
+      "usageMetadata": {
+        "promptTokenCount": 538,
+        "candidatesTokenCount": 1790,
+        "totalTokenCount": 6614,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 538
+          }
+        ],
+        "thoughtsTokenCount": 4286,
+        "serviceTier": "standard"
+      },
+      "billed": true,
+      "at": "2026-09-12T19:40:51.056Z"
+    },
+    {
+      "call": "scene-image:story-1789242051064-qntwcm:1",
+      "model": "gemini-3.1-flash-image",
+      "estimatedUsd": 0.067,
+      "usageMetadata": {
+        "promptTokenCount": 259,
+        "candidatesTokenCount": 1560,
+        "totalTokenCount": 1819,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 259
+          }
+        ],
+        "candidatesTokensDetails": [
+          {
+            "modality": "IMAGE",
+            "tokenCount": 1120
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "billed": true,
+      "at": "2026-09-12T19:41:00.913Z"
+    },
+    {
+      "call": "scene-image:story-1789242051064-qntwcm:2",
+      "model": "gemini-3.1-flash-image",
+      "estimatedUsd": 0.067,
+      "usageMetadata": {
+        "promptTokenCount": 250,
+        "candidatesTokenCount": 1364,
+        "totalTokenCount": 1614,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 250
+          }
+        ],
+        "candidatesTokensDetails": [
+          {
+            "modality": "IMAGE",
+            "tokenCount": 1120
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "billed": true,
+      "at": "2026-09-12T19:41:09.658Z"
+    },
+    {
+      "call": "scene-image:story-1789242051064-qntwcm:3",
+      "model": "gemini-3.1-flash-image",
+      "estimatedUsd": 0.067,
+      "usageMetadata": {
+        "promptTokenCount": 248,
+        "candidatesTokenCount": 1588,
+        "totalTokenCount": 1836,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 248
+          }
+        ],
+        "candidatesTokensDetails": [
+          {
+            "modality": "IMAGE",
+            "tokenCount": 1120
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "billed": true,
+      "at": "2026-09-12T19:41:19.404Z"
+    },
+    {
+      "call": "scene-image:story-1789242051064-qntwcm:4",
+      "model": "gemini-3.1-flash-image",
+      "estimatedUsd": 0.067,
+      "usageMetadata": {
+        "promptTokenCount": 247,
+        "candidatesTokenCount": 1421,
+        "totalTokenCount": 1668,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 247
+          }
+        ],
+        "candidatesTokensDetails": [
+          {
+            "modality": "IMAGE",
+            "tokenCount": 1120
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "billed": true,
+      "at": "2026-09-12T19:41:28.826Z"
+    },
+    {
+      "call": "scene-image:story-1789242051064-qntwcm:5",
+      "model": "gemini-3.1-flash-image",
+      "estimatedUsd": 0.067,
+      "usageMetadata": {
+        "promptTokenCount": 244,
+        "candidatesTokenCount": 1556,
+        "totalTokenCount": 1800,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 244
+          }
+        ],
+        "candidatesTokensDetails": [
+          {
+            "modality": "IMAGE",
+            "tokenCount": 1120
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "billed": true,
+      "at": "2026-09-12T19:41:38.496Z"
+    },
+    {
+      "call": "scene-video:story-1789242051064-qntwcm:1",
+      "model": "veo-3.1-lite-generate-preview",
+      "estimatedUsd": 0.30000000000000004,
+      "usageMetadata": {
+        "generatedVideos": [
+          {
+            "video": {
+              "uri": "https://generativelanguage.googleapis.com/v1beta/files/dun9v9ibsg6c:download?alt=media"
+            }
+          }
+        ]
+      },
+      "billed": true,
+      "at": "2026-09-12T19:42:24.852Z"
     }
   ]
 }

@@ -101,7 +101,7 @@ coverage:
 
 duration: ~55min
 completed: 2026-09-12
-status: halted
+status: complete
 ---
 
 # Phase 2 Plan 4: Single-Scene Video Generation + Bangla/Banglish Proof Run Summary
@@ -219,6 +219,26 @@ None -- no new external service configuration required.
 - `storage/stories/story-1789237907876-npep3b/scenes/01/video.mp4` — FOUND (1559179 bytes, ftyp-verified)
 - Commit `7738012` — FOUND in `git log --oneline --all`
 - Commit `a5f4c15` — FOUND in `git log --oneline --all`
+
+---
+
+## Addendum (Quick Task 260913-4rr)
+
+D-04's full-scale (5-scene) proof-run gap identified above was closed in quick task
+`260913-4rr-complete-phase-2-s-d-04-full-scale-proof`, executed 2026-09-12/13. Following the
+user-approved, budget-capped retry plan (story-only-first, continue only on success), a fresh
+D-05-compliant idea (an old fisherman, Korim, returning a lost paper boat) was run at full scale:
+
+- The Bangla-script story call **succeeded on the first attempt** (no retry needed) — `finishReason: STOP`, title "কাগজের নৌকা", 5 scenes (numbered 1-5, no gaps/duplicates), durations 6/4/8/4/6 (varied, §14 confirmed at full scale).
+- All 5 scene images generated successfully (`IMAGES DONE: 5/5`); visual review confirmed the same elderly fisherman character (white hair/beard, cream collarless shirt with breast pocket, blue-grey lungi, barefoot) across every image — a positive SCENE-02 finding at full 5-scene scale.
+- The Director-chosen 6-second scene (scene 1) was animated into a real, playable, ftyp-verified MP4 (`ok=true`, 2,360,549 bytes, 6 seconds) at `storage/stories/story-1789242051064-qntwcm/scenes/01/video.mp4`.
+- D-04's `must_haves.truths` item is now genuinely met: a real 5-scene story, 5 real scene images, and 1 real playable video were produced end to end on a real paid run, with no fabricated numbers.
+
+Full evidence (idea text, usageMetadata, ledger rows, character-consistency judgment, MP4 container check) is recorded in `.planning/phases/02-core-generation-pipeline/02-PROOF-RUN.md` §3 ("Full-scale run details (D-04) — obtained on retry, see finding below") and the updated ledger table in §6.
+
+This run also sharpens the Bangla-script-vs-Banglish hypothesis carried forward above: this THIRD idea's Bangla-script rendering did not block at all (unlike Run B's 3/3 blocks on the grandmother's-bangle idea), suggesting Run B's specific wording — rather than Bangla script itself or full-scale prompt length — was the more likely trigger. See `02-PROOF-RUN.md` §3's "Interpretation" for detail.
+
+**Ledger after this quick task: $2.9370 of $3.00 `DEV_CEILING_USD`. Remaining headroom: $0.0630.** This is very tight — any further Phase 2-4 development against this same dev ledger should budget with extreme care, since it is now nearly exhausted.
 
 ---
 *Phase: 02-core-generation-pipeline*

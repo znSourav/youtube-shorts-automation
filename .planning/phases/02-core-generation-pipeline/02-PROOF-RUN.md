@@ -99,13 +99,75 @@ pass — the block is reported as-is.
 **Consequence:** D-04's full-scale (5-6 scene) real proof-run could not be completed in this
 session on this idea. This is carried forward — see §8.
 
-## 3. Full-scale run details (D-04) — not obtained
+## 3. Full-scale run details (D-04) — obtained on retry, see finding below
 
-Not applicable: Run B never produced a validated story, so there is no real scene count, no real
-per-scene duration list, no real `finishReason: STOP`, and no real `usageMetadata` for a
-successful 5-scene generation to report here. This section is intentionally left without invented
-numbers, per the plan's own instruction not to make a criterion pass by changing the test or
-fabricating a result.
+Recorded per quick task 260913-4rr, executed 2026-09-12/13 against a fresh, D-05-compliant idea
+(an old fisherman named Korim returning a lost paper boat), genuinely unrelated in protagonist,
+setting, central object, and emotional arc to Run A/Run B's grandmother's-bangle idea and to every
+other idea tested in Phase 1/2. The story-only-first / stop-on-block / continue-on-success budget
+discipline from quick task 260913-4rr's own plan was followed: the story call was dispatched alone
+first (chained automatically, per `story-probe.ts`'s new `--video` flag, into images and video on
+success), with the run authorized to continue only because the story call itself cleared the
+safety classifier.
+
+**Bangla script idea (matching §1's format):**
+> বৃদ্ধ জেলে করিম নদীর তীরে একটি ছোট কাগজের নৌকা খুঁজে পান যার গায়ে একটি শিশুর আঁকা ছবি আছে। সে সারা
+> বিকেল গ্রামে খোঁজ করেন কোন শিশুটি নৌকাটি বানিয়েছে, যাতে সেটি তাকে ফিরিয়ে দিতে পারেন।
+
+**Character description:** "An elderly fisherman with a weathered face, a grey stubble beard,
+wearing a faded blue lungi and a simple cotton vest, standing by a wooden boat."
+
+### Run C — Bangla script, 5 scenes, full scale (D-04) — SUCCEEDED on first attempt
+
+Unlike Run B's three consecutive prompt-feedback blocks, this idea's Bangla-script rendering
+cleared the safety classifier on the **first** real attempt — no retry was needed at any stage.
+
+- **Story ID:** `story-1789242051064-qntwcm`
+- **Title:** "কাগজের নৌকা" ("The Paper Boat")
+- **`finishReason`:** `STOP` (from the raw `generateContent` response, story call)
+- **Model / tier:** `gemini-3.1-pro-preview` (primary Preview tier, `fallbackUsed: false` — the
+  403/404 GA-fallback path in `src/providers/llm/gemini.ts` was never exercised)
+- **Scenes requested / received:** 5 / 5, numbered 1, 2, 3, 4, 5 — no gaps or duplicates
+  (`validateScenePlan` passed)
+- **Scene durations:** 6, 4, 8, 4, 6 — varied, not defaulted to the maximum (§14 confirmed
+  operational on a full 5-scene run, not just the 3-scene runs in §2)
+- **`usageMetadata` (story call):**
+  `{"promptTokenCount":538,"candidatesTokenCount":1790,"totalTokenCount":6614,"promptTokensDetails":[{"modality":"TEXT","tokenCount":538}],"thoughtsTokenCount":4286,"serviceTier":"standard"}`
+- **Premise:** এক বৃদ্ধ জেলে একটি শিশুর আঁকা কাগজের নৌকা খুঁজে পেয়ে তার মালিককে খুঁজতে বের হন।
+- **Theme:** স্নেহ, নির্দোষ আনন্দ এবং প্রজন্মের মেলবন্ধন
+- **Emotional arc:** কৌতূহল থেকে নস্টালজিয়া এবং শেষে এক অদ্ভুত প্রশান্তি
+- **Ending:** শিশুটিকে তার কাগজের নৌকা ফিরিয়ে দিয়ে করিম এক অদ্ভুত আত্মতৃপ্তি নিয়ে নিজের নৌকায় ফিরে যান।
+
+**Scene images:** all 5 generated (`IMAGES DONE: 5/5`), sizes 586437–845860 bytes, at
+`storage/stories/story-1789242051064-qntwcm/scenes/0{1..5}/image.jpg`.
+
+**Character-consistency judgment across the 5 images (SCENE-02):** the same elderly man appears in
+every scene — same short white/grey hair, same short grey beard and mustache, same weathered
+wrinkled face and warm smile, same off-white collarless short-sleeve shirt with a breast pocket,
+same blue-grey lungi, barefoot throughout — across five independently-generated images spanning
+riverbank, village-path, doorway, and paper-boat-in-hand compositions. Positive finding, consistent
+with 02-03-SUMMARY.md's own earlier positive finding on a different idea.
+
+**Video scene chosen:** scene 1, whose Director-assigned `duration` was exactly 6 seconds — the
+plan's preferred target matched on the first try, no scene_number fallback was needed.
+
+- **`VIDEO:` line:** `scene=1 ok=true path=storage/stories/story-1789242051064-qntwcm/scenes/01/video.mp4 bytes=2360549 seconds=6`
+- **MP4 container check:** `MP4 CONTAINER OK size=2360549` (ftyp box present at byte offset 4,
+  size well above the 1000-byte floor)
+- Veo operation completed after 4 poll iterations (~40s), `generatedVideos[0].video.uri` present,
+  no `raiMediaFilteredCount`, no `operation.error` — a clean, unblocked video dispatch.
+
+**Cost of this run:** story $0.0500 (one attempt, no retry) + 5×$0.0670 images = $0.3350 + one
+6-second 720p video $0.3000 = **$0.6850** total. See §6 for the updated full ledger.
+
+**Interpretation:** this idea's Bangla-script rendering did NOT reproduce Run B's block. Taken
+together with Run B (identical script, different idea, 3/3 blocked at prompt-feedback) and Run A
+(a third idea, Banglish, blocked once then succeeded), the evidence across all three runs now
+points toward Run B's specific wording (a girl, alone, "lukiye lukiye"/secretly, handling an
+inherited family object) as the more likely trigger, rather than Bangla script itself, or
+full-scale (5-scene) prompt length, being inherently block-prone. D-04's full-scale pipeline
+validation is now genuinely met: a real 5-scene story, 5 real scene images, and 1 real playable
+video were produced end to end on a real paid run.
 
 ## 4. Preview-tier model vs GA fallback (Assumption A1)
 
@@ -150,15 +212,30 @@ Full ledger as of this proof run (`node src/scripts/smoke-test.ts --report`, no 
 | **story:5-scene** | gemini-3.1-pro-preview | **$0.0500** | **02-04 Task 2 Run B, attempt 1 (blocked)** |
 | **story:5-scene** | gemini-3.1-pro-preview | **$0.0500** | **02-04 Task 2 Run B, attempt 2 (blocked)** |
 | **story:5-scene** | gemini-3.1-pro-preview | **$0.0500** | **02-04 Task 2 Run B, attempt 3 (blocked)** |
+| **story:5-scene** | gemini-3.1-pro-preview | **$0.0500** | **Quick 260913-4rr Task 2, Run C, attempt 1 (succeeded, no retry needed)** |
+| **scene-image:story-...qntwcm:1** | gemini-3.1-flash-image | **$0.0670** | **Quick 260913-4rr Task 2, Run C** |
+| **scene-image:story-...qntwcm:2** | gemini-3.1-flash-image | **$0.0670** | **Quick 260913-4rr Task 2, Run C** |
+| **scene-image:story-...qntwcm:3** | gemini-3.1-flash-image | **$0.0670** | **Quick 260913-4rr Task 2, Run C** |
+| **scene-image:story-...qntwcm:4** | gemini-3.1-flash-image | **$0.0670** | **Quick 260913-4rr Task 2, Run C** |
+| **scene-image:story-...qntwcm:5** | gemini-3.1-flash-image | **$0.0670** | **Quick 260913-4rr Task 2, Run C** |
+| **scene-video:story-...qntwcm:1** | veo-3.1-lite-generate-preview | **$0.3000** | **Quick 260913-4rr Task 2, Run C (real, 6s, ok=true)** |
 
-**TOTAL LEDGER: $2.2520**
-**REMAINING HEADROOM: $0.7480 of $3.00 ceiling**
+**TOTAL LEDGER: $2.9370**
+**REMAINING HEADROOM: $0.0630 of $3.00 ceiling**
 
 Plan 02-04's own spend: $2.2520 − $1.6020 (ledger at the start of this plan) = **$0.6500**, against
 a planned ~$0.94 for the plan. The plan's total dollar spend landed *under* its own estimate
 overall — the money that would have gone to Run B's images ($0.335) and 6-second video ($0.30)
 was never spent, because Run B never produced a valid story to spend it on. Task 1 alone spent
 $0.20 more than its own line-item estimate (see the plan's SUMMARY.md Deviations section for why).
+
+Quick task 260913-4rr's own spend: $2.9370 − $2.2520 (ledger at the start of this quick task) =
+**$0.6850** — the story call succeeded on the first attempt, so the full story + 5 images + 1
+video chain was dispatched, landing very close to (but not exceeding) the $3.00 `DEV_CEILING_USD`.
+Remaining headroom after this quick task is **$0.0630** — enough for one more small probe call but
+not a full scene-image or scene-video dispatch; any further Phase 2-4 development against this
+ledger should budget carefully or be treated as informational until Phase 5's real budget system
+replaces this dev ceiling.
 
 ## 7. Every validator/zod/provider block this session, verbatim
 
