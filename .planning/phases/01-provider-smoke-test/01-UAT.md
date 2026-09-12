@@ -1,9 +1,9 @@
 ---
-status: testing
+status: complete
 phase: 01-provider-smoke-test
 source: [01-VERIFICATION.md]
 started: 2026-09-12T14:35:00Z
-updated: 2026-09-12T13:11:52Z
+updated: 2026-09-12T13:14:48.838Z
 ---
 
 ## Current Test
@@ -22,7 +22,7 @@ result: PASS — user confirmed working correctly.
 
 ### 2. Play storage/_smoketest/scene-childscene.mp4 in a media player
 expected: ~8-second portrait (9:16) clip of a hand-painted-style girl in a glowing garden, with visible motion, matching the "Soft hand-painted 2D" style.
-result: ISSUE — container/playback mechanics are fine, but a real motion-quality defect was found: when the girl's head turns backward, her torso stays facing forward — a body-horror-looking kinematic disconnect. User's exact words: "the head is on the back but the body is on the same front!!" See Gaps.
+result: RESOLVED — container/playback mechanics were fine from the start; a real motion-quality defect was found (when the girl's head turns backward, her torso stays facing forward — a body-horror-looking kinematic disconnect; user's exact words: "the head is on the back but the body is on the same front!!"). Root-caused to the motion prompt's vague "looks around" language and closed via quick task 260912-j3x: a conservative-motion follow-up clip (scene-childscene-conservative.mp4) confirmed the artifact does not reproduce when the motion prompt avoids requesting any character pose change. See Gaps > CR-03 for full detail.
 
 ### 3. Judgment call — SC-4's unexercised provider-block-reporting branch
 expected: A decision — accept the current evidence (code is structurally correct, classify-before-parse order verified by reading; the sibling budget-refusal error path was live-verified to print a clear message and exit 2, not hang; no genuine provider block occurred in either real run to exercise this exact branch) as sufficient for a technical-spike phase, or request a deliberate low-cost block-triggering test before Phase 2 relies on this code.
@@ -31,11 +31,13 @@ result: PASS — user accepted current evidence, no forced block test requested.
 ## Summary
 
 total: 3
-passed: 2
-issues: 1
+passed: 3
+issues: 0
 pending: 0
 skipped: 0
 blocked: 0
+
+All 3 items resolved. Item 2's issue (CR-03 motion-coherence finding) was root-caused and empirically closed via a real follow-up probe, not merely accepted — see Gaps > CR-03.
 
 ## Gaps
 
