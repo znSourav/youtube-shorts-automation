@@ -10,7 +10,11 @@ import {
   CeilingExceededError,
 } from "../lib/spend-ledger.ts";
 import { generateImage, IMAGE_PRICE_PER_CALL } from "../providers/image/gemini-image.ts";
-import { generateVideo, VIDEO_PRICE_PER_SECOND } from "../providers/video/veo.ts";
+import {
+  generateVideo,
+  VIDEO_PRICE_PER_SECOND,
+  type GenerateVideoResult,
+} from "../providers/video/veo.ts";
 
 // D-06: throwaway output location, deliberately separate from storage/stories/<id>/.
 const OUTPUT_DIR = "storage/_smoketest";
@@ -27,11 +31,31 @@ const VIDEO_RESOLUTION: "720p" = "720p";
 const VIDEO_DURATION_SECONDS = 4;
 const VIDEO_MODEL_ID = "veo-3.1-lite-generate-preview";
 
-function parseArgs(argv: string[]): { probe: string; imageOnly: boolean } {
+// D-01's second, representative generation (plan 01-04): a real
+// product-shaped scene, drawn from the requester's own example idea
+// (CONTEXT.md <specifics>), in the D-02 "Soft hand-painted 2D" style — not a
+// generic stand-in. The whole point is to probe whether Gemini's and Veo's
+// safety filters false-positive on wholesome children's-story content, since
+// this entire channel is animated stories about child protagonists.
+const CHILD_SCENE_STYLE = "Soft hand-painted 2D";
+const CHILD_SCENE_PROMPT =
+  "A little girl with pigtails kneeling in a lush, colorful garden, looking around hopefully for her " +
+  "lost cat, and discovering the garden is magical: softly glowing flowers, gentle fireflies, warm " +
+  "sunlight filtering through leaves. Wholesome, storybook children's illustration, no text.";
+const CHILD_MOTION_PROMPT =
+  "Gentle camera drift through the magical garden; glowing flowers softly pulse and fireflies drift " +
+  "past while the little girl looks around for her cat.";
+// 8s is deliberately different from the tracer's 4s (plan 01-04 Task 1): the
+// longest duration Veo 3.1 Lite supports at 720p, establishing the
+// worst-case per-clip cost for Phase 5's budget system.
+const CHILD_VIDEO_DURATION_SECONDS = 8;
+
+function parseArgs(argv: string[]): { probe: string; imageOnly: boolean; report: boolean } {
   const probeArg = argv.find((a) => a.startsWith("--probe="));
   const probe = probeArg ? probeArg.slice("--probe=".length) : "all";
   const imageOnly = argv.includes("--image-only");
-  return { probe, imageOnly };
+  const report = argv.includes("--report");
+  return { probe, imageOnly, report };
 }
 
 function formatLogArg(arg: unknown): string {
@@ -204,37 +228,248 @@ async function runGenericProbe(imageOnly: boolean): Promise<number> {
   }
 }
 
-async function main(): Promise<void> {
-  const { probe, imageOnly } = parseArgs(process.argv.slice(2));
+/**
+ * Dispatches a single childscene Veo call (image -> motion), gated behind
+ * checkCeiling() every time it is invoked — including the D-01 retry, so the
+ * retry path can never bypass the D-04 budget gate (T-01-02).
+ */
+async function dispatchChildVideo(
+  imageBytes: Buffer,
+  mimeType: string,
+  attemptLabel: string,
+): Promise<GenerateVideoResult> {
+  const videoEstimate = CHILD_VIDEO_DURATION_SECONDS * VIDEO_PRICE_PER_SECOND[VIDEO_RESOLUTION];
+  checkCeiling(videoEstimate);
 
-  if (probe === "childscene") {
-    console.error(
-      "UNIMPLEMENTED PROBE: --probe=childscene is not implemented in plan 01-03; see plan 01-04.",
+  console.log(
+    `Dispatching childscene video call (${attemptLabel}, resolution=${VIDEO_RESOLUTION}, ` +
+      `duration=${CHILD_VIDEO_DURATION_SECONDS}s, estimate=$${videoEstimate.toFixed(4)})...`,
+  );
+  const result = await generateVideo({
+    imageBytes,
+    mimeType,
+    prompt: CHILD_MOTION_PROMPT,
+    durationSeconds: CHILD_VIDEO_DURATION_SECONDS,
+    resolution: VIDEO_RESOLUTION,
+    aspectRatio: "9:16",
+    outputPath: path.join(OUTPUT_DIR, "scene-childscene.mp4"),
+  });
+
+  recordSpend({
+    call: "childscene-video",
+    model: VIDEO_MODEL_ID,
+    estimatedUsd: result.estimatedUsd,
+    usageMetadata: result.usageMetadata,
+    billed: true,
+    at: new Date().toISOString(),
+  });
+
+  console.log(`VIDEO COST $${result.estimatedUsd.toFixed(4)} (model=${VIDEO_MODEL_ID}, ${attemptLabel})`);
+  return result;
+}
+
+/**
+ * Runs the D-01 representative probe: the "Soft hand-painted 2D" style on a
+ * real, product-shaped child-protagonist scene (CONTEXT.md <specifics>).
+ * Classification follows the same defensive pattern as the generic probe,
+ * but here a classified block is a SUCCESSFUL, reportable probe outcome
+ * (not a bug to investigate) — CONTEXT.md records this as a finding that
+ * would materially affect provider viability for this product. A Veo block
+ * is retried exactly once, through the same checkCeiling() gate as a first
+ * attempt (D-04), per RESEARCH.md Pitfall 3: a single block may be a
+ * documented non-deterministic false positive, not proof of categorical
+ * non-viability.
+ */
+async function runChildsceneProbe(): Promise<number> {
+  try {
+    mkdirSync(OUTPUT_DIR, { recursive: true });
+
+    const imageEstimate = IMAGE_PRICE_PER_CALL[IMAGE_MODEL];
+    checkCeiling(imageEstimate);
+
+    console.log(
+      `Dispatching childscene image call (model=${IMAGE_MODEL}, style="${CHILD_SCENE_STYLE}", ` +
+        `estimate=$${imageEstimate.toFixed(4)})...`,
     );
-    process.exitCode = 1;
+    const imageResult = await generateImage({
+      prompt: CHILD_SCENE_PROMPT,
+      aspectRatio: "9:16",
+      model: IMAGE_MODEL,
+      style: CHILD_SCENE_STYLE,
+    });
+
+    recordSpend({
+      call: "childscene-image",
+      model: imageResult.modelUsed,
+      estimatedUsd: imageResult.estimatedUsd,
+      usageMetadata: imageResult.usageMetadata,
+      billed: true,
+      at: new Date().toISOString(),
+    });
+
+    console.log(`IMAGE COST $${imageResult.estimatedUsd.toFixed(4)} (model=${imageResult.modelUsed})`);
+
+    if (imageResult.blocked) {
+      // A classified block IS the probe's successful outcome — print the
+      // provider's own reason text verbatim, never a generic "no output"
+      // message (RESEARCH.md Pitfall 2), and never paraphrase it.
+      console.log(
+        `CHILD PROBE: BLOCKED reason=${imageResult.block?.reason} (image, stage=${imageResult.block?.stage})`,
+      );
+      const ledgerAfterImage = loadLedger();
+      console.log(`TOTAL THIS RUN $${imageResult.estimatedUsd.toFixed(4)}`);
+      console.log(`LEDGER TOTAL $${totalSpentUsd(ledgerAfterImage).toFixed(4)}`);
+      return 0;
+    }
+
+    if (!imageResult.bytes || imageResult.bytes.length === 0) {
+      console.error("IMAGE ERROR: no bytes returned and the call was not classified as blocked.");
+      return 1;
+    }
+
+    console.log("CHILD PROBE: PASS (image)");
+
+    const pngPath = path.join(OUTPUT_DIR, "scene-childscene.png");
+    writeFileSync(pngPath, imageResult.bytes);
+    const pngStat = statSync(pngPath);
+    if (pngStat.size === 0) {
+      console.error("IMAGE ERROR: written PNG is zero-length.");
+      return 1;
+    }
+    console.log(`Wrote ${pngPath} (${pngStat.size} bytes)`);
+
+    // D-03-style guard: Veo is unreachable unless a real image was written
+    // to disk and classified good above.
+    let videoResult = await dispatchChildVideo(
+      imageResult.bytes,
+      imageResult.mimeType ?? "image/png",
+      "attempt 1",
+    );
+    let videoCostTotal = videoResult.estimatedUsd;
+    let isRetry = false;
+
+    if (videoResult.timedOut) {
+      console.error(
+        `VIDEO TIMEOUT: operation ${videoResult.operationName ?? "(unnamed)"} did not complete within ` +
+          "10 minutes.",
+      );
+      return 1;
+    }
+
+    if (videoResult.blocked) {
+      console.log(`CHILD PROBE: BLOCKED reason=${videoResult.blockReason} (video, attempt 1)`);
+
+      // RESEARCH.md Pitfall 3: a real, closed-as-not-planned googleapis/js-genai
+      // issue (#1272) documents an identical prompt/image succeeding on a
+      // subsequent retry — one block is not proof of categorical
+      // non-viability. Retry exactly once; do not loop.
+      isRetry = true;
+      videoResult = await dispatchChildVideo(
+        imageResult.bytes,
+        imageResult.mimeType ?? "image/png",
+        "retry",
+      );
+      videoCostTotal += videoResult.estimatedUsd;
+
+      if (videoResult.timedOut) {
+        console.error(
+          `VIDEO TIMEOUT (retry): operation ${videoResult.operationName ?? "(unnamed)"} did not complete ` +
+            "within 10 minutes.",
+        );
+        return 1;
+      }
+    }
+
+    const total = imageResult.estimatedUsd + videoCostTotal;
+    const ledgerFinal = loadLedger();
+
+    if (videoResult.blocked) {
+      console.log(
+        `CHILD PROBE: BLOCKED reason=${videoResult.blockReason} (video, retry) — one block is not proof ` +
+          "of categorical non-viability (RESEARCH.md Pitfall 3); a human must judge whether this is a " +
+          "real content-policy wall or the documented non-deterministic RAI false positive.",
+      );
+      console.log(`TOTAL THIS RUN $${total.toFixed(4)}`);
+      console.log(`LEDGER TOTAL $${totalSpentUsd(ledgerFinal).toFixed(4)}`);
+      return 0;
+    }
+
+    console.log(isRetry ? "CHILD PROBE: PASS (video, retry)" : "CHILD PROBE: PASS (video)");
+    console.log(`Wrote ${videoResult.filePath}`);
+    console.log(`TOTAL THIS RUN $${total.toFixed(4)}`);
+    console.log(`LEDGER TOTAL $${totalSpentUsd(ledgerFinal).toFixed(4)}`);
+    return 0;
+  } catch (err) {
+    if (err instanceof CeilingExceededError) {
+      console.error(`SPEND CEILING REFUSAL: ${err.message}`);
+      return 2;
+    }
+    console.error("UNCLASSIFIED ERROR:", err);
+    return 1;
+  }
+}
+
+/**
+ * Task 2: reconciles every paid call in the phase's ledger against the
+ * providers' own usageMetadata, making NO paid calls and requiring no
+ * GEMINI_API_KEY. Prints one row per ledger entry, then a total and a
+ * remaining-headroom line against the $3.00 D-05 ceiling.
+ */
+function runReport(): number {
+  mkdirSync(OUTPUT_DIR, { recursive: true });
+
+  const ledger = loadLedger();
+  console.log("COST REPORT — every paid call recorded in this phase's ledger (no network call made)");
+  console.log("");
+
+  for (const entry of ledger.entries) {
+    console.log(
+      `call=${entry.call} model=${entry.model} estimatedUsd=$${entry.estimatedUsd.toFixed(4)} ` +
+        `usageMetadata=${JSON.stringify(entry.usageMetadata)}`,
+    );
+  }
+
+  const total = totalSpentUsd(ledger);
+  const headroom = ledger.ceilingUsd - total;
+  console.log("");
+  console.log(`TOTAL LEDGER $${total.toFixed(4)}`);
+  console.log(`REMAINING HEADROOM $${headroom.toFixed(4)} of $${ledger.ceilingUsd.toFixed(2)} ceiling`);
+  return 0;
+}
+
+async function main(): Promise<void> {
+  const { probe, imageOnly, report } = parseArgs(process.argv.slice(2));
+
+  if (report) {
+    process.exitCode = await withMirroredConsole("cost-report.log", async () => runReport());
     return;
   }
 
-  if (probe !== "generic" && probe !== "all") {
+  if (probe !== "generic" && probe !== "childscene" && probe !== "all") {
     console.error(`UNKNOWN PROBE: "${probe}". Valid values: generic, childscene, all.`);
     process.exitCode = 1;
     return;
   }
 
-  const exitCode = await withMirroredConsole("generic-run.log", () => runGenericProbe(imageOnly));
-
-  if (probe === "all" && exitCode === 0) {
-    // D-01's second call (childscene) belongs to plan 01-04. Reported
-    // loudly rather than silently treating a generic-only run as complete.
-    console.error(
-      "UNIMPLEMENTED PROBE: --probe=all also includes childscene, which is not implemented in plan " +
-        "01-03; see plan 01-04.",
-    );
-    process.exitCode = 1;
+  if (probe === "generic") {
+    process.exitCode = await withMirroredConsole("generic-run.log", () => runGenericProbe(imageOnly));
     return;
   }
 
-  process.exitCode = exitCode;
+  if (probe === "childscene") {
+    process.exitCode = await withMirroredConsole("childscene-run.log", () => runChildsceneProbe());
+    return;
+  }
+
+  // probe === "all": sequence generic then childscene (D-03-style ordering)
+  // — don't spend on the second, content-sensitive probe until the first,
+  // deliberately-unblockable plumbing probe has proven the call chain works.
+  const genericExit = await withMirroredConsole("generic-run.log", () => runGenericProbe(imageOnly));
+  if (genericExit !== 0) {
+    process.exitCode = genericExit;
+    return;
+  }
+  process.exitCode = await withMirroredConsole("childscene-run.log", () => runChildsceneProbe());
 }
 
 await main();

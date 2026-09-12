@@ -66,6 +66,47 @@
       },
       "billed": true,
       "at": "2026-09-12T04:42:07.763Z"
+    },
+    {
+      "call": "childscene-image",
+      "model": "gemini-3.1-flash-image",
+      "estimatedUsd": 0.067,
+      "usageMetadata": {
+        "promptTokenCount": 68,
+        "candidatesTokenCount": 1493,
+        "totalTokenCount": 1561,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 68
+          }
+        ],
+        "candidatesTokensDetails": [
+          {
+            "modality": "IMAGE",
+            "tokenCount": 1120
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "billed": true,
+      "at": "2026-09-12T04:57:53.533Z"
+    },
+    {
+      "call": "childscene-video",
+      "model": "veo-3.1-lite-generate-preview",
+      "estimatedUsd": 0.4,
+      "usageMetadata": {
+        "generatedVideos": [
+          {
+            "video": {
+              "uri": "https://generativelanguage.googleapis.com/v1beta/files/5fkepxjttmmk:download?alt=media"
+            }
+          }
+        ]
+      },
+      "billed": true,
+      "at": "2026-09-12T04:59:00.376Z"
     }
   ]
 }

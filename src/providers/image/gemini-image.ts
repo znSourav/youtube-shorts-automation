@@ -19,6 +19,11 @@ export interface GenerateImageParams {
   prompt: string;
   aspectRatio: string;
   model?: string;
+  // Plan 01-04 (D-02): a single free-text style descriptor composed into the
+  // prompt text sent to the model. Intentionally NOT a preset registry — the
+  // real six-preset style-configuration system with Style Bible generation
+  // belongs to Phase 2 (CONTEXT.md Deferred Ideas).
+  style?: string;
 }
 
 export interface ImageBlockClassification {
@@ -54,6 +59,10 @@ export async function generateImage(params: GenerateImageParams): Promise<Genera
   const primaryModel = params.model ?? PRIMARY_MODEL;
   const ai = new GoogleGenAI({});
 
+  // D-02: style is composed into the prompt text as a single free-text
+  // descriptor, not a preset registry (Phase 2's concern, not this one's).
+  const promptText = params.style ? `${params.style} style. ${params.prompt}` : params.prompt;
+
   let modelUsed = primaryModel;
   let fallbackUsed = false;
   let response;
@@ -61,7 +70,7 @@ export async function generateImage(params: GenerateImageParams): Promise<Genera
   try {
     response = await ai.models.generateContent({
       model: primaryModel,
-      contents: params.prompt,
+      contents: promptText,
       config: {
         responseModalities: ["IMAGE"],
         imageConfig: { aspectRatio: params.aspectRatio },
@@ -79,7 +88,7 @@ export async function generateImage(params: GenerateImageParams): Promise<Genera
     fallbackUsed = true;
     response = await ai.models.generateContent({
       model: FALLBACK_MODEL,
-      contents: params.prompt,
+      contents: promptText,
       config: {
         responseModalities: ["IMAGE"],
         imageConfig: { aspectRatio: params.aspectRatio },
