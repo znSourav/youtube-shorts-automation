@@ -11,7 +11,7 @@ Requirements for the 24-hour MVP. Each maps to a roadmap phase.
 
 ### Startup
 
-- [ ] **STARTUP-01**: Wife can start the whole app with one documented command and reach it at `localhost:3000` on a fresh install, with no compilation errors and no fatal startup errors
+- [x] **STARTUP-01**: Wife can start the whole app with one documented command and reach it at `localhost:3000` on a fresh install, with no compilation errors and no fatal startup errors
 - [ ] **STARTUP-02**: If a required API key is missing, the app still starts and clearly explains what's missing in the UI instead of crashing or showing a stack trace, and never exposes secret values in the browser
 
 ### Story
@@ -19,7 +19,7 @@ Requirements for the 24-hour MVP. Each maps to a roadmap phase.
 - [ ] **STORY-01**: Wife can type a story idea in Bangla script and receive a coherent, original story with a title, beginning, middle, and ending
 - [ ] **STORY-02**: Wife can type the same idea in Banglish (Latin-script Bangla) with identical results — no manual translation required
 - [ ] **STORY-03**: Wife can describe a character and pick an animation style/mood in plain language, and never has to write or see an AI prompt
-- [ ] **STORY-04**: Every generated story includes a Character Bible and a Style Bible, generated automatically from her inputs and the selected style preset
+- [x] **STORY-04**: Every generated story includes a Character Bible and a Style Bible, generated automatically from her inputs and the selected style preset
 - [ ] **STORY-05**: Wife can choose a scene count (5-7) and get an automatically-generated scene-by-scene breakdown, each scene with a clear story purpose
 
 ### Uniqueness
@@ -117,12 +117,12 @@ Explicitly excluded from this project, not just this milestone. Documented to pr
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| STARTUP-01 | Phase 2 | Pending |
+| STARTUP-01 | Phase 2 | Complete |
 | STARTUP-02 | Phase 6 | Pending |
 | STORY-01 | Phase 2 | Pending |
 | STORY-02 | Phase 2 | Pending |
 | STORY-03 | Phase 2 | Pending |
-| STORY-04 | Phase 2 | Pending |
+| STORY-04 | Phase 2 | Complete |
 | STORY-05 | Phase 2 | Pending |
 | UNIQUE-01 | Phase 3 | Pending |
 | UNIQUE-02 | Phase 3 | Pending |

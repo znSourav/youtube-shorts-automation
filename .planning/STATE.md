@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 2
 current_phase_name: Core Generation Pipeline
 status: executing
-stopped_at: Phase 2 context gathered
-last_updated: "2026-09-12T14:51:48.174Z"
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-09-12T15:23:31.347Z"
 last_activity: 2026-09-12
-last_activity_desc: Phase 1 complete, transitioned to Phase 2
-state_head: 8dc912ba3a40eba5f127c033b927d0a92eb60d83
+last_activity_desc: Phase 2 execution started
+state_head: f193d783a3de93876760912bdee3539c62e042b3
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 8
-  completed_plans: 4
+  completed_plans: 5
   percent: 17
 ---
 
@@ -27,12 +27,12 @@ See: .planning/PROJECT.md (updated 2026-09-12)
 
 ## Current Position
 
-Phase: 2 (Core Generation Pipeline) — READY TO EXECUTE
-Plan: Not started
+Phase: 2 (Core Generation Pipeline) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-09-12 — Phase 1 complete, transitioned to Phase 2
+Last activity: 2026-09-12 — Phase 2 execution started
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██░░░░░░░░] 17%
 
 ## Performance Metrics
 
@@ -63,6 +63,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P03 | 20min | 2 tasks | 4 files |
 | Phase 01 P04 | 15min | 2 tasks | 3 files |
 | Phase quick-260912-j3x P01 | 26min | 3 tasks | 3 files |
+| Phase 02 P01 | 13min | 3 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -83,6 +84,8 @@ Recent decisions affecting current work:
 - [Phase 1]: [Phase 1] D-01 representative probe PASSED on first attempt: Gemini and Veo generated/animated a real child-protagonist garden scene (Soft hand-painted 2D style) with no safety block — Gemini/Veo confirmed viable providers for this product's actual content type on this sample
 - [Phase 1]: [Phase 1] Both IMAGE_PRICE_PER_CALL and VIDEO_PRICE_PER_SECOND left UNRESOLVED, unchanged: neither provider's usageMetadata publishes a per-token/per-second rate that can independently re-derive the flat pricing-page figures, so the flat 0.067/image and 0.05/sec-720p figures are kept as-is with the gap documented rather than invented
 - [Phase 1]: [Quick j3x]: CR-03 resolved — conservative motion prompts (camera/environmental motion only, no character pose-change language) avoid the head/torso kinematic disconnect while remaining visibly usable footage; validated via a real $0.4000 Veo probe (ledger now $1.2010 of $3.00 D-05 ceiling).
+- [Phase 2]: [Phase 2, 02-01] Turbopack unusable on this Windows machine (Application Control policy blocks the native SWC binary) -- dev/build scripts use --webpack fallback
+- [Phase 2]: [Phase 2, 02-01] Disabled Next 16's agentRules (root AGENTS.md/CLAUDE.md auto-generation) to avoid shadowing this project's .claude/CLAUDE.md
 
 ### Pending Todos
 
@@ -108,6 +111,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-12T14:12:03.682Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-core-generation-pipeline/02-CONTEXT.md
+Last session: 2026-09-12T15:23:31.242Z
+Stopped at: Completed 02-01-PLAN.md
+Resume file: None
