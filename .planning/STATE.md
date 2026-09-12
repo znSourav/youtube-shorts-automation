@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 1
 current_phase_name: Provider Smoke Test
 status: executing
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-09-12T03:51:57.095Z"
+stopped_at: Completed 01-03-PLAN.md
+last_updated: "2026-09-12T04:46:54.696Z"
 last_activity: 2026-09-12
 last_activity_desc: Phase 1 execution started
-state_head: f2b58d97dc138cfcd7fc61b21684507b4ec970ce
+state_head: e32a88baefc06e1d5bae29477d010303ac387203
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 4
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-12)
 ## Current Position
 
 Phase: 1 (Provider Smoke Test) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-09-12 — Phase 1 execution started
 
@@ -60,6 +60,7 @@ Progress: [░░░░░░░░░░] 0%
 |------|----------|-------|-------|
 | Phase 01 P01 | 4min | 3 tasks | 5 files |
 | Phase 01 P02 | 12min | 2 tasks | 4 files |
+| Phase 01 P03 | 20min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -74,6 +75,9 @@ Recent decisions affecting current work:
 - [Phase 1]: No tsx/ts-node/dotenv added — Node v24.20.0 natively runs .ts and supports --env-file.
 - [Phase 1]: checkCeiling's finite/non-negative guard runs before any disk read, refusing a broken cost calculation deterministically regardless of ledger file state
 - [Phase 1]: logRawResponse combines label + redacted JSON into one console.log call, matching the plan's literal phrasing as one printed unit
+- [Phase 1]: [Phase 1] Real API shape confirmed: gemini-3.1-flash-image returns candidates[0].content.parts[].inlineData with mimeType image/jpeg (not png as RESEARCH.md assumed); Veo durationSeconds is typed number not string in the installed SDK.
+- [Phase 1]: [Phase 1] Kept veo.ts on the deprecation-warned top-level image/prompt GenerateVideosParameters shape rather than migrating to source:{} unverified; deferred to Phase 2's first real Veo call (WINDOWS #1).
+- [Phase 1]: [Phase 1] log-response.ts's isSecretKey() over-redacts usageMetadata token-count fields (substring match on 'token'); real data unaffected in spend-ledger.json, fix deferred (WINDOWS #2).
 
 ### Pending Todos
 
@@ -93,6 +97,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-12T03:51:57.081Z
-Stopped at: Completed 01-02-PLAN.md
+Last session: 2026-09-12T04:46:54.682Z
+Stopped at: Completed 01-03-PLAN.md
 Resume file: None
