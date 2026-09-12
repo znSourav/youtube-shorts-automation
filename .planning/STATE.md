@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 current_phase: 02
 current_phase_name: Core Generation Pipeline
 status: executing
-stopped_at: Completed 02-04-PLAN.md (halted -- D-04 full-scale proof run unmet, see 02-PROOF-RUN.md)
-last_updated: "2026-09-12T19:18:19.310Z"
+stopped_at: Completed quick task 260913-4rr (D-04 full-scale proof run closed -- success on fresh idea)
+last_updated: "2026-09-12T19:46:15.783Z"
 last_activity: 2026-09-13
 last_activity_desc: Phase 02 Plan 4 executed (halted -- D-04 full-scale proof run unmet)
-state_head: a5f4c159854a2c0aefa949e19dc5965f542e78d4
+state_head: 485b7a653b3af0279bafba1a0489910e3c364f61
 progress:
   total_phases: 6
   completed_phases: 1
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-09-12)
 
 ## Current Position
 
-Phase: 02 (Core Generation Pipeline) — HALTED
+Phase: 02 (Core Generation Pipeline) — COMPLETE
 Plan: 4 of 4
-Status: All 4 plans executed; D-04's full-scale proof run unmet (see 02-PROOF-RUN.md) -- needs a human decision before Phase 02 is considered fully closed
-Last activity: 2026-09-13 — Phase 02 Plan 4 (02-04) executed
+Status: All 4 plans executed; D-04's full-scale proof run closed via quick task 260913-4rr (succeeded on first real attempt on a fresh idea, see 02-PROOF-RUN.md §3 and 02-04-SUMMARY.md addendum). Dev ledger now very tight: $2.9370 of $3.00 ($0.0630 headroom).
+Last activity: 2026-09-13 — Quick task 260913-4rr executed (D-04 full-scale proof run closed)
 
 Progress: [██░░░░░░░░] 17%
 
@@ -67,6 +67,7 @@ Progress: [██░░░░░░░░] 17%
 | Phase 02 P02 | 35min | 2 tasks | 13 files |
 | Phase 02 P03 | ~20min | 2 tasks | 11 files |
 | Phase 02 P04 | ~55min | 2 tasks | 6 files |
+| Phase quick-260913-4rr P01 | ~35min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -97,6 +98,7 @@ Recent decisions affecting current work:
 - [Phase 02]: [Phase 2, 02-04] generateSceneVideoAction is the sole real generateVideo call site: ceiling-gated, second-layer CR-03 motion-prompt guard, video returned to the browser as a data: URL
 - [Phase 02]: [Phase 2, 02-04] Real Veo call: scene 1 of story-1789237907876-npep3b animated to a playable 1.56MB MP4 (8s, ftyp-verified); cost $0.40 not the ~$0.20 planned because the video-only probe mode has no persisted scene duration to resolve from (story.json persistence is Phase 3's job)
 - [Phase 02]: [Phase 2, 02-04] Bangla/Banglish proof run: Banglish succeeded after one retry (title kept Banglish rendering, durations varied 6/4/8); the SAME idea's Bangla-script rendering was blocked on all 3 real attempts (prompt: PROHIBITED_CONTENT each time) -- D-04's full-scale 5-scene validation is UNMET, carried forward to Phase 3/4; ledger now $2.2520 of $3.00
+- [Phase 02]: [Quick 260913-4rr] D-04's full-scale (5-scene) proof run succeeded on the first real attempt on a fresh idea (a fisherman returning a lost paper boat) -- no retry needed, unlike the prior session's 3/3 blocks on a different idea; 02-04-SUMMARY.md status flipped to complete; ledger now $2.9370 of $3.00 ($0.0630 headroom remaining)
 
 ### Pending Todos
 
@@ -106,13 +108,16 @@ None yet.
 
 None from Phase 1 — the AI Studio API key / billing blocker (noted at planning time) was resolved before Phase 1 execution; Phase 1 ran to completion against real providers.
 
-- [Phase 2, 02-04] D-04's full-scale (5-6 scene) real proof run is unmet: 3 real attempts at the same Bangla-script idea were all blocked (prompt: PROHIBITED_CONTENT) before any generation began. Needs a human decision: approve a fresh attempt with a different idea, or accept as a documented Phase 2 limitation. See 02-PROOF-RUN.md.
+**Resolved:** [Phase 2, 02-04] D-04's full-scale (5-6 scene) real proof run was unmet after 3 blocked attempts in the 02-04 session. **Closed by quick task 260913-4rr** (2026-09-13): a fresh idea's Bangla-script rendering succeeded on the first attempt, producing a real 5-scene story, 5 scene images, and 1 playable video end to end. See 02-PROOF-RUN.md §3 and 02-04-SUMMARY.md's addendum.
+
+**New concern:** [Quick 260913-4rr] The dev spend ledger (`DEV_CEILING_USD`, shared across Phases 1-4) is now nearly exhausted: **$2.9370 of $3.00, only $0.0630 headroom remaining.** Any further real paid probing in Phase 3/4 will very likely exceed this ceiling and needs to be explicitly discussed with the user (never silently raised) before dispatching further real calls against this same ledger.
 
 ### Quick Tasks Completed
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260912-j3x | CR-03 follow-up: add `--probe=childscene-conservative` motion mode, run it for real, confirm the head/torso artifact does not reproduce | 2026-09-12 | df7c458 | [260912-j3x-add-a-probe-childscene-conservative-mode](./quick/260912-j3x-add-a-probe-childscene-conservative-mode/) |
+| 260913-4rr | Close Phase 2's D-04 full-scale (5-scene) proof gap: extend story-probe.ts with a `--video` chain flag, run one budget-capped retry on a fresh idea -- succeeded on the first attempt | 2026-09-13 | 485b7a6 | [260913-4rr-complete-phase-2-s-d-04-full-scale-proof](./quick/260913-4rr-complete-phase-2-s-d-04-full-scale-proof/) |
 
 ## Deferred Items
 
@@ -124,6 +129,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-12T19:18:19.198Z
-Stopped at: Completed 02-04-PLAN.md (halted -- D-04 full-scale proof run unmet, see 02-PROOF-RUN.md)
+Last session: 2026-09-12T19:46:15.657Z
+Stopped at: Completed quick task 260913-4rr (D-04 full-scale proof run closed -- success on fresh idea)
 Resume file: None
