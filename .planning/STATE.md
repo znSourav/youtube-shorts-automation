@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 current_phase: 1
 current_phase_name: Provider Smoke Test
 status: verifying
-stopped_at: Completed 01-04-PLAN.md
-last_updated: "2026-09-12T05:02:57.066Z"
+stopped_at: Completed quick-260912-j3x-01-PLAN.md (CR-03 conservative-motion probe)
+last_updated: "2026-09-12T13:14:48.838Z"
 last_activity: 2026-09-12
 last_activity_desc: Phase 1 execution started
-state_head: b0cc2bbad59b57f6cb74ad60336045d3d84b3996
+state_head: df7c458ebe06d957f53aa80c2e7d5f71754e2577
 progress:
   total_phases: 6
   completed_phases: 0
@@ -62,6 +62,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P02 | 12min | 2 tasks | 4 files |
 | Phase 01 P03 | 20min | 2 tasks | 4 files |
 | Phase 01 P04 | 15min | 2 tasks | 3 files |
+| Phase quick-260912-j3x P01 | 26min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,7 @@ Recent decisions affecting current work:
 - [Phase 1]: [Phase 1] log-response.ts's isSecretKey() over-redacts usageMetadata token-count fields (substring match on 'token'); real data unaffected in spend-ledger.json, fix deferred (WINDOWS #2).
 - [Phase 1]: [Phase 1] D-01 representative probe PASSED on first attempt: Gemini and Veo generated/animated a real child-protagonist garden scene (Soft hand-painted 2D style) with no safety block — Gemini/Veo confirmed viable providers for this product's actual content type on this sample
 - [Phase 1]: [Phase 1] Both IMAGE_PRICE_PER_CALL and VIDEO_PRICE_PER_SECOND left UNRESOLVED, unchanged: neither provider's usageMetadata publishes a per-token/per-second rate that can independently re-derive the flat pricing-page figures, so the flat 0.067/image and 0.05/sec-720p figures are kept as-is with the gap documented rather than invented
+- [Phase 1]: [Quick j3x]: CR-03 resolved — conservative motion prompts (camera/environmental motion only, no character pose-change language) avoid the head/torso kinematic disconnect while remaining visibly usable footage; validated via a real $0.4000 Veo probe (ledger now $1.2010 of $3.00 D-05 ceiling).
 
 ### Pending Todos
 
@@ -88,7 +90,13 @@ None yet.
 
 ### Blockers/Concerns
 
-- Requester had not yet created the AI Studio API key / enabled billing at planning time (per PROJECT.md Context) — needed before Phase 1 can execute against real providers.
+None currently — the AI Studio API key / billing blocker (noted at planning time) was resolved before Phase 1 execution; Phase 1 ran to completion against real providers.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260912-j3x | CR-03 follow-up: add `--probe=childscene-conservative` motion mode, run it for real, confirm the head/torso artifact does not reproduce | 2026-09-12 | df7c458 | [260912-j3x-add-a-probe-childscene-conservative-mode](./quick/260912-j3x-add-a-probe-childscene-conservative-mode/) |
 
 ## Deferred Items
 
@@ -100,6 +108,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-12T05:02:57.051Z
-Stopped at: Completed 01-04-PLAN.md
+Last session: 2026-09-12T13:14:48.728Z
+Stopped at: Completed quick-260912-j3x-01-PLAN.md (CR-03 conservative-motion probe)
 Resume file: None
