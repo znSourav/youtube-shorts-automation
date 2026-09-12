@@ -37,19 +37,29 @@ function redactValue(value: unknown, maxLen: number, seen: WeakSet<object>, keyN
     return value;
   }
 
+  // WR-01: `seen` tracks only the current ancestor path (this node and its
+  // still-open recursive callers), not every object visited anywhere in the
+  // whole tree. A true cycle re-enters an object that is still on this path
+  // and is correctly reported as "[CIRCULAR]"; a "diamond" reference (the
+  // same object reachable from two separate, non-nested branches) is popped
+  // off `seen` before the sibling branch is visited, so it is redacted
+  // normally instead of being falsely flagged as circular.
   if (seen.has(value)) {
     return "[CIRCULAR]";
   }
   seen.add(value);
 
   if (Array.isArray(value)) {
-    return value.map((item) => redactValue(item, maxLen, seen));
+    const arrayResult = value.map((item) => redactValue(item, maxLen, seen));
+    seen.delete(value);
+    return arrayResult;
   }
 
   const result: Record<string, unknown> = {};
   for (const [key, entryValue] of Object.entries(value as Record<string, unknown>)) {
     result[key] = redactValue(entryValue, maxLen, seen, key);
   }
+  seen.delete(value);
   return result;
 }
 
