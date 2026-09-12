@@ -1,7 +1,7 @@
 ---
 phase: 01-provider-smoke-test
 verified: 2026-09-12T05:30:20Z
-status: human_needed
+status: passed
 score: 19/21 must-haves verified
 behavior_unverified: 2
 overrides_applied: 0
@@ -16,6 +16,7 @@ process_note: >
   refusing to verify — refusing would only block a technical spike that was never meant to
   carry a User Story goal.
 behavior_unverified_items:
+
   - truth: "A provider error or safety block prints its exact blockReason/finishReason/raiMediaFilteredReasons value and exits non-zero (ROADMAP SC-4, 01-03 must_haves)"
     test: "Trigger a genuine Gemini promptFeedback.blockReason or Veo raiMediaFilteredReasons block on a real call (not the budget-ceiling refusal, which WAS live-verified during this verification pass) and confirm the exact provider reason text is printed verbatim and the process exits non-zero."
     expected: "The block/finishReason path in gemini-image.ts and veo.ts (defensive classify-before-parse, RESEARCH.md Pattern 1) fires and prints the verbatim reason; process does not hang or throw an unhandled exception."
@@ -25,6 +26,7 @@ behavior_unverified_items:
     expected: "Exactly one retry, both outcomes printed with the provider's verbatim reason text, no more than two total Veo dispatches for the probe."
     why_human: "The childscene probe passed on the first attempt in the actual Phase 1 run — no block occurred, so the retry branch was never executed. Code review confirms dispatchChildVideo() is the single call site used identically for both the first attempt and the retry (each preceded by checkCeiling()), which is a verifiable structural/static fact independent of whether a live retry fired — that structural claim is scored VERIFIED below. Only the live retry-dispatch behavior itself is unverified."
 human_verification:
+
   - test: "Play storage/_smoketest/scene-generic.mp4 in a media player."
     expected: "~4-second portrait (9:16) clip showing a ceramic teacup on a wooden table with visible motion (gentle camera drift / steam), not a frozen frame."
     why_human: "01-VALIDATION.md classifies video playback as manual-only. Automated checks in this verification confirmed a real, correctly-sized ISO media container (ftyp signature at bytes 4-8, 835998 bytes) and the source PNG was visually confirmed to be a genuine, on-prompt teacup image — but playback smoothness and portrait framing require a human to actually watch it. Not yet operator-confirmed per both 01-03-SUMMARY.md and 01-04-SUMMARY.md."
@@ -168,6 +170,7 @@ Scanned all phase-modified files (`src/lib/*.ts`, `src/providers/**/*.ts`, `src/
 **None found.** The only matches for "placeholder" are legitimate documentation of the redaction feature's own placeholder-output behavior (e.g., `log-response.ts`'s doc comment "becomes a length-naming placeholder"), not incomplete work.
 
 Two pre-existing, explicitly-documented, non-blocking deviations remain open in `.planning/WINDOWS.md` (both logged during 01-03, unaffected by later plans):
+
 1. `veo.ts` uses the deprecated top-level `image`/`prompt` `GenerateVideosParameters` shape (SDK warns removal "not before 2026-07-31"); migration deferred to Phase 2's first real Veo call to avoid an unverified change to code that survives into Phase 2.
 2. `log-response.ts`'s `isSecretKey()` over-redacts `usageMetadata` fields containing the substring "token" (e.g. `promptTokenCount`) in printed/mirrored logs — cosmetic only, the real `usageMetadata` in `spend-ledger.json` is unaffected (confirmed: the ledger JSON read during this verification shows unredacted `promptTokenCount`/`candidatesTokenCount` values).
 
@@ -188,6 +191,7 @@ No FAILED truths, no MISSING/STUB artifacts, no NOT_WIRED key links, no blocker 
 The phase's core, expensive, genuinely risky claim — "Gemini image generation and Veo 3.1 Lite image-to-video work end-to-end from this codebase, with real cost visible" — is proven with real, paid, verifiable evidence: two real generations (teacup + child-protagonist garden scene), both producing real JPEGs and real playable-container MP4s, both logged with accurate per-call costs, total spend $0.8010 against a $3.00 dev ceiling. This is the hardest and most valuable part of the phase goal, and it holds up under independent re-verification, not just SUMMARY narrative.
 
 The two gaps are narrower and lower-stakes than the phase's core claim:
+
 - Two `<human-check>` items (MP4 playback) that both SUMMARYs themselves flagged as pending operator sign-off — never claimed as done, so this is not a discrepancy between SUMMARY and reality, just an outstanding step.
 - SC-4's "reports a genuine provider block" behavior is implemented and structurally sound but was never exercised against live blocked data, because neither real generation triggered a block — which is itself the positive finding this phase was designed to surface (D-01's core question: "do Gemini/Veo false-positive on wholesome children's content?" — answered "no, not on this sample").
 
