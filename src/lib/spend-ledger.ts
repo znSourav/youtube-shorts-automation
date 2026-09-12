@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 // D-05: dev/testing ceiling for Phases 1-4 combined, carved out of the real
@@ -25,6 +25,65 @@ export type Ledger = {
 };
 
 export class CeilingExceededError extends Error {}
+
+// WR-02 (partial mitigation): `recordSpend`'s own read-modify-write is not
+// atomic — two processes writing the ledger at nearly the same instant can
+// each read the same on-disk snapshot and the later `writeFileSync` clobbers
+// the earlier one's entry outright (silent lost accounting record). An
+// exclusive-create lock file around the read-modify-write closes THAT
+// specific data-loss window: a second writer blocks (briefly, retrying) until
+// the first has read, appended, and written, so at most one recordSpend call
+// wins the file at a time and no entry is silently dropped.
+//
+// This does NOT close the full checkCeiling-then-dispatch-then-recordSpend
+// TOCTOU window the review also calls out: two processes can still both
+// call `checkCeiling` against the same pre-dispatch snapshot, both pass, and
+// both go on to make real paid calls before either calls `recordSpend` — the
+// ceiling check itself is not reserved. Fully closing that requires a
+// reserve-then-commit redesign of the ledger schema (a provisional entry
+// written at checkCeiling time, replaced by the real entry at recordSpend
+// time), which is a larger, schema-affecting change deliberately deferred
+// rather than rushed into this budget-safety-critical file; tracked for
+// Phase 5's real budget system (see 01-REVIEW-FIX.md).
+const LOCK_RETRY_INTERVAL_MS = 10;
+const LOCK_TIMEOUT_MS = 2000;
+
+function sleepSync(ms: number): void {
+  const sab = new SharedArrayBuffer(4);
+  Atomics.wait(new Int32Array(sab), 0, 0, ms);
+}
+
+function withLedgerFileLock<T>(path: string, fn: () => T): T {
+  const lockPath = `${path}.lock`;
+  const start = Date.now();
+  while (true) {
+    try {
+      writeFileSync(lockPath, "", { flag: "wx" });
+      break;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") {
+        throw err;
+      }
+      if (Date.now() - start > LOCK_TIMEOUT_MS) {
+        throw new Error(
+          `Could not acquire ledger lock at ${lockPath} within ${LOCK_TIMEOUT_MS}ms — ` +
+            "another process may be mid-write, or a stale lock file was left behind by a crash.",
+        );
+      }
+      sleepSync(LOCK_RETRY_INTERVAL_MS);
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    try {
+      unlinkSync(lockPath);
+    } catch {
+      // Already removed (or never created due to a dir-creation race below) —
+      // nothing left to clean up.
+    }
+  }
+}
 
 /**
  * Loads the ledger from disk. A missing file is a legitimate first run and
@@ -104,13 +163,19 @@ export function checkCeiling(estimatedUsd: number, path: string = LEDGER_PATH): 
  * was blocked, with `billed` reflecting whether usable output returned.
  * Conservative accounting is the point: whether a blocked call bills is
  * one of the things this phase is meant to establish empirically.
+ *
+ * The read-modify-write is guarded by an exclusive-create lock file
+ * (WR-02 partial mitigation, see comment above `withLedgerFileLock`) so two
+ * concurrent `recordSpend` calls cannot clobber each other's entry.
  */
 export function recordSpend(entry: LedgerEntry, path: string = LEDGER_PATH): void {
-  const ledger = existsSync(path) ? loadLedger(path) : { ceilingUsd: DEV_CEILING_USD, entries: [] };
-  ledger.entries.push(entry);
   const dir = dirname(path);
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
-  writeFileSync(path, JSON.stringify(ledger, null, 2));
+  withLedgerFileLock(path, () => {
+    const ledger = existsSync(path) ? loadLedger(path) : { ceilingUsd: DEV_CEILING_USD, entries: [] };
+    ledger.entries.push(entry);
+    writeFileSync(path, JSON.stringify(ledger, null, 2));
+  });
 }
