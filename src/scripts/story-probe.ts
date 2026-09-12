@@ -4,14 +4,33 @@
 // 02-02 Task 1. With --images, plan 02-03 Task 1 extends this to also drive
 // generateSceneImagesAction -- the exact same "use server" action path the
 // browser UI calls -- so the whole story-to-images chain has one real,
-// scriptable probe. Run with:
+// scriptable probe. Plan 02-04 Task 1 adds a `--video=<sceneNumber>` mode
+// (paired with `--story-id=<id>`) that drives generateSceneVideoAction
+// against an already-generated scene image, without paying for a fresh
+// story/image run -- this phase has no story.json persistence yet (Phase 3),
+// so the video-only mode constructs a minimal probe Scene rather than
+// reading one back off disk; `--duration=`/`--motion-prompt=` let the caller
+// carry over the REAL values a prior `--images` run printed, when the point
+// is to prove the pipeline against real recorded numbers rather than an
+// arbitrary test value. Run with:
 //   node --env-file=.env.local src/scripts/story-probe.ts [--scenes=N] [--idea=...] [--images]
-import { statSync } from "node:fs";
+//   node --env-file=.env.local src/scripts/story-probe.ts --story-id=<id> --video=<n> [--duration=N] [--motion-prompt=...]
+import { readdirSync, statSync } from "node:fs";
 
 import { runStoryDirector } from "../core/story/director.ts";
 import { generateSceneImagesAction } from "../app/actions/generate-images.ts";
+import { generateSceneVideoAction } from "../app/actions/generate-video.ts";
+import { sceneDir } from "../core/storage-paths.ts";
+import type { Scene } from "../core/story/schema.ts";
 import { loadLedger, totalSpentUsd } from "../lib/spend-ledger.ts";
 import { CeilingExceededError } from "../lib/spend-ledger.ts";
+
+// A deliberately safe, camera/environment-only default (mirrors CR-03's
+// conservative phrasing) for the video-only probe mode when the caller
+// doesn't supply their own via --motion-prompt=.
+const DEFAULT_TEST_MOTION_PROMPT =
+  "A slow, gentle camera drift across the scene, with soft ambient motion in the environment. " +
+  "The subject holds its pose, calm and still.";
 
 // D-05: genuinely different from the CR-03 follow-up's "girl in a magical
 // garden" content already tested in Phase 1.
@@ -20,11 +39,25 @@ const DEFAULT_IDEA =
 const DEFAULT_CHARACTER_DESCRIPTION =
   "A shy 9-year-old village boy, short and slight, with tousled black hair and a patched brown vest over a simple cotton shirt.";
 
-function parseArgs(argv: string[]): { scenes: number; idea: string; images: boolean } {
+interface ProbeArgs {
+  scenes: number;
+  idea: string;
+  images: boolean;
+  video?: number;
+  storyId?: string;
+  duration?: number;
+  motionPrompt?: string;
+}
+
+function parseArgs(argv: string[]): ProbeArgs {
   // D-04: default to the reduced 3-scene scale for debugging passes.
   let scenes = 3;
   let idea = DEFAULT_IDEA;
   let images = false;
+  let video: number | undefined;
+  let storyId: string | undefined;
+  let duration: number | undefined;
+  let motionPrompt: string | undefined;
   for (const arg of argv) {
     if (arg.startsWith("--scenes=")) {
       scenes = Number(arg.slice("--scenes=".length));
@@ -32,9 +65,58 @@ function parseArgs(argv: string[]): { scenes: number; idea: string; images: bool
       idea = arg.slice("--idea=".length);
     } else if (arg === "--images") {
       images = true;
+    } else if (arg.startsWith("--video=")) {
+      video = Number(arg.slice("--video=".length));
+    } else if (arg.startsWith("--story-id=")) {
+      storyId = arg.slice("--story-id=".length);
+    } else if (arg.startsWith("--duration=")) {
+      duration = Number(arg.slice("--duration=".length));
+    } else if (arg.startsWith("--motion-prompt=")) {
+      motionPrompt = arg.slice("--motion-prompt=".length);
     }
   }
-  return { scenes, idea, images };
+  return { scenes, idea, images, video, storyId, duration, motionPrompt };
+}
+
+// Locates the already-written image.<ext> file under a scene's directory --
+// storage-paths.ts's sceneImagePath() needs the extension as an input, which
+// this video-only probe mode doesn't otherwise know (no story.json
+// persistence yet, Phase 3), so it is discovered from disk instead.
+function findSceneImagePath(storyId: string, sceneNumber: number): string {
+  const dir = sceneDir(storyId, sceneNumber);
+  const entries = readdirSync(dir);
+  const imageFile = entries.find((entry) => entry.startsWith("image."));
+  if (!imageFile) {
+    throw new Error(`No image.* file found under ${dir} -- generate this scene's image first.`);
+  }
+  return `${dir}/${imageFile}`;
+}
+
+// Drives generateSceneVideoAction directly against an already-generated
+// scene image, without calling runStoryDirector again (--story-id skips
+// paying for a fresh story/image run this probe mode doesn't need).
+async function runVideoProbe(storyId: string, sceneNumber: number, duration?: number, motionPrompt?: string): Promise<void> {
+  const imagePath = findSceneImagePath(storyId, sceneNumber);
+  const scene: Scene = {
+    scene_number: sceneNumber,
+    duration,
+    story_purpose: "story-probe video test",
+    image_prompt: "",
+    motion_prompt: motionPrompt ?? DEFAULT_TEST_MOTION_PROMPT,
+  };
+
+  const result = await generateSceneVideoAction(storyId, scene, imagePath);
+  const bytes = result.ok && result.videoPath ? statSync(result.videoPath).size : 0;
+  console.log(
+    `VIDEO: scene=${sceneNumber} ok=${result.ok} path=${result.videoPath ?? "-"} bytes=${bytes} ` +
+      `seconds=${result.durationSeconds}`,
+  );
+  if (!result.ok) {
+    console.log(`VIDEO MESSAGE: ${result.message}`);
+  }
+
+  const ledger = loadLedger();
+  console.log(`Ledger total: $${totalSpentUsd(ledger).toFixed(4)} of $${ledger.ceilingUsd.toFixed(2)}`);
 }
 
 // Matches src/core/storage-paths.ts's STORY_ID_PATTERN (lowercase
@@ -45,7 +127,22 @@ function generateStoryId(): string {
 }
 
 async function main(): Promise<void> {
-  const { scenes, idea, images } = parseArgs(process.argv.slice(2));
+  const { scenes, idea, images, video, storyId: storyIdArg, duration, motionPrompt } = parseArgs(process.argv.slice(2));
+
+  // Video-only mode: --story-id=<id> --video=<n>, no fresh story/image call.
+  if (storyIdArg && video !== undefined) {
+    try {
+      await runVideoProbe(storyIdArg, video, duration, motionPrompt);
+    } catch (err) {
+      if (err instanceof CeilingExceededError) {
+        console.log(`STORY PROBE: blocked reason=${err.message}`);
+        process.exitCode = 1;
+        return;
+      }
+      throw err;
+    }
+    return;
+  }
 
   try {
     const result = await runStoryDirector({
@@ -67,6 +164,10 @@ async function main(): Promise<void> {
         `model=${result.modelUsed} usd=${result.estimatedUsd.toFixed(4)}`,
     );
     console.log(`Scene numbers: ${result.data.scenes.map((scene) => scene.scene_number).join(", ")}`);
+    // §14: durations should vary (4/6/8s), not default to the max every
+    // time -- printed per scene so a real proof run's evidence can be
+    // recorded verbatim rather than re-derived (02-04 Task 2).
+    console.log(`Scene durations: ${result.data.scenes.map((scene) => scene.duration ?? "unset").join(", ")}`);
     console.log(`Fallback model used: ${result.fallbackUsed}`);
     console.log(`usageMetadata: ${JSON.stringify(result.usageMetadata)}`);
 
