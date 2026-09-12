@@ -11,3 +11,13 @@ storage/_smoketest/*.log
 .gsd/
 .planning/milestone.lock
 .planning/research/.cache/
+
+# Next.js
+/.next/
+/out/
+*.tsbuildinfo
+.vercel
+
+# Phase 2 scaffold merge scratch dir and generated story assets
+scaffold-tmp/
+storage/stories/
