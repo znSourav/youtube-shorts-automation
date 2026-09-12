@@ -1,0 +1,18 @@
+{
+  "name": "ai-animated-shorts-studio",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test:lib": "node --test src/lib/spend-ledger.test.ts src/lib/log-response.test.ts",
+    "smoke": "node --env-file=.env.local src/scripts/smoke-test.ts"
+  },
+  "dependencies": {
+    "@google/genai": "^2.22.0"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "@types/node": "22.20.2"
+  }
+}
