@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync, statSync } from "node:fs";
 import { writeFileSync as writeFileSyncOverwrite } from "node:fs";
 import path from "node:path";
+import { inspect } from "node:util";
 
 import {
   checkCeiling,
@@ -79,7 +80,14 @@ function extensionForMimeType(mimeType: string | null): string {
 function formatLogArg(arg: unknown): string {
   if (typeof arg === "string") return arg;
   if (arg instanceof Error) return arg.stack ?? arg.message;
-  return String(arg);
+  // WR-04: String(arg) collapses any plain-object thrown value (e.g. the
+  // { status?, code? }-shaped SDK errors gemini-image.ts's own
+  // isNotFoundOrForbidden casts caught errors to) into the useless
+  // "[object Object]" in the persisted .log file, even though the live
+  // terminal shows the real object via console.error's util.inspect-based
+  // formatting. Use util.inspect directly so the durable log matches what
+  // was actually printed.
+  return inspect(arg, { depth: null });
 }
 
 /**
