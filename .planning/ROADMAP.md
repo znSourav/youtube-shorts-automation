@@ -68,7 +68,7 @@ Plans:
   4. The scene breakdown always has exactly the requested number of scenes, numbered 1..N with no gaps or duplicates, and character appearance/clothing/features carry forward across consecutive scene prompts so scenes stay visually consistent.
   5. She can animate one approved scene image into a 9:16, 720p Veo clip and confirm the result end-to-end before committing to generating a full episode.
 
-**Plans:** 2/4 plans executed
+**Plans:** 3/4 plans executed
 
 Plans:
 **Wave 1**
@@ -81,7 +81,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 02-03-PLAN.md — Scene images to disk, sequential and ceiling-gated, plus the three screens with the image-first pause
+- [x] 02-03-PLAN.md — Scene images to disk, sequential and ceiling-gated, plus the three screens with the image-first pause
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -160,7 +160,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Provider Smoke Test | 4/4 | Complete    | 2026-09-12 |
-| 2. Core Generation Pipeline | 2/4 | In Progress|  |
+| 2. Core Generation Pipeline | 3/4 | In Progress|  |
 | 3. Persistence & Structural Uniqueness | 0/TBD | Not started | - |
 | 4. Wife-Facing Review & Approval Flow | 0/TBD | Not started | - |
 | 5. Budget & Retry Safeguards | 0/TBD | Not started | - |

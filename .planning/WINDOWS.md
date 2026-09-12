@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 2
+open_count: 4
 waived_count: 0
 fixed_count: 0
-total_count: 2
-last_updated: 2026-09-12T04:46:28.726Z
+total_count: 4
+last_updated: 2026-09-12T18:36:48.757Z
 ---
 
 # Broken Windows Ledger
@@ -17,6 +17,8 @@ last_updated: 2026-09-12T04:46:28.726Z
 |----|-------|------|------|------|-------------|--------|--------|-------------|-------------|
 | 1 | 01 | deviation | src/providers/video/veo.ts |  | generateVideos top-level image/prompt args are deprecated (SDK warning: removed no earlier than 2026-07-31); migrate to source:{image,prompt} shape, verified on Phase 2's first real Veo call | open |  | 2026-09-12T04:46:28.286Z |  |
 | 2 | 01 | deviation | src/lib/log-response.ts |  | isSecretKey() substring-matches 'token', over-redacting usageMetadata fields like promptTokenCount/candidatesTokenCount in printed logs (real values are unaffected in spend-ledger.json) | open |  | 2026-09-12T04:46:28.726Z |  |
+| 3 | 2 | unrun-verify | package.json |  | npm run lint cannot run: typescript-eslint 8.70.0 (latest published) rejects TypeScript 7.0.2, no compatible upstream release exists yet -- confirmed pre-existing before this plan's changes | open |  | 2026-09-12T18:36:48.345Z |  |
+| 4 | 2 | unrun-verify | src/app/page.tsx |  | Full interactive three-screen human-check (create -> story review -> image review, Generate Videos gating, no leaked prompts/paths, character consistency) deferred to end-of-phase UAT -- no browser-driving tool available in this executor session | open |  | 2026-09-12T18:36:48.757Z |  |
 
 ````json
 [
@@ -42,6 +44,30 @@ last_updated: 2026-09-12T04:46:28.726Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-12T04:46:28.726Z",
+    "resolved_at": null
+  },
+  {
+    "id": 3,
+    "kind": "unrun-verify",
+    "phase": "2",
+    "file": "package.json",
+    "line": null,
+    "description": "npm run lint cannot run: typescript-eslint 8.70.0 (latest published) rejects TypeScript 7.0.2, no compatible upstream release exists yet -- confirmed pre-existing before this plan's changes",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-12T18:36:48.345Z",
+    "resolved_at": null
+  },
+  {
+    "id": 4,
+    "kind": "unrun-verify",
+    "phase": "2",
+    "file": "src/app/page.tsx",
+    "line": null,
+    "description": "Full interactive three-screen human-check (create -> story review -> image review, Generate Videos gating, no leaked prompts/paths, character consistency) deferred to end-of-phase UAT -- no browser-driving tool available in this executor session",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-12T18:36:48.757Z",
     "resolved_at": null
   }
 ]

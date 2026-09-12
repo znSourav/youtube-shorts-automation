@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 2
 current_phase_name: Core Generation Pipeline
 status: executing
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-09-12T18:20:36.024Z"
+stopped_at: Completed 02-03-PLAN.md
+last_updated: "2026-09-12T18:38:47.613Z"
 last_activity: 2026-09-12
 last_activity_desc: Phase 2 execution started
-state_head: 42ca4db94745127e142bb4da47093c7376a559b7
+state_head: bbdafa22f69a0f9b66463fc4a33ba5601775dca8
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 8
-  completed_plans: 6
+  completed_plans: 7
   percent: 17
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-12)
 ## Current Position
 
 Phase: 2 (Core Generation Pipeline) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-09-12 — Phase 2 execution started
 
@@ -65,6 +65,7 @@ Progress: [██░░░░░░░░] 17%
 | Phase quick-260912-j3x P01 | 26min | 3 tasks | 3 files |
 | Phase 02 P01 | 13min | 3 tasks | 17 files |
 | Phase 02 P02 | 35min | 2 tasks | 13 files |
+| Phase 02 P03 | ~20min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -89,6 +90,9 @@ Recent decisions affecting current work:
 - [Phase 2]: [Phase 2, 02-01] Disabled Next 16's agentRules (root AGENTS.md/CLAUDE.md auto-generation) to avoid shadowing this project's .claude/CLAUDE.md
 - [Phase 2]: [Phase 2, 02-02] Story Director tracer proved end-to-end on the first real attempt: gemini-3.1-pro-preview answered directly (no fallback), finishReason STOP, two real calls (3-scene CLI probe + 5-scene browser run) both validated; ledger now $1.3010 of $3.00
 - [Phase 2]: [Phase 2, 02-02] zod schema required-ness narrowed to match buildStorySchema's own JSON-Schema required arrays (not every §10 field), to avoid a real paid call failing validation over a field the model reasonably treated as optional
+- [Phase 2]: [Phase 2, 02-03] check-boundaries.ts invariant 2 narrowed to the LLM provider only -- image/video providers are deliberately imported directly by their single-call-site Server Action, per 02-RESEARCH.md Pattern 3
+- [Phase 2]: [Phase 2, 02-03] Scene images transported to the browser as base64 data: URLs returned from the Server Action, not served from a new HTTP route -- keeps the filesystem path out of rendered UI with no new file-serving surface
+- [Phase 2]: [Phase 2, 02-03] Real 3-scene probe: first attempt hit a PROHIBITED_CONTENT safety block on a benign kite-flying story; identical retry succeeded -- confirmed a transient classifier fluke, not a persistent content issue. All 3 generated images visually confirmed as the same character (SCENE-02's real bar)
 
 ### Pending Todos
 
@@ -114,6 +118,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-12T18:20:35.908Z
-Stopped at: Completed 02-02-PLAN.md
+Last session: 2026-09-12T18:38:47.497Z
+Stopped at: Completed 02-03-PLAN.md
 Resume file: None
