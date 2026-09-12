@@ -35,7 +35,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. The actual/estimated cost of both calls is printed or logged, so real per-call pricing is known before the budget system is built on assumptions.
   4. A provider error (auth failure, rate limit, malformed response) surfaces as a clear message in the output, not a silent hang or an uncaught crash.
 
-**Plans:** 1/4 plans executed
+**Plans:** 2/4 plans executed
 
 Plans:
 **Wave 1**
@@ -44,7 +44,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — $3.00 spend-ceiling ledger and secret-safe response logger (no paid calls)
+- [x] 01-02-PLAN.md — $3.00 spend-ceiling ledger and secret-safe response logger (no paid calls)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -142,7 +142,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Provider Smoke Test | 1/4 | In Progress|  |
+| 1. Provider Smoke Test | 2/4 | In Progress|  |
 | 2. Core Generation Pipeline | 0/TBD | Not started | - |
 | 3. Persistence & Structural Uniqueness | 0/TBD | Not started | - |
 | 4. Wife-Facing Review & Approval Flow | 0/TBD | Not started | - |
