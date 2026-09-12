@@ -13,7 +13,7 @@
 // carry over the REAL values a prior `--images` run printed, when the point
 // is to prove the pipeline against real recorded numbers rather than an
 // arbitrary test value. Run with:
-//   node --env-file=.env.local src/scripts/story-probe.ts [--scenes=N] [--idea=...] [--images]
+//   node --env-file=.env.local src/scripts/story-probe.ts [--scenes=N] [--idea=...] [--character=...] [--images]
 //   node --env-file=.env.local src/scripts/story-probe.ts --story-id=<id> --video=<n> [--duration=N] [--motion-prompt=...]
 import { readdirSync, statSync } from "node:fs";
 
@@ -47,6 +47,7 @@ interface ProbeArgs {
   storyId?: string;
   duration?: number;
   motionPrompt?: string;
+  character?: string;
 }
 
 function parseArgs(argv: string[]): ProbeArgs {
@@ -58,6 +59,7 @@ function parseArgs(argv: string[]): ProbeArgs {
   let storyId: string | undefined;
   let duration: number | undefined;
   let motionPrompt: string | undefined;
+  let character: string | undefined;
   for (const arg of argv) {
     if (arg.startsWith("--scenes=")) {
       scenes = Number(arg.slice("--scenes=".length));
@@ -73,9 +75,11 @@ function parseArgs(argv: string[]): ProbeArgs {
       duration = Number(arg.slice("--duration=".length));
     } else if (arg.startsWith("--motion-prompt=")) {
       motionPrompt = arg.slice("--motion-prompt=".length);
+    } else if (arg.startsWith("--character=")) {
+      character = arg.slice("--character=".length);
     }
   }
-  return { scenes, idea, images, video, storyId, duration, motionPrompt };
+  return { scenes, idea, images, video, storyId, duration, motionPrompt, character };
 }
 
 // Locates the already-written image.<ext> file under a scene's directory --
@@ -127,7 +131,9 @@ function generateStoryId(): string {
 }
 
 async function main(): Promise<void> {
-  const { scenes, idea, images, video, storyId: storyIdArg, duration, motionPrompt } = parseArgs(process.argv.slice(2));
+  const { scenes, idea, images, video, storyId: storyIdArg, duration, motionPrompt, character } = parseArgs(
+    process.argv.slice(2),
+  );
 
   // Video-only mode: --story-id=<id> --video=<n>, no fresh story/image call.
   if (storyIdArg && video !== undefined) {
@@ -147,7 +153,7 @@ async function main(): Promise<void> {
   try {
     const result = await runStoryDirector({
       idea,
-      characterDescription: DEFAULT_CHARACTER_DESCRIPTION,
+      characterDescription: character ?? DEFAULT_CHARACTER_DESCRIPTION,
       stylePresetId: "soft-hand-painted-2d",
       mood: "Emotional",
       sceneCount: scenes,
@@ -170,6 +176,18 @@ async function main(): Promise<void> {
     console.log(`Scene durations: ${result.data.scenes.map((scene) => scene.duration ?? "unset").join(", ")}`);
     console.log(`Fallback model used: ${result.fallbackUsed}`);
     console.log(`usageMetadata: ${JSON.stringify(result.usageMetadata)}`);
+    // Printed straight from the already-parsed, already-validated
+    // result.data object -- NOT via logRawResponse (which deliberately
+    // redacts long strings, per lib/log-response.ts's secret/payload-safe
+    // policy) -- so a real proof run (02-04 Task 2) can quote the full
+    // premise/ending verbatim for its Bangla/Banglish comparison.
+    console.log(`Premise: ${result.data.story.premise}`);
+    console.log(`Theme: ${result.data.story.theme}`);
+    console.log(`Emotional arc: ${result.data.story.emotional_arc}`);
+    console.log(`Ending: ${result.data.story.ending}`);
+    for (const scene of result.data.scenes) {
+      console.log(`  Scene ${scene.scene_number} purpose: ${scene.story_purpose}`);
+    }
 
     if (images) {
       const storyId = generateStoryId();

@@ -293,6 +293,99 @@
       },
       "billed": true,
       "at": "2026-09-12T18:59:45.815Z"
+    },
+    {
+      "call": "story:3-scene",
+      "model": "gemini-3.1-pro-preview",
+      "estimatedUsd": 0.05,
+      "usageMetadata": {
+        "promptTokenCount": 575,
+        "totalTokenCount": 3224,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 575
+          }
+        ],
+        "thoughtsTokenCount": 2649,
+        "serviceTier": "standard"
+      },
+      "billed": false,
+      "at": "2026-09-12T19:04:33.457Z"
+    },
+    {
+      "call": "story:3-scene",
+      "model": "gemini-3.1-pro-preview",
+      "estimatedUsd": 0.05,
+      "usageMetadata": {
+        "promptTokenCount": 575,
+        "candidatesTokenCount": 1489,
+        "totalTokenCount": 7633,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 575
+          }
+        ],
+        "thoughtsTokenCount": 5569,
+        "serviceTier": "standard"
+      },
+      "billed": true,
+      "at": "2026-09-12T19:05:48.968Z"
+    },
+    {
+      "call": "story:5-scene",
+      "model": "gemini-3.1-pro-preview",
+      "estimatedUsd": 0.05,
+      "usageMetadata": {
+        "promptTokenCount": 551,
+        "totalTokenCount": 551,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 551
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "billed": false,
+      "at": "2026-09-12T19:07:18.399Z"
+    },
+    {
+      "call": "story:5-scene",
+      "model": "gemini-3.1-pro-preview",
+      "estimatedUsd": 0.05,
+      "usageMetadata": {
+        "promptTokenCount": 551,
+        "totalTokenCount": 551,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 551
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "billed": false,
+      "at": "2026-09-12T19:07:31.725Z"
+    },
+    {
+      "call": "story:5-scene",
+      "model": "gemini-3.1-pro-preview",
+      "estimatedUsd": 0.05,
+      "usageMetadata": {
+        "promptTokenCount": 551,
+        "totalTokenCount": 551,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 551
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "billed": false,
+      "at": "2026-09-12T19:12:10.206Z"
     }
   ]
 }
