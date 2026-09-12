@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync, statSync } from "node:fs";
+import { mkdirSync, writeFileSync, statSync, existsSync, readFileSync } from "node:fs";
 import { writeFileSync as writeFileSyncOverwrite } from "node:fs";
 import path from "node:path";
 import { inspect } from "node:util";
@@ -46,10 +46,29 @@ const CHILD_SCENE_PROMPT =
 const CHILD_MOTION_PROMPT =
   "Gentle camera drift through the magical garden; glowing flowers softly pulse and fireflies drift " +
   "past while the little girl looks around for her cat.";
+
+// Quick task 260912-j3x: probes CR-03 (01-UAT.md) — Veo 3.1 Lite animated
+// CHILD_MOTION_PROMPT's "looks around for her cat" as a head-independent-of-
+// torso rotation. This prompt requests ONLY camera drift and environmental
+// motion, never a character body/head pose change, to see whether avoiding
+// pose-change language avoids the artifact. Stays consistent with the D-02
+// "Soft hand-painted 2D" style already baked into the source image. Worded
+// as a positive description of the motion wanted, not a list of things to
+// avoid — negative instructions are unreliable steering for video models.
+const CONSERVATIVE_MOTION_PROMPT =
+  "A slow, gentle camera push-in drifting through the magical garden. The glowing flowers pulse " +
+  "softly, fireflies drift past, and a light breeze gives a faint sway to the little girl's hair and " +
+  "clothing. The girl herself holds her pose, calm and still, front-facing.";
 // 8s is deliberately different from the tracer's 4s (plan 01-04 Task 1): the
 // longest duration Veo 3.1 Lite supports at 720p, establishing the
 // worst-case per-clip cost for Phase 5's budget system.
 const CHILD_VIDEO_DURATION_SECONDS = 8;
+
+// Reuses the already-approved childscene image (never regenerated) and
+// writes beside — never over — the original clip so the two can be compared
+// side by side without losing the reviewed original.
+const CONSERVATIVE_SOURCE_IMAGE = path.join(OUTPUT_DIR, "scene-childscene.jpg");
+const CONSERVATIVE_OUTPUT_VIDEO = path.join(OUTPUT_DIR, "scene-childscene-conservative.mp4");
 
 function parseArgs(argv: string[]): { probe: string; imageOnly: boolean; report: boolean } {
   const probeArg = argv.find((a) => a.startsWith("--probe="));
@@ -74,6 +93,26 @@ function extensionForMimeType(mimeType: string | null): string {
       return "webp";
     default:
       return "png";
+  }
+}
+
+// Faithful inverse of extensionForMimeType: the on-disk extension was itself
+// derived from the provider's own reported mimeType (CR-02), so mapping back
+// recovers the real type rather than assuming one. Throws (naming the path)
+// for anything unrecognized instead of guessing, since a wrong mimeType sent
+// to Veo would be silently-wrong input to a paid call.
+function mimeTypeForExtension(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  switch (ext) {
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".png":
+      return "image/png";
+    case ".webp":
+      return "image/webp";
+    default:
+      throw new Error(`Cannot infer mimeType for "${filePath}": unrecognized extension "${ext}".`);
   }
 }
 
@@ -258,34 +297,58 @@ async function runGenericProbe(imageOnly: boolean): Promise<number> {
 }
 
 /**
- * Dispatches a single childscene Veo call (image -> motion), gated behind
- * checkCeiling() every time it is invoked — including the D-01 retry, so the
- * retry path can never bypass the D-04 budget gate (T-01-02).
+ * Variant inputs that differ between the childscene and childscene-conservative
+ * dispatches — everything else (the checkCeiling gate, duration, resolution,
+ * aspect ratio, model) is shared so there is exactly one ceiling-gated
+ * dispatch site rather than a duplicated one a future edit could drop the
+ * gate from.
+ */
+interface ChildVideoVariant {
+  motionPrompt: string;
+  outputPath: string;
+  ledgerCall: string;
+  logLabel: string;
+}
+
+const CHILDSCENE_VARIANT: ChildVideoVariant = {
+  motionPrompt: CHILD_MOTION_PROMPT,
+  outputPath: path.join(OUTPUT_DIR, "scene-childscene.mp4"),
+  ledgerCall: "childscene-video",
+  logLabel: "childscene",
+};
+
+/**
+ * Dispatches a single childscene-family Veo call (image -> motion), gated
+ * behind checkCeiling() every time it is invoked — including the D-01 retry,
+ * so the retry path can never bypass the D-04 budget gate (T-01-02). Shared
+ * by the original childscene probe and the childscene-conservative probe via
+ * `variant`, so both paths pass through one gate instead of two.
  */
 async function dispatchChildVideo(
   imageBytes: Buffer,
   mimeType: string,
   attemptLabel: string,
+  variant: ChildVideoVariant,
 ): Promise<GenerateVideoResult> {
   const videoEstimate = CHILD_VIDEO_DURATION_SECONDS * VIDEO_PRICE_PER_SECOND[VIDEO_RESOLUTION];
   checkCeiling(videoEstimate);
 
   console.log(
-    `Dispatching childscene video call (${attemptLabel}, resolution=${VIDEO_RESOLUTION}, ` +
+    `Dispatching ${variant.logLabel} video call (${attemptLabel}, resolution=${VIDEO_RESOLUTION}, ` +
       `duration=${CHILD_VIDEO_DURATION_SECONDS}s, estimate=$${videoEstimate.toFixed(4)})...`,
   );
   const result = await generateVideo({
     imageBytes,
     mimeType,
-    prompt: CHILD_MOTION_PROMPT,
+    prompt: variant.motionPrompt,
     durationSeconds: CHILD_VIDEO_DURATION_SECONDS,
     resolution: VIDEO_RESOLUTION,
     aspectRatio: "9:16",
-    outputPath: path.join(OUTPUT_DIR, "scene-childscene.mp4"),
+    outputPath: variant.outputPath,
   });
 
   recordSpend({
-    call: "childscene-video",
+    call: variant.ledgerCall,
     model: VIDEO_MODEL_ID,
     estimatedUsd: result.estimatedUsd,
     usageMetadata: result.usageMetadata,
@@ -293,7 +356,9 @@ async function dispatchChildVideo(
     at: new Date().toISOString(),
   });
 
-  console.log(`VIDEO COST $${result.estimatedUsd.toFixed(4)} (model=${VIDEO_MODEL_ID}, ${attemptLabel})`);
+  console.log(
+    `VIDEO COST $${result.estimatedUsd.toFixed(4)} (model=${VIDEO_MODEL_ID}, ${variant.logLabel}, ${attemptLabel})`,
+  );
   return result;
 }
 
@@ -376,6 +441,7 @@ async function runChildsceneProbe(): Promise<number> {
       imageResult.bytes,
       imageResult.mimeType ?? "image/png",
       "attempt 1",
+      CHILDSCENE_VARIANT,
     );
     let videoCostTotal = videoResult.estimatedUsd;
     let isRetry = false;
@@ -400,6 +466,7 @@ async function runChildsceneProbe(): Promise<number> {
         imageResult.bytes,
         imageResult.mimeType ?? "image/png",
         "retry",
+        CHILDSCENE_VARIANT,
       );
       videoCostTotal += videoResult.estimatedUsd;
 
@@ -427,6 +494,94 @@ async function runChildsceneProbe(): Promise<number> {
     }
 
     console.log(isRetry ? "CHILD PROBE: PASS (video, retry)" : "CHILD PROBE: PASS (video)");
+    console.log(`Wrote ${videoResult.filePath}`);
+    console.log(`TOTAL THIS RUN $${total.toFixed(4)}`);
+    console.log(`LEDGER TOTAL $${totalSpentUsd(ledgerFinal).toFixed(4)}`);
+    return 0;
+  } catch (err) {
+    if (err instanceof CeilingExceededError) {
+      console.error(`SPEND CEILING REFUSAL: ${err.message}`);
+      return 2;
+    }
+    console.error("UNCLASSIFIED ERROR:", err);
+    return 1;
+  }
+}
+
+const CONSERVATIVE_VARIANT: ChildVideoVariant = {
+  motionPrompt: CONSERVATIVE_MOTION_PROMPT,
+  outputPath: CONSERVATIVE_OUTPUT_VIDEO,
+  ledgerCall: "childscene-conservative-video",
+  logLabel: "childscene-conservative",
+};
+
+/**
+ * Quick task 260912-j3x: re-animates the ALREADY-APPROVED
+ * scene-childscene.jpg (never regenerated — no image call on this path) with
+ * CONSERVATIVE_MOTION_PROMPT, to empirically probe whether CR-03's
+ * head/torso kinematic disconnect (01-UAT.md) reproduces under a motion
+ * prompt that never asks for a character pose change. Writes to the distinct
+ * CONSERVATIVE_OUTPUT_VIDEO path so the original, already-reviewed clip is
+ * never overwritten and the two can be compared side by side.
+ */
+async function runChildsceneConservativeProbe(): Promise<number> {
+  try {
+    mkdirSync(OUTPUT_DIR, { recursive: true });
+
+    // Source image must already exist on disk — this probe never generates
+    // one. Checked BEFORE any checkCeiling call and before any provider call,
+    // so this path can never reach the provider without its source image.
+    if (!existsSync(CONSERVATIVE_SOURCE_IMAGE)) {
+      console.error(
+        `SOURCE IMAGE MISSING: ${CONSERVATIVE_SOURCE_IMAGE} does not exist. Run ` +
+          '"npm run smoke -- --probe=childscene" first to produce it.',
+      );
+      return 1;
+    }
+
+    const imageBytes = readFileSync(CONSERVATIVE_SOURCE_IMAGE);
+    if (imageBytes.length === 0) {
+      console.error(`SOURCE IMAGE ERROR: ${CONSERVATIVE_SOURCE_IMAGE} is zero-length.`);
+      return 1;
+    }
+    console.log(
+      `Reusing existing source image ${CONSERVATIVE_SOURCE_IMAGE} (${imageBytes.length} bytes) — ` +
+        "no image generation call is dispatched on this path.",
+    );
+
+    const mimeType = mimeTypeForExtension(CONSERVATIVE_SOURCE_IMAGE);
+
+    // D-03-style guard: Veo is unreachable unless a real image was read from
+    // disk above. dispatchChildVideo() gates the paid call behind
+    // checkCeiling() itself, same as every other paid call in this file.
+    const videoResult = await dispatchChildVideo(imageBytes, mimeType, "attempt 1", CONSERVATIVE_VARIANT);
+
+    if (videoResult.timedOut) {
+      console.error(
+        `VIDEO TIMEOUT: operation ${videoResult.operationName ?? "(unnamed)"} did not complete within ` +
+          "10 minutes.",
+      );
+      return 1;
+    }
+
+    const total = videoResult.estimatedUsd;
+    const ledgerFinal = loadLedger();
+
+    if (videoResult.blocked) {
+      // Deliberately NO retry here, unlike runChildsceneProbe's single
+      // block-retry. That retry exists to disambiguate Veo's documented
+      // non-deterministic RAI false positives (RESEARCH.md Pitfall 3) on a
+      // BLOCKING outcome; this probe investigates motion QUALITY, not
+      // blocking, so an automatic retry would silently double the spend to
+      // $0.80 for no extra signal. Report the provider's own reason verbatim
+      // (RESEARCH.md Pitfall 2) and leave any re-run decision to the human.
+      console.log(`CHILD CONSERVATIVE PROBE: BLOCKED reason=${videoResult.blockReason} (video, attempt 1)`);
+      console.log(`TOTAL THIS RUN $${total.toFixed(4)}`);
+      console.log(`LEDGER TOTAL $${totalSpentUsd(ledgerFinal).toFixed(4)}`);
+      return 0;
+    }
+
+    console.log("CHILD CONSERVATIVE PROBE: PASS (video)");
     console.log(`Wrote ${videoResult.filePath}`);
     console.log(`TOTAL THIS RUN $${total.toFixed(4)}`);
     console.log(`LEDGER TOTAL $${totalSpentUsd(ledgerFinal).toFixed(4)}`);
@@ -491,8 +646,10 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (probe !== "generic" && probe !== "childscene" && probe !== "all") {
-    console.error(`UNKNOWN PROBE: "${probe}". Valid values: generic, childscene, all.`);
+  if (probe !== "generic" && probe !== "childscene" && probe !== "childscene-conservative" && probe !== "all") {
+    console.error(
+      `UNKNOWN PROBE: "${probe}". Valid values: generic, childscene, childscene-conservative, all.`,
+    );
     process.exitCode = 1;
     return;
   }
@@ -504,6 +661,16 @@ async function main(): Promise<void> {
 
   if (probe === "childscene") {
     process.exitCode = await withMirroredConsole("childscene-run.log", () => runChildsceneProbe());
+    return;
+  }
+
+  if (probe === "childscene-conservative") {
+    // Opt-in paid follow-up (quick task 260912-j3x) — deliberately NOT part
+    // of the "all" sequence below, so a future full smoke run never silently
+    // costs an extra $0.40.
+    process.exitCode = await withMirroredConsole("childscene-conservative-run.log", () =>
+      runChildsceneConservativeProbe(),
+    );
     return;
   }
 
