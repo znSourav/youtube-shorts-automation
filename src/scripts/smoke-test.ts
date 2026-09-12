@@ -448,25 +448,39 @@ async function runChildsceneProbe(): Promise<number> {
  * remaining-headroom line against the $3.00 D-05 ceiling.
  */
 function runReport(): number {
-  mkdirSync(OUTPUT_DIR, { recursive: true });
+  // WR-03: mirror the try/catch taxonomy used by runGenericProbe and
+  // runChildsceneProbe (2 for CeilingExceededError, 1 for anything else) so
+  // a corrupted/unparseable ledger (loadLedger's deliberate throw, per its
+  // own docstring) is reported via this script's own error convention
+  // instead of an unhandled exception propagating out of `main`.
+  try {
+    mkdirSync(OUTPUT_DIR, { recursive: true });
 
-  const ledger = loadLedger();
-  console.log("COST REPORT — every paid call recorded in this phase's ledger (no network call made)");
-  console.log("");
+    const ledger = loadLedger();
+    console.log("COST REPORT — every paid call recorded in this phase's ledger (no network call made)");
+    console.log("");
 
-  for (const entry of ledger.entries) {
-    console.log(
-      `call=${entry.call} model=${entry.model} estimatedUsd=$${entry.estimatedUsd.toFixed(4)} ` +
-        `usageMetadata=${JSON.stringify(entry.usageMetadata)}`,
-    );
+    for (const entry of ledger.entries) {
+      console.log(
+        `call=${entry.call} model=${entry.model} estimatedUsd=$${entry.estimatedUsd.toFixed(4)} ` +
+          `usageMetadata=${JSON.stringify(entry.usageMetadata)}`,
+      );
+    }
+
+    const total = totalSpentUsd(ledger);
+    const headroom = ledger.ceilingUsd - total;
+    console.log("");
+    console.log(`TOTAL LEDGER $${total.toFixed(4)}`);
+    console.log(`REMAINING HEADROOM $${headroom.toFixed(4)} of $${ledger.ceilingUsd.toFixed(2)} ceiling`);
+    return 0;
+  } catch (err) {
+    if (err instanceof CeilingExceededError) {
+      console.error(`SPEND CEILING REFUSAL: ${err.message}`);
+      return 2;
+    }
+    console.error("UNCLASSIFIED ERROR:", err);
+    return 1;
   }
-
-  const total = totalSpentUsd(ledger);
-  const headroom = ledger.ceilingUsd - total;
-  console.log("");
-  console.log(`TOTAL LEDGER $${total.toFixed(4)}`);
-  console.log(`REMAINING HEADROOM $${headroom.toFixed(4)} of $${ledger.ceilingUsd.toFixed(2)} ceiling`);
-  return 0;
 }
 
 async function main(): Promise<void> {
