@@ -1,0 +1,71 @@
+{
+  "ceilingUsd": 3,
+  "entries": [
+    {
+      "call": "generic-image",
+      "model": "gemini-3.1-flash-image",
+      "estimatedUsd": 0.067,
+      "usageMetadata": {
+        "promptTokenCount": 12,
+        "candidatesTokenCount": 1536,
+        "totalTokenCount": 1548,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 12
+          }
+        ],
+        "candidatesTokensDetails": [
+          {
+            "modality": "IMAGE",
+            "tokenCount": 1120
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "billed": true,
+      "at": "2026-09-12T04:39:57.286Z"
+    },
+    {
+      "call": "generic-image",
+      "model": "gemini-3.1-flash-image",
+      "estimatedUsd": 0.067,
+      "usageMetadata": {
+        "promptTokenCount": 12,
+        "candidatesTokenCount": 1524,
+        "totalTokenCount": 1536,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 12
+          }
+        ],
+        "candidatesTokensDetails": [
+          {
+            "modality": "IMAGE",
+            "tokenCount": 1120
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "billed": true,
+      "at": "2026-09-12T04:41:31.409Z"
+    },
+    {
+      "call": "generic-video",
+      "model": "veo-3.1-lite-generate-preview",
+      "estimatedUsd": 0.2,
+      "usageMetadata": {
+        "generatedVideos": [
+          {
+            "video": {
+              "uri": "https://generativelanguage.googleapis.com/v1beta/files/83xt0up4xlfq:download?alt=media"
+            }
+          }
+        ]
+      },
+      "billed": true,
+      "at": "2026-09-12T04:42:07.763Z"
+    }
+  ]
+}
