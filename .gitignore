@@ -4,3 +4,8 @@ node_modules/
 storage/_smoketest/*.png
 storage/_smoketest/*.mp4
 storage/_smoketest/*.log
+
+# GSD runtime artifacts — session-local, not project state
+.gsd/
+.planning/milestone.lock
+.planning/research/.cache/

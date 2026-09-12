@@ -1,0 +1,43 @@
+{
+  "contract": "1.0.0",
+  "flavor": "core",
+  "milestone": null,
+  "phases": [
+    {
+      "number": "1",
+      "name": "Provider Smoke Test",
+      "status": "in_progress"
+    },
+    {
+      "number": "2",
+      "name": "Core Generation Pipeline",
+      "status": "pending"
+    },
+    {
+      "number": "3",
+      "name": "Persistence & Structural Uniqueness",
+      "status": "pending"
+    },
+    {
+      "number": "4",
+      "name": "Wife-Facing Review & Approval Flow",
+      "status": "pending"
+    },
+    {
+      "number": "5",
+      "name": "Budget & Retry Safeguards",
+      "status": "pending"
+    },
+    {
+      "number": "6",
+      "name": "Reliability, Secrets Hygiene & Output Correctness",
+      "status": "pending"
+    }
+  ],
+  "next": {
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step",
+    "reason": "Phase 1 of 6 · 0% · executing"
+  },
+  "updated_at": "2026-09-12T03:51:45.147Z"
+}
