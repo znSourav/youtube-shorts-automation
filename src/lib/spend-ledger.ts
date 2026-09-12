@@ -42,8 +42,20 @@ export function loadLedger(path: string = LEDGER_PATH): Ledger {
   return JSON.parse(raw) as Ledger;
 }
 
+/**
+ * Sums every entry's `estimatedUsd`. Throws rather than silently treating a
+ * malformed entry (e.g. a hand-edited or corrupted `estimatedUsd` that is no
+ * longer a valid non-negative finite number) as $0 spent — an unvalidated
+ * entry could otherwise understate the running total and disarm the ceiling
+ * gate in `checkCeiling` (fail-closed, per CR-01).
+ */
 export function totalSpentUsd(ledger: Ledger): number {
-  return ledger.entries.reduce((sum, entry) => sum + entry.estimatedUsd, 0);
+  return ledger.entries.reduce((sum, entry) => {
+    if (!Number.isFinite(entry.estimatedUsd) || entry.estimatedUsd < 0) {
+      throw new Error(`Ledger entry has invalid estimatedUsd: ${JSON.stringify(entry)}`);
+    }
+    return sum + entry.estimatedUsd;
+  }, 0);
 }
 
 /**
@@ -52,6 +64,15 @@ export function totalSpentUsd(ledger: Ledger): number {
  * return can be ignored at a call site by accident, a throw cannot.
  * Non-finite and negative estimates throw rather than pass, so a broken
  * cost calculation cannot disarm the gate (T-01-02).
+ *
+ * The *loaded* ledger's shape is validated too (CR-01): `ceilingUsd` must be
+ * a valid positive finite number, and `totalSpentUsd` validates each entry's
+ * `estimatedUsd`. A missing/malformed ceiling or entry on disk (bad manual
+ * edit, bad merge resolution, future writer bug) MUST refuse the call rather
+ * than silently pass every future check — `someNumber > undefined` and any
+ * comparison against `NaN` evaluate to `false` in JS, so an unvalidated
+ * ceiling would otherwise disarm the gate entirely. Fail closed, no
+ * exceptions.
  */
 export function checkCeiling(estimatedUsd: number, path: string = LEDGER_PATH): void {
   if (!Number.isFinite(estimatedUsd) || estimatedUsd < 0) {
@@ -61,6 +82,12 @@ export function checkCeiling(estimatedUsd: number, path: string = LEDGER_PATH): 
   }
   const ledger = loadLedger(path);
   const ceiling = ledger.ceilingUsd;
+  if (!Number.isFinite(ceiling) || ceiling <= 0) {
+    throw new CeilingExceededError(
+      `Refusing call: ledger ceilingUsd (${ceiling}) is not a valid positive finite number — ` +
+        `refusing rather than silently allowing unlimited spend.`,
+    );
+  }
   const spent = totalSpentUsd(ledger);
   const projected = spent + estimatedUsd;
   // Inclusive boundary: projected total exactly equal to the ceiling is allowed.
