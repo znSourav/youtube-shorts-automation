@@ -16,11 +16,11 @@ Requirements for the 24-hour MVP. Each maps to a roadmap phase.
 
 ### Story
 
-- [ ] **STORY-01**: Wife can type a story idea in Bangla script and receive a coherent, original story with a title, beginning, middle, and ending
-- [ ] **STORY-02**: Wife can type the same idea in Banglish (Latin-script Bangla) with identical results — no manual translation required
-- [ ] **STORY-03**: Wife can describe a character and pick an animation style/mood in plain language, and never has to write or see an AI prompt
+- [x] **STORY-01**: Wife can type a story idea in Bangla script and receive a coherent, original story with a title, beginning, middle, and ending
+- [x] **STORY-02**: Wife can type the same idea in Banglish (Latin-script Bangla) with identical results — no manual translation required
+- [x] **STORY-03**: Wife can describe a character and pick an animation style/mood in plain language, and never has to write or see an AI prompt
 - [x] **STORY-04**: Every generated story includes a Character Bible and a Style Bible, generated automatically from her inputs and the selected style preset
-- [ ] **STORY-05**: Wife can choose a scene count (5-7) and get an automatically-generated scene-by-scene breakdown, each scene with a clear story purpose
+- [x] **STORY-05**: Wife can choose a scene count (5-7) and get an automatically-generated scene-by-scene breakdown, each scene with a clear story purpose
 
 ### Uniqueness
 
@@ -30,8 +30,8 @@ Requirements for the 24-hour MVP. Each maps to a roadmap phase.
 
 ### Scene
 
-- [ ] **SCENE-01**: Every approved story produces exactly the requested number of scenes, numbered 1..N, with no duplicates or gaps
-- [ ] **SCENE-02**: Generated scene prompts explicitly carry forward character appearance/clothing/features so consecutive scenes stay visually consistent
+- [x] **SCENE-01**: Every approved story produces exactly the requested number of scenes, numbered 1..N, with no duplicates or gaps
+- [x] **SCENE-02**: Generated scene prompts explicitly carry forward character appearance/clothing/features so consecutive scenes stay visually consistent
 
 ### Image
 
@@ -119,16 +119,16 @@ Explicitly excluded from this project, not just this milestone. Documented to pr
 |-------------|-------|--------|
 | STARTUP-01 | Phase 2 | Complete |
 | STARTUP-02 | Phase 6 | Pending |
-| STORY-01 | Phase 2 | Pending |
-| STORY-02 | Phase 2 | Pending |
-| STORY-03 | Phase 2 | Pending |
+| STORY-01 | Phase 2 | Complete |
+| STORY-02 | Phase 2 | Complete |
+| STORY-03 | Phase 2 | Complete |
 | STORY-04 | Phase 2 | Complete |
-| STORY-05 | Phase 2 | Pending |
+| STORY-05 | Phase 2 | Complete |
 | UNIQUE-01 | Phase 3 | Pending |
 | UNIQUE-02 | Phase 3 | Pending |
 | UNIQUE-03 | Phase 3 | Pending |
-| SCENE-01 | Phase 2 | Pending |
-| SCENE-02 | Phase 2 | Pending |
+| SCENE-01 | Phase 2 | Complete |
+| SCENE-02 | Phase 2 | Complete |
 | IMAGE-01 | Phase 3 | Pending |
 | IMAGE-02 | Phase 4 | Pending |
 | IMAGE-03 | Phase 3 | Pending |

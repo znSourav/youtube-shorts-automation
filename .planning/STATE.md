@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 2
 current_phase_name: Core Generation Pipeline
 status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-09-12T15:23:31.347Z"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-09-12T18:20:36.024Z"
 last_activity: 2026-09-12
 last_activity_desc: Phase 2 execution started
-state_head: f193d783a3de93876760912bdee3539c62e042b3
+state_head: 42ca4db94745127e142bb4da47093c7376a559b7
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 8
-  completed_plans: 5
+  completed_plans: 6
   percent: 17
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-12)
 ## Current Position
 
 Phase: 2 (Core Generation Pipeline) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-09-12 — Phase 2 execution started
 
@@ -64,6 +64,7 @@ Progress: [██░░░░░░░░] 17%
 | Phase 01 P04 | 15min | 2 tasks | 3 files |
 | Phase quick-260912-j3x P01 | 26min | 3 tasks | 3 files |
 | Phase 02 P01 | 13min | 3 tasks | 17 files |
+| Phase 02 P02 | 35min | 2 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -86,6 +87,8 @@ Recent decisions affecting current work:
 - [Phase 1]: [Quick j3x]: CR-03 resolved — conservative motion prompts (camera/environmental motion only, no character pose-change language) avoid the head/torso kinematic disconnect while remaining visibly usable footage; validated via a real $0.4000 Veo probe (ledger now $1.2010 of $3.00 D-05 ceiling).
 - [Phase 2]: [Phase 2, 02-01] Turbopack unusable on this Windows machine (Application Control policy blocks the native SWC binary) -- dev/build scripts use --webpack fallback
 - [Phase 2]: [Phase 2, 02-01] Disabled Next 16's agentRules (root AGENTS.md/CLAUDE.md auto-generation) to avoid shadowing this project's .claude/CLAUDE.md
+- [Phase 2]: [Phase 2, 02-02] Story Director tracer proved end-to-end on the first real attempt: gemini-3.1-pro-preview answered directly (no fallback), finishReason STOP, two real calls (3-scene CLI probe + 5-scene browser run) both validated; ledger now $1.3010 of $3.00
+- [Phase 2]: [Phase 2, 02-02] zod schema required-ness narrowed to match buildStorySchema's own JSON-Schema required arrays (not every §10 field), to avoid a real paid call failing validation over a field the model reasonably treated as optional
 
 ### Pending Todos
 
@@ -111,6 +114,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-12T15:23:31.242Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-09-12T18:20:35.908Z
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None

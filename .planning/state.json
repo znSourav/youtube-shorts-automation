@@ -11,7 +11,7 @@
     {
       "number": "2",
       "name": "Core Generation Pipeline",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "3",
@@ -39,5 +39,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 2 of 6 · 17% · executing"
   },
-  "updated_at": "2026-09-12T15:23:20.654Z"
+  "updated_at": "2026-09-12T18:20:20.348Z"
 }
