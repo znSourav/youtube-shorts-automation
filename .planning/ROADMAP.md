@@ -68,7 +68,24 @@ Plans:
   4. The scene breakdown always has exactly the requested number of scenes, numbered 1..N with no gaps or duplicates, and character appearance/clothing/features carry forward across consecutive scene prompts so scenes stay visually consistent.
   5. She can animate one approved scene image into a 9:16, 720p Veo clip and confirm the result end-to-end before committing to generating a full episode.
 
-**Plans**: TBD
+**Plans:** 4 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 02-01-PLAN.md — Next.js 16 App Router scaffold merged onto Phase 1's repo without loss, plus the 6-preset Style Bible config
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 02-02-PLAN.md — Tracer: typed idea → real structured Gemini story on screen, plus scene-plan validator and boundary gates
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 02-03-PLAN.md — Scene images to disk, sequential and ceiling-gated, plus the three screens with the image-first pause
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 02-04-PLAN.md — One scene animated to a playable 9:16 720p clip, plus the Bangla/Banglish and full-scale proof runs
 
 ### Phase 3: Persistence & Structural Uniqueness
 
@@ -143,7 +160,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Provider Smoke Test | 4/4 | Complete    | 2026-09-12 |
-| 2. Core Generation Pipeline | 0/TBD | Not started | - |
+| 2. Core Generation Pipeline | 0/4 | Planned | - |
 | 3. Persistence & Structural Uniqueness | 0/TBD | Not started | - |
 | 4. Wife-Facing Review & Approval Flow | 0/TBD | Not started | - |
 | 5. Budget & Retry Safeguards | 0/TBD | Not started | - |
