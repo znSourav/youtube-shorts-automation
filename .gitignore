@@ -2,6 +2,8 @@ node_modules/
 .env.local
 !.env.local.example
 storage/_smoketest/*.png
+storage/_smoketest/*.jpg
+storage/_smoketest/*.webp
 storage/_smoketest/*.mp4
 storage/_smoketest/*.log
 

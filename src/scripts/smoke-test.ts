@@ -58,6 +58,24 @@ function parseArgs(argv: string[]): { probe: string; imageOnly: boolean; report:
   return { probe, imageOnly, report };
 }
 
+// CR-02: the provider's own reported mimeType decides the file extension —
+// never assume PNG. gemini-image.ts's own fallback (line 145) only applies
+// when the provider omits mimeType entirely; when it IS present but not one
+// of these three known values, ".png" here is a documented fallback guess,
+// not a silent one.
+function extensionForMimeType(mimeType: string | null): string {
+  switch (mimeType) {
+    case "image/png":
+      return "png";
+    case "image/jpeg":
+      return "jpg";
+    case "image/webp":
+      return "webp";
+    default:
+      return "png";
+  }
+}
+
 function formatLogArg(arg: unknown): string {
   if (typeof arg === "string") return arg;
   if (arg instanceof Error) return arg.stack ?? arg.message;
@@ -143,11 +161,14 @@ async function runGenericProbe(imageOnly: boolean): Promise<number> {
       return 1;
     }
 
-    const pngPath = path.join(OUTPUT_DIR, "scene-generic.png");
+    const pngPath = path.join(
+      OUTPUT_DIR,
+      `scene-generic.${extensionForMimeType(imageResult.mimeType)}`,
+    );
     writeFileSync(pngPath, imageResult.bytes);
     const pngStat = statSync(pngPath);
     if (pngStat.size === 0) {
-      console.error("IMAGE ERROR: written PNG is zero-length.");
+      console.error("IMAGE ERROR: written image file is zero-length.");
       return 1;
     }
     console.log(`Wrote ${pngPath} (${pngStat.size} bytes)`);
@@ -329,11 +350,14 @@ async function runChildsceneProbe(): Promise<number> {
 
     console.log("CHILD PROBE: PASS (image)");
 
-    const pngPath = path.join(OUTPUT_DIR, "scene-childscene.png");
+    const pngPath = path.join(
+      OUTPUT_DIR,
+      `scene-childscene.${extensionForMimeType(imageResult.mimeType)}`,
+    );
     writeFileSync(pngPath, imageResult.bytes);
     const pngStat = statSync(pngPath);
     if (pngStat.size === 0) {
-      console.error("IMAGE ERROR: written PNG is zero-length.");
+      console.error("IMAGE ERROR: written image file is zero-length.");
       return 1;
     }
     console.log(`Wrote ${pngPath} (${pngStat.size} bytes)`);
