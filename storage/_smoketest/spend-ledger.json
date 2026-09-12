@@ -107,6 +107,22 @@
       },
       "billed": true,
       "at": "2026-09-12T04:59:00.376Z"
+    },
+    {
+      "call": "childscene-conservative-video",
+      "model": "veo-3.1-lite-generate-preview",
+      "estimatedUsd": 0.4,
+      "usageMetadata": {
+        "generatedVideos": [
+          {
+            "video": {
+              "uri": "https://generativelanguage.googleapis.com/v1beta/files/zr1jhdczkuhn:download?alt=media"
+            }
+          }
+        ]
+      },
+      "billed": true,
+      "at": "2026-09-12T13:08:14.614Z"
     }
   ]
 }
