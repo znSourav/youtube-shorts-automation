@@ -10,7 +10,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test:lib": "node --test src/lib/spend-ledger.test.ts src/lib/log-response.test.ts src/core/story/styles.test.ts",
+    "test:lib": "node --test src/lib/spend-ledger.test.ts src/lib/log-response.test.ts src/core/story/styles.test.ts src/core/story/validate-scene-plan.test.ts src/core/story/director.test.ts src/providers/llm/gemini.test.ts",
     "smoke": "node --env-file=.env.local src/scripts/smoke-test.ts"
   },
   "dependencies": {

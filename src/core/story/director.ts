@@ -2,6 +2,7 @@ import { checkCeiling, recordSpend } from "../../lib/spend-ledger.ts";
 import { generateStory, LLM_PRICE_PER_CALL } from "../../providers/llm/gemini.ts";
 import { STYLE_PRESETS } from "./styles.ts";
 import { StoryDirectorOutputSchema, type StoryDirectorOutput } from "./schema.ts";
+import { validateScenePlan } from "./validate-scene-plan.ts";
 
 export interface StoryDirectorInput {
   idea: string;
@@ -13,9 +14,6 @@ export interface StoryDirectorInput {
 
 export interface StoryDirectorFailure {
   ok: false;
-  // "validation_failed" is added by plan 02-02 Task 2 once
-  // validate-scene-plan.ts exists; kept here as a forward-compatible member
-  // so callers written against this union do not need to change again.
   reason: "blocked" | "parse_failed" | "validation_failed";
   detail: string;
   blockReason?: string;
@@ -207,6 +205,19 @@ export async function runStoryDirector(input: StoryDirectorInput): Promise<Story
       reason: "parse_failed",
       detail: "Story Director response did not match the expected shape.",
       issues: parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`),
+    };
+  }
+
+  // The response schema's minItems/maxItems constrain scene COUNT only; this
+  // checks the cross-item numbering invariant it cannot express (SCENE-01).
+  // Nothing downstream of runStoryDirector ever sees an unvalidated scenes array.
+  const sceneValidation = validateScenePlan(parsed.data.scenes, input.sceneCount);
+  if (!sceneValidation.valid) {
+    return {
+      ok: false,
+      reason: "validation_failed",
+      detail: "Scene plan failed validation.",
+      issues: sceneValidation.errors,
     };
   }
 

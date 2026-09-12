@@ -143,6 +143,26 @@
       },
       "billed": true,
       "at": "2026-09-12T18:10:07.680Z"
+    },
+    {
+      "call": "story:5-scene",
+      "model": "gemini-3.1-pro-preview",
+      "estimatedUsd": 0.05,
+      "usageMetadata": {
+        "promptTokenCount": 507,
+        "candidatesTokenCount": 1713,
+        "totalTokenCount": 5377,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 507
+          }
+        ],
+        "thoughtsTokenCount": 3157,
+        "serviceTier": "standard"
+      },
+      "billed": true,
+      "at": "2026-09-12T18:13:25.286Z"
     }
   ]
 }
