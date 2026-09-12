@@ -13,7 +13,7 @@ The journey runs risk-first: prove the two paid, unproven AI provider integratio
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Provider Smoke Test** - Prove Gemini image generation and Veo 3.1 Lite image-to-video both work end-to-end with real cost visibility, before anything is built on top of them
+- [x] **Phase 1: Provider Smoke Test** - Prove Gemini image generation and Veo 3.1 Lite image-to-video both work end-to-end with real cost visibility, before anything is built on top of them (completed 2026-09-12)
 - [ ] **Phase 2: Core Generation Pipeline** - A typed idea flows automatically through the Story Director to a full set of local scene images and video clips for one story
 - [ ] **Phase 3: Persistence & Structural Uniqueness** - Stories, scenes, and generation records survive a restart, and structurally-similar stories are rejected and regenerated before reaching review
 - [ ] **Phase 4: Wife-Facing Review & Approval Flow** - The non-technical target user can run the full create → review → approve → generate → find-output flow using only plain-language UI
@@ -35,7 +35,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. The actual/estimated cost of both calls is printed or logged, so real per-call pricing is known before the budget system is built on assumptions.
   4. A provider error (auth failure, rate limit, malformed response) surfaces as a clear message in the output, not a silent hang or an uncaught crash.
 
-**Plans:** 4/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 **Wave 1**
@@ -142,7 +142,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Provider Smoke Test | 4/4 | In Progress|  |
+| 1. Provider Smoke Test | 4/4 | Complete    | 2026-09-12 |
 | 2. Core Generation Pipeline | 0/TBD | Not started | - |
 | 3. Persistence & Structural Uniqueness | 0/TBD | Not started | - |
 | 4. Wife-Facing Review & Approval Flow | 0/TBD | Not started | - |

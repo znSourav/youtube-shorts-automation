@@ -62,14 +62,15 @@ One simple idea in → one genuinely original, structurally-unique animated epis
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Single provider: Google Gemini for LLM + image + Veo 3.1 Lite | One API key and billing account, simplest possible budget tracking, still clears the cost/commercial/capability bar | — Pending |
-| Plain Gemini Developer API key, not Vertex AI | Faster setup; "API Client" in the ToS is judged to be the private local tool, not the YouTube channel | — Pending |
-| No ffmpeg, no in-app audio stripping | Veo's MP4 passes through as-is; audio gets muted/replaced manually in CapCut as originally planned — avoids a native binary dependency for a 24-hour MVP | — Pending |
-| Prisma as the ORM | Best Next.js/TypeScript developer experience for a single-developer local SQLite app: migrations, a type-safe client, and Prisma Studio for manual DB inspection while debugging | — Pending |
-| Deterministic pre-filter + targeted LLM call for uniqueness, no vector database | Cheap and instant for the obvious cases; the LLM is only spent on borderline-similar candidates; avoids infrastructure the project doesn't need | — Pending |
-| No automated test suite; rely on the acceptance-test checklist plus targeted unit tests for budget math and uniqueness scoring | Disproportionate effort for a 24-hour single-user MVP; the requester's own AT-01 through AT-34 checklist is the real verification gate | — Pending |
+| Single provider: Google Gemini for LLM + image + Veo 3.1 Lite | One API key and billing account, simplest possible budget tracking, still clears the cost/commercial/capability bar | ✓ Good — Phase 1 proved image gen + Veo image-to-video work end-to-end from one API key, real cost $1.2010 across 6 calls |
+| Plain Gemini Developer API key, not Vertex AI | Faster setup; "API Client" in the ToS is judged to be the private local tool, not the YouTube channel | ✓ Good — no access/permission issues encountered in Phase 1's real calls |
+| No ffmpeg, no in-app audio stripping | Veo's MP4 passes through as-is; audio gets muted/replaced manually in CapCut as originally planned — avoids a native binary dependency for a 24-hour MVP | — Pending (not yet exercised — CapCut import happens in a later phase) |
+| Prisma as the ORM | Best Next.js/TypeScript developer experience for a single-developer local SQLite app: migrations, a type-safe client, and Prisma Studio for manual DB inspection while debugging | — Pending (Phase 3) |
+| Deterministic pre-filter + targeted LLM call for uniqueness, no vector database | Cheap and instant for the obvious cases; the LLM is only spent on borderline-similar candidates; avoids infrastructure the project doesn't need | — Pending (Phase 3) |
+| No automated test suite; rely on the acceptance-test checklist plus targeted unit tests for budget math and uniqueness scoring | Disproportionate effort for a 24-hour single-user MVP; the requester's own AT-01 through AT-34 checklist is the real verification gate | ✓ Good — Phase 1 followed exactly this pattern (19 targeted unit tests for spend-ledger/log-response, no framework), independent verifier + code review both passed |
 | `MONTHLY_BUDGET_USD` stays exactly $15, despite a real RM/USD mismatch discovered during Phase 1 execution (50 RM funded ≈ $11-12 USD at current rates, 80 RM eventual top-up ≈ $18-20 USD — neither matches $15 cleanly) | Requester's explicit choice: keep the originally-speced figure rather than resync to either the currently-funded or eventual-total RM amount; the app's own spend ledger (not Google's Billing API — real-time, zero-lag, and the actual enforced gate) is what checks against this number, so the mismatch is a funding-cushion question, not a code-correctness one | ✓ Good |
 | No Google Cloud Billing API polling for live remaining-budget display | Billing data has an inherent multi-hour-to-day lag (aggregation pipeline, not real-time), so it would be a strictly weaker signal than the app's own zero-lag internal ledger if used as a gate — and reading real billing data needs billing-account-level IAM/service-account setup, a meaningfully bigger lift than an API key. The GCP billing alert already recommended during provider setup serves the same "catch drift against Google's real numbers" purpose via email, without the lag problem or the extra permissions | ✓ Good |
+| Motion prompts for Veo must avoid requesting character pose changes (turning, looking, reaching, walking, gesturing) — favor camera drift and environmental motion (pulsing/glowing effects, particle drift, breeze-driven cloth/hair sway) instead | Phase 1's D-01 representative probe surfaced a real kinematic-coherence defect: a mild "the girl looks around for her cat" motion prompt caused Veo 3.1 Lite to animate the head turning backward while the torso stayed front-facing (user-reported "horror" effect). A quick follow-up probe (260912-j3x) with a conservative, pose-static motion prompt on the same image confirmed the artifact does not reproduce while the clip remains visibly animated (not a frozen still) | ✓ Good — validated by a real $0.40 Veo call, not assumed. Binding constraint for Phase 2's Story Director motion-prompt generation |
 
 ## Evolution
 
@@ -89,4 +90,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-12 after initialization*
+*Last updated: 2026-09-12 after Phase 1*
