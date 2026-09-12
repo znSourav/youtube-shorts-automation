@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 current_phase: 1
 current_phase_name: Provider Smoke Test
-status: executing
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-09-12T04:46:54.696Z"
+status: verifying
+stopped_at: Completed 01-04-PLAN.md
+last_updated: "2026-09-12T05:02:57.066Z"
 last_activity: 2026-09-12
 last_activity_desc: Phase 1 execution started
-state_head: e32a88baefc06e1d5bae29477d010303ac387203
+state_head: b0cc2bbad59b57f6cb74ad60336045d3d84b3996
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 4
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-09-12)
 
 Phase: 1 (Provider Smoke Test) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-12 — Phase 1 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -61,6 +61,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P01 | 4min | 3 tasks | 5 files |
 | Phase 01 P02 | 12min | 2 tasks | 4 files |
 | Phase 01 P03 | 20min | 2 tasks | 4 files |
+| Phase 01 P04 | 15min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -78,6 +79,8 @@ Recent decisions affecting current work:
 - [Phase 1]: [Phase 1] Real API shape confirmed: gemini-3.1-flash-image returns candidates[0].content.parts[].inlineData with mimeType image/jpeg (not png as RESEARCH.md assumed); Veo durationSeconds is typed number not string in the installed SDK.
 - [Phase 1]: [Phase 1] Kept veo.ts on the deprecation-warned top-level image/prompt GenerateVideosParameters shape rather than migrating to source:{} unverified; deferred to Phase 2's first real Veo call (WINDOWS #1).
 - [Phase 1]: [Phase 1] log-response.ts's isSecretKey() over-redacts usageMetadata token-count fields (substring match on 'token'); real data unaffected in spend-ledger.json, fix deferred (WINDOWS #2).
+- [Phase 1]: [Phase 1] D-01 representative probe PASSED on first attempt: Gemini and Veo generated/animated a real child-protagonist garden scene (Soft hand-painted 2D style) with no safety block — Gemini/Veo confirmed viable providers for this product's actual content type on this sample
+- [Phase 1]: [Phase 1] Both IMAGE_PRICE_PER_CALL and VIDEO_PRICE_PER_SECOND left UNRESOLVED, unchanged: neither provider's usageMetadata publishes a per-token/per-second rate that can independently re-derive the flat pricing-page figures, so the flat 0.067/image and 0.05/sec-720p figures are kept as-is with the gap documented rather than invented
 
 ### Pending Todos
 
@@ -97,6 +100,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-12T04:46:54.682Z
-Stopped at: Completed 01-03-PLAN.md
+Last session: 2026-09-12T05:02:57.051Z
+Stopped at: Completed 01-04-PLAN.md
 Resume file: None
