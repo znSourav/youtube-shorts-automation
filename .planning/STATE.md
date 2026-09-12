@@ -1,18 +1,18 @@
 ---
 gsd_state_version: 1.0
-current_phase: 2
+current_phase: 02
 current_phase_name: Core Generation Pipeline
 status: executing
-stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-09-12T18:38:47.613Z"
-last_activity: 2026-09-12
-last_activity_desc: Phase 2 execution started
-state_head: bbdafa22f69a0f9b66463fc4a33ba5601775dca8
+stopped_at: Completed 02-04-PLAN.md (halted -- D-04 full-scale proof run unmet, see 02-PROOF-RUN.md)
+last_updated: "2026-09-12T19:18:19.310Z"
+last_activity: 2026-09-13
+last_activity_desc: Phase 02 Plan 4 executed (halted -- D-04 full-scale proof run unmet)
+state_head: a5f4c159854a2c0aefa949e19dc5965f542e78d4
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 8
-  completed_plans: 7
+  completed_plans: 8
   percent: 17
 ---
 
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-12)
 
 **Core value:** One simple idea in → one genuinely original, structurally-unique animated episode's worth of local video assets out, without ever exceeding the $15 experiment budget or silently shipping a story that's a thin reskin of a previous one.
-**Current focus:** Phase 2 — Core Generation Pipeline
+**Current focus:** Phase 02 — Core Generation Pipeline
 
 ## Current Position
 
-Phase: 2 (Core Generation Pipeline) — EXECUTING
+Phase: 02 (Core Generation Pipeline) — HALTED
 Plan: 4 of 4
-Status: Ready to execute
-Last activity: 2026-09-12 — Phase 2 execution started
+Status: All 4 plans executed; D-04's full-scale proof run unmet (see 02-PROOF-RUN.md) -- needs a human decision before Phase 02 is considered fully closed
+Last activity: 2026-09-13 — Phase 02 Plan 4 (02-04) executed
 
 Progress: [██░░░░░░░░] 17%
 
@@ -66,6 +66,7 @@ Progress: [██░░░░░░░░] 17%
 | Phase 02 P01 | 13min | 3 tasks | 17 files |
 | Phase 02 P02 | 35min | 2 tasks | 13 files |
 | Phase 02 P03 | ~20min | 2 tasks | 11 files |
+| Phase 02 P04 | ~55min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -93,6 +94,9 @@ Recent decisions affecting current work:
 - [Phase 2]: [Phase 2, 02-03] check-boundaries.ts invariant 2 narrowed to the LLM provider only -- image/video providers are deliberately imported directly by their single-call-site Server Action, per 02-RESEARCH.md Pattern 3
 - [Phase 2]: [Phase 2, 02-03] Scene images transported to the browser as base64 data: URLs returned from the Server Action, not served from a new HTTP route -- keeps the filesystem path out of rendered UI with no new file-serving surface
 - [Phase 2]: [Phase 2, 02-03] Real 3-scene probe: first attempt hit a PROHIBITED_CONTENT safety block on a benign kite-flying story; identical retry succeeded -- confirmed a transient classifier fluke, not a persistent content issue. All 3 generated images visually confirmed as the same character (SCENE-02's real bar)
+- [Phase 02]: [Phase 2, 02-04] generateSceneVideoAction is the sole real generateVideo call site: ceiling-gated, second-layer CR-03 motion-prompt guard, video returned to the browser as a data: URL
+- [Phase 02]: [Phase 2, 02-04] Real Veo call: scene 1 of story-1789237907876-npep3b animated to a playable 1.56MB MP4 (8s, ftyp-verified); cost $0.40 not the ~$0.20 planned because the video-only probe mode has no persisted scene duration to resolve from (story.json persistence is Phase 3's job)
+- [Phase 02]: [Phase 2, 02-04] Bangla/Banglish proof run: Banglish succeeded after one retry (title kept Banglish rendering, durations varied 6/4/8); the SAME idea's Bangla-script rendering was blocked on all 3 real attempts (prompt: PROHIBITED_CONTENT each time) -- D-04's full-scale 5-scene validation is UNMET, carried forward to Phase 3/4; ledger now $2.2520 of $3.00
 
 ### Pending Todos
 
@@ -100,7 +104,9 @@ None yet.
 
 ### Blockers/Concerns
 
-None currently — the AI Studio API key / billing blocker (noted at planning time) was resolved before Phase 1 execution; Phase 1 ran to completion against real providers.
+None from Phase 1 — the AI Studio API key / billing blocker (noted at planning time) was resolved before Phase 1 execution; Phase 1 ran to completion against real providers.
+
+- [Phase 2, 02-04] D-04's full-scale (5-6 scene) real proof run is unmet: 3 real attempts at the same Bangla-script idea were all blocked (prompt: PROHIBITED_CONTENT) before any generation began. Needs a human decision: approve a fresh attempt with a different idea, or accept as a documented Phase 2 limitation. See 02-PROOF-RUN.md.
 
 ### Quick Tasks Completed
 
@@ -118,6 +124,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-12T18:38:47.497Z
-Stopped at: Completed 02-03-PLAN.md
+Last session: 2026-09-12T19:18:19.198Z
+Stopped at: Completed 02-04-PLAN.md (halted -- D-04 full-scale proof run unmet, see 02-PROOF-RUN.md)
 Resume file: None

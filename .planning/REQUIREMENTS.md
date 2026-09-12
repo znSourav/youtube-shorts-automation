@@ -45,7 +45,7 @@ Requirements for the 24-hour MVP. Each maps to a roadmap phase.
 
 ### Video
 
-- [ ] **VIDEO-01**: Wife can animate a single approved scene image into a 9:16, 720p video clip via Veo 3.1 Lite and confirm the result end-to-end before committing to a full episode
+- [x] **VIDEO-01**: Wife can animate a single approved scene image into a 9:16, 720p video clip via Veo 3.1 Lite and confirm the result end-to-end before committing to a full episode
 - [ ] **VIDEO-02**: Wife can generate videos for every approved scene in an episode, with each scene tracked as an independent job showing its own status
 - [ ] **VIDEO-03**: Closing and reopening the browser, or restarting the app, does not lose track of in-progress or completed video jobs
 - [ ] **VIDEO-04**: Wife can retry a single failed scene's video without regenerating any other scene, and the retry counts toward that scene's retry limit
@@ -133,7 +133,7 @@ Explicitly excluded from this project, not just this milestone. Documented to pr
 | IMAGE-02 | Phase 4 | Pending |
 | IMAGE-03 | Phase 3 | Pending |
 | APPROVAL-01 | Phase 4 | Pending |
-| VIDEO-01 | Phase 2 | Pending |
+| VIDEO-01 | Phase 2 | Complete |
 | VIDEO-02 | Phase 4 | Pending |
 | VIDEO-03 | Phase 3 | Pending (soft — documented limitation acceptable if time-constrained) |
 | VIDEO-04 | Phase 4 | Pending |
