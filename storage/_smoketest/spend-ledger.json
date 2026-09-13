@@ -567,6 +567,46 @@
       },
       "billed": true,
       "at": "2026-09-13T13:04:59.625Z"
+    },
+    {
+      "call": "story:6-scene",
+      "model": "gemini-3.1-pro-preview",
+      "estimatedUsd": 0.05,
+      "usageMetadata": {
+        "promptTokenCount": 809,
+        "candidatesTokenCount": 2444,
+        "totalTokenCount": 11303,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 809
+          }
+        ],
+        "thoughtsTokenCount": 8050,
+        "serviceTier": "standard"
+      },
+      "billed": true,
+      "at": "2026-09-13T16:46:23.064Z"
+    },
+    {
+      "call": "story:6-scene",
+      "model": "gemini-3.1-pro-preview",
+      "estimatedUsd": 0.05,
+      "usageMetadata": {
+        "promptTokenCount": 821,
+        "candidatesTokenCount": 2377,
+        "totalTokenCount": 5771,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 821
+          }
+        ],
+        "thoughtsTokenCount": 2573,
+        "serviceTier": "standard"
+      },
+      "billed": true,
+      "at": "2026-09-13T16:48:14.136Z"
     }
   ]
 }

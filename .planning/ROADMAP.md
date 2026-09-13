@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Provider Smoke Test** - Prove Gemini image generation and Veo 3.1 Lite image-to-video both work end-to-end with real cost visibility, before anything is built on top of them (completed 2026-09-12)
 - [x] **Phase 2: Core Generation Pipeline** - A typed idea flows automatically through the Story Director to a full set of local scene images and video clips for one story (completed 2026-09-13)
-- [ ] **Phase 3: Persistence & Structural Uniqueness** - Stories, scenes, and generation records survive a restart, and structurally-similar stories are rejected and regenerated before reaching review
+- [x] **Phase 3: Persistence & Structural Uniqueness** - Stories, scenes, and generation records survive a restart, and structurally-similar stories are rejected and regenerated before reaching review (completed 2026-09-14)
 - [ ] **Phase 4: Wife-Facing Review & Approval Flow** - The non-technical target user can run the full create → review → approve → generate → find-output flow using only plain-language UI
 - [ ] **Phase 5: Budget & Retry Safeguards** - Every paid call is guarded by a hard monthly budget check that no retry can bypass
 - [ ] **Phase 6: Reliability, Secrets Hygiene & Output Correctness** - The tool fails safely and honestly at every edge instead of corrupting state or leaking secrets
@@ -101,7 +101,7 @@ Plans:
   4. After restarting the app, every story, scene, and generation record — including saved image paths and logged costs — is still present and usable by the uniqueness system.
   5. (Soft) In-progress or completed video jobs are still trackable after closing/reopening the browser or restarting the app; if this proves out of reach in the available time, the limitation is documented rather than silently broken.
 
-**Plans:** 4/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 **Wave 1**
@@ -178,7 +178,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Provider Smoke Test | 4/4 | Complete    | 2026-09-12 |
 | 2. Core Generation Pipeline | 4/4 | Complete    | 2026-09-13 |
-| 3. Persistence & Structural Uniqueness | 4/4 | In Progress|  |
+| 3. Persistence & Structural Uniqueness | 4/4 | Complete    | 2026-09-14 |
 | 4. Wife-Facing Review & Approval Flow | 0/TBD | Not started | - |
 | 5. Budget & Retry Safeguards | 0/TBD | Not started | - |
 | 6. Reliability, Secrets Hygiene & Output Correctness | 0/TBD | Not started | - |
