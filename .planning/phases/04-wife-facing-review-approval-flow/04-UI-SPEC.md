@@ -1,7 +1,7 @@
 ---
 phase: "04"
 slug: "wife-facing-review-approval-flow"
-status: draft
+status: verified
 shadcn_initialized: false
 preset: none
 created: "2026-09-14"
@@ -153,7 +153,7 @@ Per RESEARCH.md's recommendation, `Story.status` is a computed label (not a new 
 
 ## UI Considerations
 
-Applicable state considerations resolved: 14 covered, 0 backstop, 0 unresolved.
+Applicable state considerations resolved: 17 covered, 0 backstop, 0 unresolved.
 
 | Category | Element(s) | Status | Resolution / Reason |
 |----------|------------|--------|---------------------|
@@ -171,6 +171,11 @@ Applicable state considerations resolved: 14 covered, 0 backstop, 0 unresolved.
 | overflow | Library list — long story titles | ✅ covered | Single-line truncation with the `truncate` utility + full title in the `title` attribute for a hover tooltip |
 | long-text | Screen 4 scene status/message text | ✅ covered | Wraps naturally in the existing `text-sm`/`text-xs` paragraph treatment already proven on Screen 3 (`SceneCard`'s `storyPurpose`); no truncation needed |
 | state-persistence | Post-approval single-scene image regeneration (RESEARCH.md Open Question A2) | ✅ covered | Approval flag (`imagesApprovedAt`) stays intact — matches D-02's literal "one Approve action" wording; UI additionally surfaces the one-time amber heads-up ("You already approved these images...") so the change is never silent, resolving RESEARCH.md's open question at the design-contract level per its own recommendation |
+| loading | Click-to-response gap on "Approve These Images" / "Regenerate this image" / "Generate All Videos" (the brief span between click and the server responding) | ✅ covered | Reuse the existing disabled-button-plus-label-change pattern already shipped on "Create Story" and "Generate Scene Images" (Phases 2-3) — button disables and its label swaps to an in-progress phrase ("Approving...", "Regenerating...", "Starting...") for the duration of the call. No new pattern introduced. |
+| loading | Screen 5 (Library) initial load, before `listStoriesAction` resolves | ✅ covered | A single centered "Loading your stories..." text line (Body size, no spinner asset — matches the icon-library-free convention), replaced by the populated list or the empty state once the action resolves |
+| empty | Screen 4 video-status grid with zero scenes | ✅ covered | Structurally impossible, same reasoning as the zero-one-many row above: Screen 4 is reachable only after approval, which requires every scene image ready, and `SCENE_COUNT_OPTIONS` bounds scene count to 5-7 at story creation — no empty-grid state can occur |
+
+Independently re-verified by running the compiled probe engine against 8 elements extracted directly from this document's own Screen Inventory (not just trusting the table above at face value) — the three rows above were the only genuine gaps found; every other raised category was already covered by an existing row, already inapplicable in context (e.g. a static nav link has no loading state of its own), or already resolved by the batch-dispatch architecture itself (RESEARCH.md's `after()` pattern means "Generate All Videos" returns immediately, so per-scene status — not the button — carries the loading state).
 
 ---
 
@@ -187,12 +192,12 @@ Not applicable — `Tool: none`. No shadcn registry (official or third-party) is
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
-- [ ] Dimension 7 Inventory Provenance: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: FLAG (non-blocking — focal point not explicitly named per screen for Screen 3 post-approval / Screen 4; inferable from the accent-color-reserved-for-primary-CTA rule already in this document)
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
+- [x] Dimension 7 Inventory Provenance: PASS
 
-**Approval:** pending
+**Approval:** approved 2026-09-14 (gsd-ui-checker; UI-consideration probe independently re-verified by orchestrator, 3 additional rows added)
