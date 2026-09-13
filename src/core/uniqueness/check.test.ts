@@ -1,10 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   checkUniqueness,
   runUniqueStoryDirector,
   maxRegenerationAttempts,
+  compareViaLlm,
+  buildComparisonPrompt,
+  buildComparisonSchema,
   DEFAULT_MAX_REGENERATION_ATTEMPTS,
 } from "./check.ts";
 import { CeilingExceededError } from "../../lib/spend-ledger.ts";
@@ -12,6 +18,28 @@ import type { StoryDirectorInput, StoryDirectorResult } from "../story/director.
 import type { StoryDirectorOutput } from "../story/schema.ts";
 import type { AcceptedFingerprint } from "../persistence/story-repository.ts";
 import type { StructuralFingerprint } from "./fingerprint.ts";
+import type { CompareStructuralSimilarityParams, ClassifyComparisonResult } from "../../providers/llm/gemini.ts";
+
+// Every ledger-touching test below points at a throwaway mkdtempSync path --
+// never at the real storage/_smoketest/spend-ledger.json (spend-ledger.test.ts's
+// own convention).
+function tmpLedgerPath(): string {
+  const dir = mkdtempSync(join(tmpdir(), "uniqueness-check-test-"));
+  return join(dir, "spend-ledger.json");
+}
+
+function fakeComparisonResult(overrides: Partial<ClassifyComparisonResult> = {}): ClassifyComparisonResult {
+  return {
+    usageMetadata: null,
+    estimatedUsd: 0.01,
+    modelUsed: "fake-comparison-model",
+    blocked: false,
+    protagonistMatch: true,
+    obstacleMatch: true,
+    endingMatch: true,
+    ...overrides,
+  };
+}
 
 // Every test here injects a fake director/historyReader/escalate -- no
 // network call, no real ledger write, no dependency on a real Prisma
@@ -276,4 +304,197 @@ test("a ceiling error on the very first attempt propagates rather than being swa
     () => runUniqueStoryDirector(BASE_INPUT, { director, historyReader }),
     CeilingExceededError,
   );
+});
+
+// -- Task 2: the borderline LLM tie-breaker --
+//
+// A real middle-band pair (every field's Jaccard score lands in
+// [BORDERLINE_THRESHOLD, HIGH_THRESHOLD)), so the deterministic pre-filter
+// genuinely escalates rather than rejecting or passing outright -- proving
+// these tests exercise the escalate path, not the reject path.
+const MIDDLE_BAND_CANDIDATE: StructuralFingerprint = {
+  protagonistWant: "a character wants to find their missing sibling somewhere in the city tonight",
+  centralObstacle: "a storm blocks every road leading toward home before nightfall arrives",
+  endingShape: "a quiet sense of relief settles in once the search finally ends",
+};
+const MIDDLE_BAND_PAST: AcceptedFingerprint = {
+  id: "middle-band-past",
+  protagonistWant: "a character wants to find their missing sibling hiding somewhere far away",
+  centralObstacle: "a storm blocks every road leading away from town before winter arrives",
+  endingShape: "a quiet sense of unease lingers though the search finally ends",
+};
+
+// Genuinely different pair whose scores fall below BORDERLINE_THRESHOLD on
+// every field -- used to prove the comparator is never invoked for a
+// history with no borderline entry.
+const CLEARLY_DIFFERENT_PAST: AcceptedFingerprint = {
+  id: "clearly-different-past",
+  protagonistWant: "a robot dreams of painting a mural nobody has ever seen",
+  centralObstacle: "the paint has all dried up in the middle of winter",
+  endingShape: "unexpected joy from a first attempt at something new",
+};
+
+test("a middle-band pair escalates, and a fake comparator returning all-true yields a collision flagged as LLM-decided", async () => {
+  const ledgerPath = tmpLedgerPath();
+  const escalate = (candidate: StructuralFingerprint, past: AcceptedFingerprint) =>
+    compareViaLlm(candidate, past, {
+      ledgerPath,
+      comparator: async () => fakeComparisonResult({ protagonistMatch: true, obstacleMatch: true, endingMatch: true }),
+    });
+
+  const verdict = await checkUniqueness(MIDDLE_BAND_CANDIDATE, [MIDDLE_BAND_PAST], { escalate });
+
+  assert.equal(verdict.collided, true);
+  if (verdict.collided) {
+    assert.equal(verdict.viaLlm, true);
+    assert.equal(verdict.withStoryId, "middle-band-past");
+  }
+});
+
+test("the same middle-band pair with a fake comparator returning two-of-three-true yields a pass (D-02 applies on the LLM path)", async () => {
+  const ledgerPath = tmpLedgerPath();
+  const escalate = (candidate: StructuralFingerprint, past: AcceptedFingerprint) =>
+    compareViaLlm(candidate, past, {
+      ledgerPath,
+      comparator: async () => fakeComparisonResult({ protagonistMatch: true, obstacleMatch: false, endingMatch: true }),
+    });
+
+  const verdict = await checkUniqueness(MIDDLE_BAND_CANDIDATE, [MIDDLE_BAND_PAST], { escalate });
+
+  assert.equal(verdict.collided, false);
+});
+
+test("the same middle-band pair with a fake comparator returning a blocked result yields a pass and does not throw", async () => {
+  const ledgerPath = tmpLedgerPath();
+  const escalate = (candidate: StructuralFingerprint, past: AcceptedFingerprint) =>
+    compareViaLlm(candidate, past, {
+      ledgerPath,
+      comparator: async () =>
+        fakeComparisonResult({
+          blocked: true,
+          block: { stage: "prompt", reason: "SAFETY" },
+          protagonistMatch: undefined,
+          obstacleMatch: undefined,
+          endingMatch: undefined,
+        }),
+    });
+
+  const verdict = await checkUniqueness(MIDDLE_BAND_CANDIDATE, [MIDDLE_BAND_PAST], { escalate });
+
+  assert.equal(verdict.collided, false);
+});
+
+test("the comparator is invoked exactly once for one borderline past story and zero times for a history whose every entry falls below the borderline band", async () => {
+  const ledgerPath = tmpLedgerPath();
+  let comparatorCalls = 0;
+  const escalate = (candidate: StructuralFingerprint, past: AcceptedFingerprint) =>
+    compareViaLlm(candidate, past, {
+      ledgerPath,
+      comparator: async () => {
+        comparatorCalls += 1;
+        return fakeComparisonResult();
+      },
+    });
+
+  await checkUniqueness(MIDDLE_BAND_CANDIDATE, [CLEARLY_DIFFERENT_PAST], { escalate });
+  assert.equal(comparatorCalls, 0, "comparator must not be invoked when no past story reaches the borderline band");
+
+  await checkUniqueness(MIDDLE_BAND_CANDIDATE, [MIDDLE_BAND_PAST], { escalate });
+  assert.equal(comparatorCalls, 1, "comparator must be invoked exactly once for one borderline past story");
+});
+
+test("a ceiling refusal on the comparison yields a pass and never invokes the comparator", async () => {
+  const ledgerPath = tmpLedgerPath();
+  // Pre-seed the ledger already at the ceiling, so checkCeiling refuses
+  // before the comparator would ever be called.
+  const seeded = {
+    ceilingUsd: 3.0,
+    entries: [
+      {
+        call: "seed",
+        model: "seed-model",
+        estimatedUsd: 3.0,
+        usageMetadata: null,
+        billed: true,
+        at: new Date().toISOString(),
+      },
+    ],
+  };
+  const { writeFileSync } = await import("node:fs");
+  writeFileSync(ledgerPath, JSON.stringify(seeded));
+
+  let comparatorCalls = 0;
+  const result = await compareViaLlm(MIDDLE_BAND_CANDIDATE, MIDDLE_BAND_PAST, {
+    ledgerPath,
+    comparator: async (_params: CompareStructuralSimilarityParams) => {
+      comparatorCalls += 1;
+      return fakeComparisonResult();
+    },
+  });
+
+  assert.equal(result, false);
+  assert.equal(comparatorCalls, 0);
+});
+
+test("checkCeiling runs before dispatch and recordSpend runs after, including for a blocked comparison", async () => {
+  const ledgerPath = tmpLedgerPath();
+  await compareViaLlm(MIDDLE_BAND_CANDIDATE, MIDDLE_BAND_PAST, {
+    ledgerPath,
+    comparator: async () =>
+      fakeComparisonResult({
+        blocked: true,
+        block: { stage: "prompt", reason: "SAFETY" },
+        protagonistMatch: undefined,
+        obstacleMatch: undefined,
+        endingMatch: undefined,
+      }),
+  });
+
+  const ledger = JSON.parse(readFileSync(ledgerPath, "utf8"));
+  assert.equal(ledger.entries.length, 1);
+  assert.equal(ledger.entries[0].billed, false);
+  assert.ok(ledger.entries[0].call.startsWith("uniqueness-comparison:"));
+});
+
+test("buildComparisonSchema declares exactly three boolean properties, all required, with no $ref, oneOf, or allOf", () => {
+  const schema = buildComparisonSchema() as {
+    properties: Record<string, { type: string }>;
+    required: string[];
+  };
+  assert.deepEqual(Object.keys(schema.properties).sort(), ["ending_match", "obstacle_match", "protagonist_match"]);
+  for (const prop of Object.values(schema.properties)) {
+    assert.equal(prop.type, "boolean");
+  }
+  assert.deepEqual(schema.required.sort(), ["ending_match", "obstacle_match", "protagonist_match"]);
+  const serialized = JSON.stringify(schema);
+  assert.ok(!serialized.includes("$ref"));
+  assert.ok(!serialized.includes("oneOf"));
+  assert.ok(!serialized.includes("allOf"));
+});
+
+test("buildComparisonPrompt places both fingerprints after the delimiter and truncates each field at 300 characters", () => {
+  const longField = "x".repeat(400);
+  const candidate: StructuralFingerprint = {
+    protagonistWant: longField,
+    centralObstacle: "UNIQUE_CANDIDATE_OBSTACLE",
+    endingShape: "UNIQUE_CANDIDATE_ENDING",
+  };
+  const past: StructuralFingerprint = {
+    protagonistWant: "UNIQUE_PAST_WANT",
+    centralObstacle: "UNIQUE_PAST_OBSTACLE",
+    endingShape: "UNIQUE_PAST_ENDING",
+  };
+  const prompt = buildComparisonPrompt(candidate, past);
+
+  const delimiterIndex = prompt.indexOf("FINGERPRINTS TO COMPARE");
+  const candidateIndex = prompt.indexOf("UNIQUE_CANDIDATE_OBSTACLE");
+  const pastIndex = prompt.indexOf("UNIQUE_PAST_WANT");
+  assert.ok(delimiterIndex > -1);
+  assert.ok(candidateIndex > delimiterIndex, "candidate fingerprint must appear after the delimiter");
+  assert.ok(pastIndex > delimiterIndex, "past fingerprint must appear after the delimiter");
+
+  // The 400-char field must have been truncated to 300 -- the full string
+  // must NOT appear verbatim in the prompt.
+  assert.ok(!prompt.includes(longField));
+  assert.ok(prompt.includes("x".repeat(300)));
 });

@@ -21,6 +21,17 @@ const PRIMARY_MODEL = "gemini-3.1-pro-preview";
 // the same fallback shape gemini-image.ts already established for images.
 const FALLBACK_MODEL = "gemini-3.8-flash";
 
+// RESEARCH.md Assumption A2: the cheaper GA-tier model (the same id
+// generateStory itself falls back to on 403/404) is judged an adequate
+// choice for a three-boolean structural-match judgement, reserved for
+// deliberate cost reasons -- a three-boolean judgement doesn't need the
+// Preview-tier creative-writing model. This is a cost decision whose
+// failure mode is judgement quality, not spend: if the cheaper model's
+// true/false judgments prove unreliable, upgrading this one constant is the
+// fix, not a network/pricing change. No primary/fallback dance is needed
+// for this call -- COMPARISON_MODEL already IS the fallback id.
+export const COMPARISON_MODEL = "gemini-3.8-flash";
+
 function isNotFoundOrForbidden(err: unknown): boolean {
   const status = (err as { status?: number; code?: number })?.status ?? (err as { code?: number })?.code;
   return status === 403 || status === 404;
@@ -202,4 +213,135 @@ export async function generateStory(params: GenerateStoryParams): Promise<Genera
   const estimatedUsd = LLM_PRICE_PER_CALL[primaryModel] ?? LLM_PRICE_PER_CALL[PRIMARY_MODEL];
 
   return classifyStoryResponse(response, modelUsed, fallbackUsed, estimatedUsd);
+}
+
+export interface CompareStructuralSimilarityParams {
+  prompt: string;
+  responseSchema: object;
+}
+
+export interface ComparisonBlockClassification {
+  stage: "prompt" | "candidate" | "parse";
+  reason: string;
+}
+
+export interface ClassifyComparisonResult {
+  usageMetadata: unknown;
+  estimatedUsd: number;
+  modelUsed: string;
+  blocked: boolean;
+  block?: ComparisonBlockClassification;
+  // Present only when blocked is false.
+  protagonistMatch?: boolean;
+  obstacleMatch?: boolean;
+  endingMatch?: boolean;
+}
+
+/**
+ * Classifies a raw generateContent response for the structural-comparison
+ * tie-breaker, in the identical classify-before-parse order
+ * classifyStoryResponse uses: prompt-level blockReason first, then a
+ * candidate finishReason other than STOP, then the absence of text, and
+ * only then the JSON parse -- a parse failure returns a classified blocked
+ * result rather than throwing. Reuses the same loose RawGenerateContentResponse
+ * shape as classifyStoryResponse (not the SDK's own response type) so this
+ * file's test can build plain fixture objects with zero SDK dependency.
+ */
+export function classifyComparisonResponse(
+  response: RawGenerateContentResponse,
+  modelUsed: string,
+  estimatedUsd: number,
+): ClassifyComparisonResult {
+  const usageMetadata = response.usageMetadata ?? null;
+
+  const blockReason = response.promptFeedback?.blockReason;
+  if (blockReason) {
+    return {
+      usageMetadata,
+      estimatedUsd,
+      modelUsed,
+      blocked: true,
+      block: { stage: "prompt", reason: String(blockReason) },
+    };
+  }
+
+  const candidate = response.candidates?.[0];
+  const finishReason = candidate?.finishReason;
+  if (finishReason && finishReason !== "STOP") {
+    return {
+      usageMetadata,
+      estimatedUsd,
+      modelUsed,
+      blocked: true,
+      block: { stage: "candidate", reason: String(finishReason) },
+    };
+  }
+
+  const text = candidate?.content?.parts?.[0]?.text;
+  if (!text) {
+    return {
+      usageMetadata,
+      estimatedUsd,
+      modelUsed,
+      blocked: true,
+      block: { stage: "candidate", reason: "NO_TEXT_IN_RESPONSE" },
+    };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (err) {
+    return {
+      usageMetadata,
+      estimatedUsd,
+      modelUsed,
+      blocked: true,
+      block: { stage: "parse", reason: `JSON.parse failed: ${(err as Error).message}` },
+    };
+  }
+
+  const obj = parsed as Record<string, unknown>;
+  return {
+    usageMetadata,
+    estimatedUsd,
+    modelUsed,
+    blocked: false,
+    protagonistMatch: Boolean(obj.protagonist_match),
+    obstacleMatch: Boolean(obj.obstacle_match),
+    endingMatch: Boolean(obj.ending_match),
+  };
+}
+
+/**
+ * Calls Gemini's structured-output generateContent for the targeted
+ * structural-comparison tie-breaker and returns a classified, defensively-
+ * parsed result. Mirrors generateStory's shape: logRawResponse before any
+ * field access, classify-before-parse via classifyComparisonResponse. An
+ * explicit small maxOutputTokens is set -- a three-boolean response needs
+ * very few tokens, and bounding it is what stops a runaway response costing
+ * more than the judgement is worth.
+ */
+export async function compareStructuralSimilarity(
+  params: CompareStructuralSimilarityParams,
+): Promise<ClassifyComparisonResult> {
+  const ai = new GoogleGenAI({});
+
+  const config = {
+    responseMimeType: "application/json",
+    responseSchema: params.responseSchema,
+    maxOutputTokens: 256,
+  };
+
+  const response = await ai.models.generateContent({
+    model: COMPARISON_MODEL,
+    contents: params.prompt,
+    config,
+  });
+
+  logRawResponse(`generateContent raw response (comparison, model=${COMPARISON_MODEL})`, response);
+
+  const estimatedUsd = LLM_PRICE_PER_CALL[COMPARISON_MODEL];
+
+  return classifyComparisonResponse(response, COMPARISON_MODEL, estimatedUsd);
 }
