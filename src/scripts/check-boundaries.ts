@@ -1,10 +1,12 @@
 // Dependency-free structural check (node:fs/node:path only, no shell grep)
-// so it runs identically on Windows and POSIX shells. Asserts two
-// invariants that a one-time code review cannot re-verify on every commit:
+// so it runs identically on Windows and POSIX shells. Asserts invariants
+// that a one-time code review cannot re-verify on every commit:
 //
 // 1. No "use client" file (wherever it lives in src/, not just under
-//    src/components/) imports a provider module or the spend ledger -- this
-//    is what keeps GEMINI_API_KEY out of the client bundle (T-02-01).
+//    src/components/) imports a provider module, the spend ledger, the
+//    Prisma client package, the generated Prisma output, or the database
+//    module -- this is what keeps GEMINI_API_KEY and SQLite access out of
+//    the client bundle (T-02-01, T-03-02).
 // 2. Every file under src/app/actions/ reaches the LLM provider only by
 //    importing from src/core/, never directly -- keeps runStoryDirector's
 //    ceiling gate as the LLM's single dispatch point (T-02-04). Image and
@@ -14,6 +16,13 @@
 //    generateVideo (one scene, sequentially, no fan-out), so the ceiling
 //    gate living directly inside that same action file is already the
 //    single dispatch point -- there is no second call site to guard against.
+// 3. Every file under src/app/actions/ reaches the database only by
+//    importing from src/core/persistence/, never by importing the Prisma
+//    client package, the generated output, or the database module directly
+//    (T-03-03) -- keeps src/core/persistence/story-repository.ts's id
+//    validation unskippable.
+// 4. No file under src/ calls Prisma's unchecked raw-query escape hatch
+//    (T-03-01) -- $queryRawUnsafe or $executeRawUnsafe.
 //
 // Run with: node src/scripts/check-boundaries.ts
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -21,8 +30,25 @@ import { join } from "node:path";
 
 const SRC_ROOT = "src";
 
+// This script's own path, relative to SRC_ROOT-walked output -- excluded
+// from invariant 4's scan so the forbidden-method-name string constants
+// held here do not report themselves as an offender.
+const SELF_PATH = "src/scripts/check-boundaries.ts";
+
+// Held as named constants (not inlined into the scan below) so invariant 4
+// can skip this file's own path without also needing string-literal
+// obfuscation to avoid self-matching.
+const RAW_SQL_METHOD_1 = "$queryRawUnsafe";
+const RAW_SQL_METHOD_2 = "$executeRawUnsafe";
+
 function walk(dir: string, files: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
+    // src/generated/ is Prisma's own gitignored, regenerated output -- it
+    // is not application code this gate reviews, and its API surface
+    // legitimately DEFINES $queryRawUnsafe/$executeRawUnsafe as methods
+    // (invariant 4 checks whether APPLICATION code CALLS them, not whether
+    // the generated client type-declares them).
+    if (entry === "generated") continue;
     const full = join(dir, entry);
     const stat = statSync(full);
     if (stat.isDirectory()) {
@@ -64,19 +90,27 @@ function main(): void {
   for (const file of clientFiles) {
     const specifiers = importSpecifiers(readFileSync(file, "utf8"));
     for (const spec of specifiers) {
-      if (spec.includes("/providers/") || spec.includes("spend-ledger")) {
+      if (
+        spec.includes("/providers/") ||
+        spec.includes("spend-ledger") ||
+        spec.includes("@prisma/client") ||
+        spec.includes("/generated/prisma") ||
+        spec.includes("lib/db")
+      ) {
         offenders1.push(`${file} -> "${spec}"`);
       }
     }
   }
   if (offenders1.length > 0) {
     failed = true;
-    console.log("BOUNDARY CHECK FAILED (invariant 1 -- client bundle must never import a provider or the spend ledger):");
+    console.log(
+      "BOUNDARY CHECK FAILED (invariant 1 -- client bundle must never import a provider, the spend ledger, or the database layer):",
+    );
     for (const offender of offenders1) {
       console.log(`  ${offender}`);
     }
   } else {
-    console.log("OK: no \"use client\" file imports a provider or the spend ledger");
+    console.log("OK: no \"use client\" file imports a provider, the spend ledger, or the database layer");
   }
 
   // Invariant 2
@@ -98,6 +132,57 @@ function main(): void {
     }
   } else {
     console.log("OK: src/app/actions/ files reach the LLM provider only through src/core/");
+  }
+
+  // Invariant 3 -- every file under src/app/actions/ must reach the
+  // database only by importing from src/core/persistence/, never by
+  // importing the Prisma client package, the generated output, or the
+  // database module directly (T-03-03). This is what keeps
+  // story-repository.ts's storyDir() id validation unskippable.
+  const offenders3: string[] = [];
+  for (const file of actionFiles) {
+    const specifiers = importSpecifiers(readFileSync(file, "utf8"));
+    for (const spec of specifiers) {
+      if (spec.includes("@prisma/client") || spec.includes("/generated/prisma") || spec.includes("lib/db")) {
+        offenders3.push(`${file} -> "${spec}"`);
+      }
+    }
+  }
+  if (offenders3.length > 0) {
+    failed = true;
+    console.log(
+      "BOUNDARY CHECK FAILED (invariant 3 -- src/app/actions/ must reach the database only through src/core/persistence/):",
+    );
+    for (const offender of offenders3) {
+      console.log(`  ${offender}`);
+    }
+  } else {
+    console.log("OK: src/app/actions/ files reach the database only through src/core/persistence/");
+  }
+
+  // Invariant 4 -- no file under src/ may call Prisma's unchecked raw-query
+  // escape hatch (T-03-01). Scans file CONTENTS (not just import
+  // specifiers) for the two forbidden method-name substrings, since
+  // $queryRawUnsafe/$executeRawUnsafe are called as methods on an already-
+  // imported client, not imported themselves. Skips this script's own path
+  // (its own string constants would otherwise report themselves) -- the
+  // walk() helper already excludes *.test.ts files.
+  const offenders4: string[] = [];
+  for (const file of allFiles) {
+    if (file === SELF_PATH) continue;
+    const content = readFileSync(file, "utf8");
+    if (content.includes(RAW_SQL_METHOD_1) || content.includes(RAW_SQL_METHOD_2)) {
+      offenders4.push(file);
+    }
+  }
+  if (offenders4.length > 0) {
+    failed = true;
+    console.log("BOUNDARY CHECK FAILED (invariant 4 -- no file may call Prisma's unchecked raw-query escape hatch):");
+    for (const offender of offenders4) {
+      console.log(`  ${offender}`);
+    }
+  } else {
+    console.log("OK: no file calls Prisma's unchecked raw-query escape hatch");
   }
 
   if (failed) {
