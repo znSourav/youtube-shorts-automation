@@ -20,10 +20,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-12)
+See: .planning/PROJECT.md (updated 2026-09-13)
 
 **Core value:** One simple idea in → one genuinely original, structurally-unique animated episode's worth of local video assets out, without ever exceeding the $15 experiment budget or silently shipping a story that's a thin reskin of a previous one.
-**Current focus:** Phase 02 — Core Generation Pipeline
+**Current focus:** Phase 03 — Persistence & Structural Uniqueness
 
 ## Current Position
 
@@ -130,6 +130,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-12T19:46:15.657Z
+Last session: 2026-09-13T04:36:06.000Z
 Stopped at: Phase 2 complete, ready to plan Phase 3
 Resume file: None
