@@ -24,9 +24,9 @@ Requirements for the 24-hour MVP. Each maps to a roadmap phase.
 
 ### Uniqueness
 
-- [ ] **UNIQUE-01**: A newly generated story is checked for structural similarity (protagonist, conflict, mechanism, ending, etc. — not just surface nouns) against every previously accepted story before being offered for review
+- [x] **UNIQUE-01**: A newly generated story is checked for structural similarity (protagonist, conflict, mechanism, ending, etc. — not just surface nouns) against every previously accepted story before being offered for review
 - [x] **UNIQUE-02**: A structurally-similar candidate is automatically rejected and regenerated with the collision explicitly avoided, rather than silently accepted or endlessly retried — capped at a configurable maximum number of attempts
-- [ ] **UNIQUE-03**: Two genuinely different stories that happen to share generic elements (e.g. both involve a girl, a forest) are not falsely rejected
+- [x] **UNIQUE-03**: Two genuinely different stories that happen to share generic elements (e.g. both involve a girl, a forest) are not falsely rejected
 
 ### Scene
 
@@ -124,9 +124,9 @@ Explicitly excluded from this project, not just this milestone. Documented to pr
 | STORY-03 | Phase 2 | Complete |
 | STORY-04 | Phase 2 | Complete |
 | STORY-05 | Phase 2 | Complete |
-| UNIQUE-01 | Phase 3 | Pending |
+| UNIQUE-01 | Phase 3 | Complete |
 | UNIQUE-02 | Phase 3 | Complete |
-| UNIQUE-03 | Phase 3 | Pending |
+| UNIQUE-03 | Phase 3 | Complete |
 | SCENE-01 | Phase 2 | Complete |
 | SCENE-02 | Phase 2 | Complete |
 | IMAGE-01 | Phase 3 | Complete |
