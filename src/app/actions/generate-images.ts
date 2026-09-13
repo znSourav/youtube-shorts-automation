@@ -168,8 +168,25 @@ export async function generateSceneImagesAction(
 
     const extension = extensionForMimeType(result.mimeType);
     const imagePath = sceneImagePath(storyId, scene.scene_number, extension);
-    mkdirSync(sceneDir(storyId, scene.scene_number), { recursive: true });
-    writeFileSync(imagePath, result.bytes);
+    try {
+      mkdirSync(sceneDir(storyId, scene.scene_number), { recursive: true });
+      writeFileSync(imagePath, result.bytes);
+    } catch (err) {
+      // The paid call already succeeded and recordSpend already ran above --
+      // only the local write failed (locked file, full disk, permissions).
+      // Report this scene as failed but do NOT set `stopped`: the ceiling
+      // gate and provider call for subsequent scenes are unaffected, so
+      // already-paid-for progress on later scenes should not be discarded.
+      console.error(`generateSceneImagesAction: failed to write scene ${scene.scene_number}'s image to disk`, err);
+      statuses.push({
+        sceneNumber: scene.scene_number,
+        imagePath: null,
+        imageDataUrl: null,
+        ok: false,
+        message: "The image was generated but could not be saved. Please try again.",
+      });
+      continue;
+    }
 
     statuses.push({
       sceneNumber: scene.scene_number,
