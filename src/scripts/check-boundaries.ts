@@ -4,9 +4,13 @@
 //
 // 1. No "use client" file (wherever it lives in src/, not just under
 //    src/components/) imports a provider module, the spend ledger, the
-//    Prisma client package, the generated Prisma output, or the database
-//    module -- this is what keeps GEMINI_API_KEY and SQLite access out of
-//    the client bundle (T-02-01, T-03-02).
+//    Prisma client package, the generated Prisma output, the database
+//    module, or the persistence layer directly -- this is what keeps
+//    GEMINI_API_KEY and SQLite access out of the client bundle (T-02-01,
+//    T-03-02). Each of these checks the file's own DIRECT import
+//    specifiers only, not transitive imports one hop away -- see the
+//    "core/persistence" entry below for why that specific substring is
+//    listed explicitly rather than relied upon transitively.
 // 2. Every file under src/app/actions/ reaches the LLM provider only by
 //    importing from src/core/, never directly -- keeps runStoryDirector's
 //    ceiling gate as the LLM's single dispatch point (T-02-04). Image and
@@ -95,7 +99,17 @@ function main(): void {
         spec.includes("spend-ledger") ||
         spec.includes("@prisma/client") ||
         spec.includes("/generated/prisma") ||
-        spec.includes("lib/db")
+        spec.includes("lib/db") ||
+        // WR-03: story-repository.ts/generation-repository.ts themselves
+        // import lib/db and @prisma/client types, but neither of those
+        // substrings appears in a client file's OWN import specifier when it
+        // imports the persistence layer one hop away
+        // (e.g. "@/core/persistence/story-repository") -- this gate only
+        // string-matches direct imports, not transitive ones, so without
+        // this entry a client component reaching straight into
+        // src/core/persistence/ instead of through a Server Action would
+        // ship database-access code into the client bundle undetected.
+        spec.includes("core/persistence")
       ) {
         offenders1.push(`${file} -> "${spec}"`);
       }
