@@ -14,11 +14,10 @@ import { generateSceneVideoAction, type GenerateSceneVideoResult } from "./actio
 type Screen = "create" | "review-story" | "review-images";
 
 // D-03: no /stories/[id] route -- a story id is only ever used server-side
-// (as the storage/stories/<id>/ directory name) and in this page's own
-// local state, never shown to the wife.
-function generateStoryId(): string {
-  return `story-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
+// (as the storage/stories/<id>/ directory name and the database's Story.id
+// primary key) and in this page's own local state, never shown to the
+// wife. The id itself is generated server-side (Phase 3) and returned from
+// createStoryAction -- the browser no longer invents one.
 
 export default function Home() {
   const [screen, setScreen] = useState<Screen>("create");
@@ -51,7 +50,7 @@ export default function Home() {
       return;
     }
     setStory(result.data);
-    setStoryId(generateStoryId());
+    setStoryId(result.storyId);
     setSceneStatuses([]);
     setImagesError(null);
     setScreen("review-story");

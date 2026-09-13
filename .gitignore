@@ -21,3 +21,12 @@ storage/_smoketest/*.log
 # Phase 2 scaffold merge scratch dir and generated story assets
 scaffold-tmp/
 storage/stories/
+
+# Phase 3: generated Prisma client (regenerated via postinstall) and the
+# local SQLite data file -- the migration history under prisma/migrations/
+# is NOT ignored and must survive in git (confirmed via `git check-ignore`).
+src/generated/
+prisma/dev.db
+prisma/dev.db-journal
+prisma/*.db
+!prisma/migrations/

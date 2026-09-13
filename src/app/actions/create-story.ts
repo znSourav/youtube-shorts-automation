@@ -3,10 +3,13 @@
 import { runStoryDirector, type StoryDirectorInput } from "../../core/story/director.ts";
 import { CeilingExceededError } from "../../lib/spend-ledger.ts";
 import type { StoryDirectorOutput } from "../../core/story/schema.ts";
+import { generateStoryId } from "../../core/story/story-id.ts";
+import { saveStoryWithScenes, UniquenessStatus } from "../../core/persistence/story-repository.ts";
 
 export interface CreateStorySuccess {
   ok: true;
   data: StoryDirectorOutput;
+  storyId: string;
 }
 
 export interface CreateStoryFailure {
@@ -65,7 +68,22 @@ export async function createStoryAction(input: StoryDirectorInput): Promise<Crea
       };
     }
 
-    return { ok: true, data: result.data };
+    // The uniqueness gate is inserted between the Director and the save in
+    // plan 03-02; this task passes ACCEPTED directly because with an empty
+    // history (D-05) there is nothing to collide with, and that is a
+    // truthful value rather than a placeholder.
+    const storyId = generateStoryId();
+    try {
+      await saveStoryWithScenes(storyId, result.data, UniquenessStatus.ACCEPTED, 0);
+    } catch (saveErr) {
+      console.error("createStoryAction: persistence failure", saveErr);
+      return {
+        ok: false,
+        error: "The story was written but could not be saved. Please try again.",
+      };
+    }
+
+    return { ok: true, data: result.data, storyId };
   } catch (err) {
     if (err instanceof CeilingExceededError) {
       return {

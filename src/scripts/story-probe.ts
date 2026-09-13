@@ -30,6 +30,7 @@ import type { Scene } from "../core/story/schema.ts";
 import { loadLedger, totalSpentUsd } from "../lib/spend-ledger.ts";
 import { CeilingExceededError } from "../lib/spend-ledger.ts";
 import { VIDEO_PRICE_PER_SECOND } from "../providers/video/veo.ts";
+import { generateStoryId } from "../core/story/story-id.ts";
 
 // A deliberately safe, camera/environment-only default (mirrors CR-03's
 // conservative phrasing) for the video-only probe mode when the caller
@@ -131,13 +132,6 @@ async function runVideoProbe(storyId: string, sceneNumber: number, duration?: nu
 
   const ledger = loadLedger();
   console.log(`Ledger total: $${totalSpentUsd(ledger).toFixed(4)} of $${ledger.ceilingUsd.toFixed(2)}`);
-}
-
-// Matches src/core/storage-paths.ts's STORY_ID_PATTERN (lowercase
-// alphanumerics and hyphens only) -- Date.now() is all digits and
-// Math.random().toString(36) is [0-9a-z], so no extra sanitizing is needed.
-function generateStoryId(): string {
-  return `story-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 async function main(): Promise<void> {

@@ -1,0 +1,108 @@
+// Story / Scene / GenerationRecord persistence -- PERSIST-01. Grounded in
+// docs/original-brief.md §7 and narrowed by CONTEXT.md D-01/D-02/D-03/D-05
+// (03-RESEARCH.md Pattern 3). Three deliberate narrowings from research's
+// starting-point schema:
+//   (a) generator uses `prisma-client` + an explicit `../src/generated/prisma`
+//       output -- this project's `erasableSyntaxOnly` tsconfig requires the
+//       erasable const-object enum shape this generator provider produces.
+//   (b) datasource carries no `url` line -- that now lives in prisma.config.ts
+//       (Prisma 7 requirement, Pitfall 2).
+//   (c) UniquenessStatus has exactly three values (PENDING/ACCEPTED/
+//       REJECTED_EXHAUSTED_SHOWN) -- research's fourth mid-loop-rejection
+//       value is deliberately dropped: per D-03 a rejected candidate is never
+//       shown to the wife and, as plan 03-02 implements it, is never
+//       persisted at all, so a status representing one would be a value
+//       nothing ever writes.
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum UniquenessStatus {
+  PENDING
+  ACCEPTED
+  REJECTED_EXHAUSTED_SHOWN
+}
+
+enum SceneAssetStatus {
+  WAITING
+  READY
+  FAILED
+}
+
+enum GenerationType {
+  STORY
+  UNIQUENESS_CHECK
+  IMAGE
+  VIDEO
+}
+
+model Story {
+  id                  String             @id // application-supplied "story-<ts>-<rand>" id --
+  // no @default(), so the database key and the storage/stories/<id>/
+  // directory name are provably the same value (never invented by Prisma).
+  title               String
+  premise             String
+  fullStory           String
+  theme               String
+  emotionalArc        String
+  ending              String
+  // D-01's three structural elements -- abstracted, noun-free phrasing,
+  // written by the same Story Director call the app already pays for
+  // (src/core/uniqueness/fingerprint.ts). Never null: every accepted story
+  // has a fingerprint or it could not have been compared for uniqueness.
+  protagonistWant     String
+  centralObstacle     String
+  endingShape         String
+  characterBible      Json
+  styleBible          Json
+  uniquenessStatus    UniquenessStatus   @default(PENDING)
+  regenerationAttempt Int                @default(0)
+  createdAt           DateTime           @default(now())
+  scenes              Scene[]
+  generationRecords   GenerationRecord[]
+}
+
+model Scene {
+  id                String             @id @default(cuid())
+  storyId           String
+  story             Story              @relation(fields: [storyId], references: [id])
+  sceneNumber       Int
+  storyPurpose      String
+  imagePrompt       String
+  motionPrompt      String
+  durationSeconds   Int?
+  imagePath         String?
+  imageStatus       SceneAssetStatus   @default(WAITING)
+  videoPath         String?
+  videoStatus       SceneAssetStatus   @default(WAITING)
+  createdAt         DateTime           @default(now())
+  generationRecords GenerationRecord[]
+
+  // SCENE-01's numbering guarantee, enforced a second time by the database
+  // itself -- a duplicated scene number cannot be written even if a future
+  // caller skips validateScenePlan.
+  @@unique([storyId, sceneNumber])
+}
+
+model GenerationRecord {
+  id             String         @id @default(cuid())
+  storyId        String
+  story          Story          @relation(fields: [storyId], references: [id])
+  sceneId        String?
+  scene          Scene?         @relation(fields: [sceneId], references: [id])
+  generationType GenerationType
+  model          String
+  estimatedUsd   Float
+  actualUsd      Float?
+  billed         Boolean
+  ok             Boolean
+  message        String
+  createdAt      DateTime       @default(now())
+  // Summary fields only -- never a raw provider response object, prompt, or
+  // usage-metadata blob (T-03-06).
+}

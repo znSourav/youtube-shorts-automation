@@ -7,6 +7,12 @@ import { z } from "zod";
 // `responseSchema` contractually guarantees are present, so a
 // `.safeParse()` failure here signals a genuine shape violation rather than
 // a merely-optional creative-writing field the model reasonably left out.
+//
+// protagonist_want/central_obstacle/ending_shape (added Phase 3) map to
+// CONTEXT.md D-01's three structural-uniqueness elements -- what the
+// protagonist wants/lacks, the central obstacle/mechanism, and how it ends
+// emotionally -- ridden on this same Story Director call at zero extra LLM
+// cost (see src/core/uniqueness/fingerprint.ts).
 export const SceneSchema = z.object({
   scene_number: z.number().int(),
   duration: z.number().int().optional(),
@@ -32,6 +38,9 @@ export const StoryDirectorOutputSchema = z.object({
     theme: z.string(),
     emotional_arc: z.string(),
     ending: z.string(),
+    protagonist_want: z.string(),
+    central_obstacle: z.string(),
+    ending_shape: z.string(),
   }),
   character_bible: z.object({
     name: z.string(),

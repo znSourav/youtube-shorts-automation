@@ -3,7 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "engines": { "node": ">=20.6.0" },
+  "engines": {
+    "node": ">=20.6.0"
+  },
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build --webpack",
@@ -11,23 +13,28 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test:lib": "node --test src/lib/spend-ledger.test.ts src/lib/log-response.test.ts src/core/story/styles.test.ts src/core/story/validate-scene-plan.test.ts src/core/story/director.test.ts src/providers/llm/gemini.test.ts src/core/storage-paths.test.ts",
-    "smoke": "node --env-file=.env.local src/scripts/smoke-test.ts"
+    "smoke": "node --env-file=.env.local src/scripts/smoke-test.ts",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@google/genai": "^2.22.0",
+    "@prisma/adapter-better-sqlite3": "7.10.0",
+    "@prisma/client": "7.10.0",
+    "better-sqlite3": "^12.6.0",
     "next": "16.3.5",
+    "prisma": "7.10.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "zod": "^4.6.2"
   },
   "devDependencies": {
-    "typescript": "7.0.2",
-    "@types/node": "22.20.2",
     "@tailwindcss/postcss": "^4",
+    "@types/node": "22.20.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.5",
-    "tailwindcss": "^4"
+    "tailwindcss": "^4",
+    "typescript": "7.0.2"
   }
 }

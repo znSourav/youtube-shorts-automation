@@ -3,6 +3,7 @@ import { generateStory, LLM_PRICE_PER_CALL } from "../../providers/llm/gemini.ts
 import { STYLE_PRESETS } from "./styles.ts";
 import { StoryDirectorOutputSchema, type StoryDirectorOutput } from "./schema.ts";
 import { validateScenePlan } from "./validate-scene-plan.ts";
+import { FINGERPRINT_INSTRUCTION } from "../uniqueness/fingerprint.ts";
 
 export interface StoryDirectorInput {
   idea: string;
@@ -51,8 +52,21 @@ export function buildStorySchema(sceneCount: number) {
           theme: { type: "string" },
           emotional_arc: { type: "string" },
           ending: { type: "string" },
+          protagonist_want: { type: "string" },
+          central_obstacle: { type: "string" },
+          ending_shape: { type: "string" },
         },
-        required: ["title", "premise", "story", "theme", "emotional_arc", "ending"],
+        required: [
+          "title",
+          "premise",
+          "story",
+          "theme",
+          "emotional_arc",
+          "ending",
+          "protagonist_want",
+          "central_obstacle",
+          "ending_shape",
+        ],
       },
       character_bible: {
         type: "object",
@@ -156,6 +170,7 @@ export function buildStoryPrompt(input: StoryDirectorInput): string {
       "-- a prior real Veo test showed requesting pose changes causes a head/torso kinematic " +
       "coherence defect.",
     "Fill in every field of the Story, Character Bible, Style Bible, and each scene exactly as the response schema requires.",
+    FINGERPRINT_INSTRUCTION,
   ].join("\n");
 
   return `${instruction}${CONTENT_DELIMITER}${input.idea}`;
