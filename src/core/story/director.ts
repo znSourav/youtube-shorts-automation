@@ -24,6 +24,11 @@ export interface StoryDirectorFailure {
   detail: string;
   blockReason?: string;
   issues?: string[];
+  // Mirrors the exact `billed` value passed to recordSpend for this
+  // dispatched attempt (see runStoryDirector below), so a durable
+  // GenerationRecord dual-write (check.ts) can agree with the real spend
+  // ledger on this same failure case instead of assuming `true`.
+  billed: boolean;
 }
 
 export interface StoryDirectorSuccess {
@@ -235,6 +240,9 @@ export async function runStoryDirector(input: StoryDirectorInput): Promise<Story
       reason: "blocked",
       detail: result.block ? `${result.block.stage}: ${result.block.reason}` : "unknown block reason",
       blockReason: result.block?.reason,
+      // Mirrors the `billed: !result.blocked` passed to recordSpend just
+      // above -- for a blocked response that's `false`.
+      billed: false,
     };
   }
 
@@ -245,6 +253,8 @@ export async function runStoryDirector(input: StoryDirectorInput): Promise<Story
       reason: "parse_failed",
       detail: "Story Director response did not match the expected shape.",
       issues: parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`),
+      // Not blocked -- recordSpend above wrote billed: true for this call.
+      billed: true,
     };
   }
 
@@ -258,6 +268,8 @@ export async function runStoryDirector(input: StoryDirectorInput): Promise<Story
       reason: "validation_failed",
       detail: "Scene plan failed validation.",
       issues: sceneValidation.errors,
+      // Not blocked -- recordSpend above wrote billed: true for this call.
+      billed: true,
     };
   }
 

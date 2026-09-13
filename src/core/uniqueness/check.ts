@@ -387,7 +387,12 @@ export async function runUniqueStoryDirector(
             model: "unknown (story director attempt failed before model attribution)",
             estimatedUsd: Math.max(...Object.values(LLM_PRICE_PER_CALL)),
             actualUsd: null,
-            billed: true,
+            // Mirrors the real ledger write inside runStoryDirector
+            // (director.ts), which is `false` specifically for a "blocked"
+            // failure and `true` for "parse_failed"/"validation_failed" --
+            // keeps this durability record and the real spend-ledger entry
+            // agreeing on the same failure case (WR-01).
+            billed: directorResult.billed,
             ok: false,
             message: "The story could not be generated.",
           },
