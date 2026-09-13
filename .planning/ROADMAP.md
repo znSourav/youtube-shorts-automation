@@ -101,7 +101,24 @@ Plans:
   4. After restarting the app, every story, scene, and generation record — including saved image paths and logged costs — is still present and usable by the uniqueness system.
   5. (Soft) In-progress or completed video jobs are still trackable after closing/reopening the browser or restarting the app; if this proves out of reach in the available time, the limitation is documented rather than silently broken.
 
-**Plans**: TBD
+**Plans:** 4 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 03-01-PLAN.md — Tracer: a generated story, with its three structural fingerprint fields, survives a real restart in SQLite
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 03-02-PLAN.md — The structural-uniqueness gate: deterministic pre-filter, targeted LLM tie-breaker, bounded regeneration, and what she sees
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 03-03-PLAN.md — Scene asset paths, statuses, and per-call cost records become durable, plus the browser-restart restore
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 03-04-PLAN.md — One budget-gated real proof run ($0.05) and the zero-cost collision proofs derived from it
 
 ### Phase 4: Wife-Facing Review & Approval Flow
 
@@ -161,7 +178,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Provider Smoke Test | 4/4 | Complete    | 2026-09-12 |
 | 2. Core Generation Pipeline | 4/4 | Complete    | 2026-09-13 |
-| 3. Persistence & Structural Uniqueness | 0/TBD | Not started | - |
+| 3. Persistence & Structural Uniqueness | 0/4 | Planned | - |
 | 4. Wife-Facing Review & Approval Flow | 0/TBD | Not started | - |
 | 5. Budget & Retry Safeguards | 0/TBD | Not started | - |
 | 6. Reliability, Secrets Hygiene & Output Correctness | 0/TBD | Not started | - |
