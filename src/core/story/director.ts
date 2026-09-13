@@ -4,6 +4,7 @@ import { STYLE_PRESETS } from "./styles.ts";
 import { StoryDirectorOutputSchema, type StoryDirectorOutput } from "./schema.ts";
 import { validateScenePlan } from "./validate-scene-plan.ts";
 import { FINGERPRINT_INSTRUCTION } from "../uniqueness/fingerprint.ts";
+import type { StructuralFingerprint } from "../uniqueness/fingerprint.ts";
 
 export interface StoryDirectorInput {
   idea: string;
@@ -11,6 +12,10 @@ export interface StoryDirectorInput {
   stylePresetId: string;
   mood: string;
   sceneCount: number;
+  // Plan 03-02: set by the regeneration loop (runUniqueStoryDirector) on a
+  // retry after a collision. Never set by the browser -- this is a
+  // server-authored instruction, not user content.
+  avoidPattern?: StructuralFingerprint;
 }
 
 export interface StoryDirectorFailure {
@@ -147,7 +152,7 @@ export function buildStoryPrompt(input: StoryDirectorInput): string {
   }
   const seed = preset.styleBibleSeed;
 
-  const instruction = [
+  const instructionParts = [
     "You are the Story Director for a short animated video. Write an original, wholesome, " +
       "structurally-unique short story from the idea given below, IN THE SAME LANGUAGE/SCRIPT " +
       "the idea itself is written in (Bangla script or Banglish/romanized Bangla) -- do not " +
@@ -171,7 +176,27 @@ export function buildStoryPrompt(input: StoryDirectorInput): string {
       "coherence defect.",
     "Fill in every field of the Story, Character Bible, Style Bible, and each scene exactly as the response schema requires.",
     FINGERPRINT_INSTRUCTION,
-  ].join("\n");
+  ];
+
+  // Plan 03-02 Task 1 / RESEARCH.md Pattern 6: on a regeneration retry after
+  // a collision, name the collided pattern abstractly so the model steers
+  // away from it. This is a server-authored instruction -- it stays in the
+  // instruction section, appended BEFORE CONTENT_DELIMITER, and never
+  // touches the wife's own free text. Each interpolated field is truncated
+  // to 300 characters: this text is model output read back out of the
+  // database (not developer-authored), so bounding it here is what stops a
+  // pathological stored value from swamping or steering the instruction
+  // block.
+  if (input.avoidPattern) {
+    const truncate = (text: string) => (text.length > 300 ? text.slice(0, 300) : text);
+    instructionParts.push(
+      "Avoid this specific story pattern, which has already been used: a protagonist who " +
+        `${truncate(input.avoidPattern.protagonistWant)}, facing ${truncate(input.avoidPattern.centralObstacle)}, ` +
+        `ending with ${truncate(input.avoidPattern.endingShape)}. Produce a structurally different story.`,
+    );
+  }
+
+  const instruction = instructionParts.join("\n");
 
   return `${instruction}${CONTENT_DELIMITER}${input.idea}`;
 }
