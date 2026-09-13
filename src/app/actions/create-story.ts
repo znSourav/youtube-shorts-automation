@@ -7,6 +7,7 @@ import type { StoryDirectorOutput } from "../../core/story/schema.ts";
 import { generateStoryId } from "../../core/story/story-id.ts";
 import { saveStoryWithScenes, UniquenessStatus } from "../../core/persistence/story-repository.ts";
 import { recordGenerations } from "../../core/persistence/generation-repository.ts";
+import { MAX_CHARACTER_DESCRIPTION_LENGTH, MAX_IDEA_LENGTH } from "../../core/story/input-limits.ts";
 
 // D-04's plain-language exhaustion warning. Deliberately: no story title, no
 // id, no similarity score, no attempt count, no reason code -- her choice to
@@ -50,6 +51,19 @@ export async function createStoryAction(input: StoryDirectorInput): Promise<Crea
     return {
       ok: false,
       error: "Please describe your story idea and the main character before creating a story.",
+    };
+  }
+
+  // WR-05: re-validated here, not just via the form's `maxLength` -- a
+  // client-side cap alone is not a real enforcement boundary. checkCeiling's
+  // per-call estimate is a flat amount regardless of prompt size, so an
+  // unusually long pasted idea/character description could make a single
+  // call's real (per-token) cost exceed what the ceiling gate reserved for
+  // it. This runs before checkCeiling/generateStory are ever reached.
+  if (input.idea.length > MAX_IDEA_LENGTH || input.characterDescription.length > MAX_CHARACTER_DESCRIPTION_LENGTH) {
+    return {
+      ok: false,
+      error: "Your story idea or character description is too long. Please shorten it and try again.",
     };
   }
 

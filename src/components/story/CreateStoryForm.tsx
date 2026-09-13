@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import type { StylePreset } from "@/core/story/styles";
+import { MAX_CHARACTER_DESCRIPTION_LENGTH, MAX_IDEA_LENGTH } from "@/core/story/input-limits";
 
 // docs/original-brief.md §9: "Number of scenes" dropdown, 5-7 scenes.
 const SCENE_COUNT_OPTIONS = [5, 6, 7] as const;
@@ -60,6 +61,7 @@ export default function CreateStoryForm({ stylePresets, moodOptions, loading, er
             onChange={(event) => setIdea(event.target.value)}
             rows={3}
             required
+            maxLength={MAX_IDEA_LENGTH}
           />
         </label>
 
@@ -71,6 +73,7 @@ export default function CreateStoryForm({ stylePresets, moodOptions, loading, er
             onChange={(event) => setCharacterDescription(event.target.value)}
             rows={2}
             required
+            maxLength={MAX_CHARACTER_DESCRIPTION_LENGTH}
           />
         </label>
 
