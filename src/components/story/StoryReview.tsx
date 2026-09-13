@@ -7,6 +7,12 @@ export interface StoryReviewProps {
   loading: boolean;
   error: string | null;
   onGenerateImages: () => void;
+  // D-04 (plan 03-02): set only when the regeneration cap was exhausted and
+  // every candidate still collided with a past story. Plain language only --
+  // no story title, id, score, attempt count, or reason code ever reaches
+  // this prop (create-story.ts's CreateStorySuccess shape makes that a type
+  // error, not just a convention).
+  warning?: string | null;
 }
 
 /**
@@ -16,9 +22,15 @@ export interface StoryReviewProps {
  * file path (STORY-03). The only action here is moving forward to scene
  * image generation.
  */
-export default function StoryReview({ story, loading, error, onGenerateImages }: StoryReviewProps) {
+export default function StoryReview({ story, loading, error, onGenerateImages, warning }: StoryReviewProps) {
   return (
     <div className="flex flex-col gap-8">
+      {warning && (
+        <p className="rounded border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+          {warning}
+        </p>
+      )}
+
       <div>
         <h2 className="text-2xl font-semibold text-black dark:text-zinc-50">{story.story.title}</h2>
         <p className="mt-1 text-zinc-600 dark:text-zinc-400">{story.story.premise}</p>

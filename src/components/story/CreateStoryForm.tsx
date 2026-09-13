@@ -27,6 +27,13 @@ export interface CreateStoryFormProps {
  * put in src/app/page.tsx -- this is purely the extraction into its own
  * client component so the page becomes a small state machine over three
  * screens rather than a form with a growing tail.
+ *
+ * D-03's in-flight label (plan 03-02): this codebase has no streaming and no
+ * per-attempt progress channel, so a single fixed sentence covers the whole
+ * action -- generation, the uniqueness check, and up to
+ * MAX_UNIQUENESS_REGENERATION_ATTEMPTS regeneration attempts. This is a
+ * deliberate choice given the architecture, not an omission of the
+ * per-attempt "trying again" wording D-03's own example suggests.
  */
 export default function CreateStoryForm({ stylePresets, moodOptions, loading, error, onSubmit }: CreateStoryFormProps) {
   const [idea, setIdea] = useState("");
@@ -117,7 +124,7 @@ export default function CreateStoryForm({ stylePresets, moodOptions, loading, er
           disabled={loading}
           className="rounded-full bg-foreground px-5 py-3 font-medium text-background transition-colors hover:bg-[#383838] disabled:opacity-50 dark:hover:bg-[#ccc]"
         >
-          {loading ? "Creating..." : "CREATE STORY"}
+          {loading ? "Creating your story and making sure it's an original one... this can take a minute" : "CREATE STORY"}
         </button>
       </form>
 

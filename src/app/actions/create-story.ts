@@ -1,15 +1,28 @@
 "use server";
 
-import { runStoryDirector, type StoryDirectorInput } from "../../core/story/director.ts";
+import type { StoryDirectorInput } from "../../core/story/director.ts";
+import { runUniqueStoryDirector } from "../../core/uniqueness/check.ts";
 import { CeilingExceededError } from "../../lib/spend-ledger.ts";
 import type { StoryDirectorOutput } from "../../core/story/schema.ts";
 import { generateStoryId } from "../../core/story/story-id.ts";
 import { saveStoryWithScenes, UniquenessStatus } from "../../core/persistence/story-repository.ts";
 
+// D-04's plain-language exhaustion warning. Deliberately: no story title, no
+// id, no similarity score, no attempt count, no reason code -- her choice to
+// use the story anyway or try a different idea, never a refusal.
+const UNIQUENESS_EXHAUSTED_WARNING =
+  "This story turned out to be similar to one you've made before. You can use it anyway, or go back and try a different idea.";
+
+// D-03/D-04: the success shape carries exactly the story, its id, and this
+// one warning string -- there is no field here capable of holding a
+// collided story's id or a rejected candidate's text. Keep it this way: a
+// future edit adding a "collision details" field here would leak exactly
+// what D-03 requires stay server-side.
 export interface CreateStorySuccess {
   ok: true;
   data: StoryDirectorOutput;
   storyId: string;
+  uniquenessWarning: string | null;
 }
 
 export interface CreateStoryFailure {
@@ -20,10 +33,11 @@ export interface CreateStoryFailure {
 export type CreateStoryActionResult = CreateStorySuccess | CreateStoryFailure;
 
 /**
- * Thin Server Action wrapper over runStoryDirector -- no provider import, no
- * prompt text, and no raw provider error string crosses into the browser.
- * The raw response stays in the server console via logRawResponse (called
- * inside gemini.ts). Every failure mode maps to one plain-language sentence.
+ * Thin Server Action wrapper over runUniqueStoryDirector -- no provider
+ * import, no prompt text, and no raw provider error string crosses into the
+ * browser. The raw response stays in the server console via logRawResponse
+ * (called inside gemini.ts). Every failure mode maps to one plain-language
+ * sentence.
  */
 export async function createStoryAction(input: StoryDirectorInput): Promise<CreateStoryActionResult> {
   // HTML's `required` attribute on the client only rejects a zero-length
@@ -39,7 +53,10 @@ export async function createStoryAction(input: StoryDirectorInput): Promise<Crea
   }
 
   try {
-    const result = await runStoryDirector(input);
+    // The uniqueness gate (plan 03-02) sits inside runUniqueStoryDirector --
+    // no path from here reaches saveStoryWithScenes/the review screen around
+    // it (UNIQUE-01).
+    const result = await runUniqueStoryDirector(input);
 
     if (!result.ok) {
       if (result.reason === "blocked" && result.blockReason === "MAX_TOKENS") {
@@ -68,13 +85,17 @@ export async function createStoryAction(input: StoryDirectorInput): Promise<Crea
       };
     }
 
-    // The uniqueness gate is inserted between the Director and the save in
-    // plan 03-02; this task passes ACCEPTED directly because with an empty
-    // history (D-05) there is nothing to collide with, and that is a
-    // truthful value rather than a placeholder.
+    // D-04: an exhausted outcome still persists the last candidate (with the
+    // exhausted-shown status) and still returns it to her -- never a silent
+    // block, never a forced refusal. An accepted outcome persists as
+    // accepted with a null warning.
+    const uniquenessStatus =
+      result.status === "accepted" ? UniquenessStatus.ACCEPTED : UniquenessStatus.REJECTED_EXHAUSTED_SHOWN;
+    const uniquenessWarning = result.status === "accepted" ? null : UNIQUENESS_EXHAUSTED_WARNING;
+
     const storyId = generateStoryId();
     try {
-      await saveStoryWithScenes(storyId, result.data, UniquenessStatus.ACCEPTED, 0);
+      await saveStoryWithScenes(storyId, result.data, uniquenessStatus, result.attempt);
     } catch (saveErr) {
       console.error("createStoryAction: persistence failure", saveErr);
       return {
@@ -83,7 +104,7 @@ export async function createStoryAction(input: StoryDirectorInput): Promise<Crea
       };
     }
 
-    return { ok: true, data: result.data, storyId };
+    return { ok: true, data: result.data, storyId, uniquenessWarning };
   } catch (err) {
     if (err instanceof CeilingExceededError) {
       return {

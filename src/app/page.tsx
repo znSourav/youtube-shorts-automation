@@ -27,6 +27,10 @@ export default function Home() {
 
   const [story, setStory] = useState<StoryDirectorOutput | null>(null);
   const [storyId, setStoryId] = useState<string | null>(null);
+  // D-04 (plan 03-02): the plain-language exhaustion warning, or null on a
+  // clean accept. Cleared on every new story creation so a stale warning
+  // from a previous story can never survive onto a fresh one.
+  const [uniquenessWarning, setUniquenessWarning] = useState<string | null>(null);
 
   const [imagesLoading, setImagesLoading] = useState(false);
   const [imagesError, setImagesError] = useState<string | null>(null);
@@ -41,6 +45,7 @@ export default function Home() {
   async function handleCreateStory(values: CreateStoryFormValues) {
     setCreateLoading(true);
     setCreateError(null);
+    setUniquenessWarning(null);
 
     const result = await createStoryAction(values);
 
@@ -51,6 +56,7 @@ export default function Home() {
     }
     setStory(result.data);
     setStoryId(result.storyId);
+    setUniquenessWarning(result.uniquenessWarning);
     setSceneStatuses([]);
     setImagesError(null);
     setScreen("review-story");
@@ -128,6 +134,7 @@ export default function Home() {
             loading={imagesLoading}
             error={imagesError}
             onGenerateImages={handleGenerateImages}
+            warning={uniquenessWarning}
           />
         )}
 
