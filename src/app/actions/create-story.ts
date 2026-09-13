@@ -23,6 +23,18 @@ export type CreateStoryActionResult = CreateStorySuccess | CreateStoryFailure;
  * inside gemini.ts). Every failure mode maps to one plain-language sentence.
  */
 export async function createStoryAction(input: StoryDirectorInput): Promise<CreateStoryActionResult> {
+  // HTML's `required` attribute on the client only rejects a zero-length
+  // value -- a whitespace-only submission passes it and would otherwise
+  // reach runStoryDirector's paid, budget-gated call for guaranteed-useless
+  // output. This check runs before checkCeiling/generateStory are ever
+  // reached (T-02-04's single-dispatch-point guarantee is unaffected).
+  if (!input.idea.trim() || !input.characterDescription.trim()) {
+    return {
+      ok: false,
+      error: "Please describe your story idea and the main character before creating a story.",
+    };
+  }
+
   try {
     const result = await runStoryDirector(input);
 
