@@ -12,7 +12,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test:lib": "node --test src/lib/spend-ledger.test.ts src/lib/log-response.test.ts src/core/story/styles.test.ts src/core/story/validate-scene-plan.test.ts src/core/story/director.test.ts src/providers/llm/gemini.test.ts src/core/storage-paths.test.ts src/lib/db.test.ts src/core/uniqueness/similarity.test.ts src/core/uniqueness/check.test.ts src/core/persistence/generation-repository.test.ts src/core/persistence/story-view.test.ts",
+    "test:lib": "node --test src/lib/spend-ledger.test.ts src/lib/log-response.test.ts src/core/story/styles.test.ts src/core/story/validate-scene-plan.test.ts src/core/story/director.test.ts src/providers/llm/gemini.test.ts src/core/storage-paths.test.ts src/lib/db.test.ts src/core/uniqueness/similarity.test.ts src/core/uniqueness/check.test.ts src/core/persistence/generation-repository.test.ts src/core/persistence/story-view.test.ts && node src/scripts/check-boundaries.ts",
     "smoke": "node --env-file=.env.local src/scripts/smoke-test.ts",
     "postinstall": "prisma generate"
   },
