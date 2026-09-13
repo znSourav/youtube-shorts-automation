@@ -101,12 +101,12 @@ Plans:
   4. After restarting the app, every story, scene, and generation record — including saved image paths and logged costs — is still present and usable by the uniqueness system.
   5. (Soft) In-progress or completed video jobs are still trackable after closing/reopening the browser or restarting the app; if this proves out of reach in the available time, the limitation is documented rather than silently broken.
 
-**Plans:** 4 plans
+**Plans:** 1/4 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 03-01-PLAN.md — Tracer: a generated story, with its three structural fingerprint fields, survives a real restart in SQLite
+- [x] 03-01-PLAN.md — Tracer: a generated story, with its three structural fingerprint fields, survives a real restart in SQLite
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -178,7 +178,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Provider Smoke Test | 4/4 | Complete    | 2026-09-12 |
 | 2. Core Generation Pipeline | 4/4 | Complete    | 2026-09-13 |
-| 3. Persistence & Structural Uniqueness | 0/4 | Planned | - |
+| 3. Persistence & Structural Uniqueness | 1/4 | In Progress|  |
 | 4. Wife-Facing Review & Approval Flow | 0/TBD | Not started | - |
 | 5. Budget & Retry Safeguards | 0/TBD | Not started | - |
 | 6. Reliability, Secrets Hygiene & Output Correctness | 0/TBD | Not started | - |
