@@ -2,9 +2,9 @@
 // so it runs identically on Windows and POSIX shells. Asserts two
 // invariants that a one-time code review cannot re-verify on every commit:
 //
-// 1. No file under src/components/ imports a provider module or the spend
-//    ledger -- this is what keeps GEMINI_API_KEY out of the client bundle
-//    (T-02-01).
+// 1. No "use client" file (wherever it lives in src/, not just under
+//    src/components/) imports a provider module or the spend ledger -- this
+//    is what keeps GEMINI_API_KEY out of the client bundle (T-02-01).
 // 2. Every file under src/app/actions/ reaches the LLM provider only by
 //    importing from src/core/, never directly -- keeps runStoryDirector's
 //    ceiling gate as the LLM's single dispatch point (T-02-04). Image and
@@ -52,10 +52,16 @@ function main(): void {
   const allFiles = walk(SRC_ROOT).map(normalize);
   let failed = false;
 
-  // Invariant 1
-  const componentFiles = allFiles.filter((f) => f.includes("src/components/"));
+  // Invariant 1 -- any "use client" file ships to the browser, not just ones
+  // under src/components/ (e.g. src/app/page.tsx is also a client file and
+  // lives outside that directory).
+  const clientFiles = allFiles.filter((f) => {
+    if (!f.endsWith(".tsx") && !f.endsWith(".ts")) return false;
+    const content = readFileSync(f, "utf8");
+    return /^["']use client["'];?/m.test(content);
+  });
   const offenders1: string[] = [];
-  for (const file of componentFiles) {
+  for (const file of clientFiles) {
     const specifiers = importSpecifiers(readFileSync(file, "utf8"));
     for (const spec of specifiers) {
       if (spec.includes("/providers/") || spec.includes("spend-ledger")) {
@@ -70,7 +76,7 @@ function main(): void {
       console.log(`  ${offender}`);
     }
   } else {
-    console.log("OK: no src/components/ file imports a provider or the spend ledger");
+    console.log("OK: no \"use client\" file imports a provider or the spend ledger");
   }
 
   // Invariant 2
