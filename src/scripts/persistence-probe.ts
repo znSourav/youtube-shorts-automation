@@ -18,13 +18,24 @@
 //            any generation records this mode previously wrote for the
 //            probe story first.
 //   --real   calls createStoryAction with a real story idea (real LLM +
-//            persistence spend). NOT run by this plan -- 03-04 runs it once
-//            behind a budget checkpoint.
+//            persistence spend). Deletes the --write fixture row first
+//            (D-05: the probe's own synthetic story must never be part of
+//            the accepted history a real candidate is compared against).
+//            Records the resulting story id to LAST_STORY_ID_PATH so a
+//            subsequent, separately-invoked `--read` (no --id given) reads
+//            THIS story back rather than the fixture.
+//   --read   reads a story back in a FRESH node process invocation -- this
+//            is PERSIST-01's two-process restart-survival proof. Reads
+//            --id=<storyId> when given; otherwise reads whichever story id
+//            was last written by --write or --real (via LAST_STORY_ID_PATH),
+//            falling back to the fixture id if neither has ever run.
 // Run with:
 //   node --env-file=.env.local src/scripts/persistence-probe.ts --write
 //   node --env-file=.env.local src/scripts/persistence-probe.ts --read
 //   node --env-file=.env.local src/scripts/persistence-probe.ts --simulate-assets
 //   node --env-file=.env.local src/scripts/persistence-probe.ts --real
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { prisma } from "../lib/db.ts";
 import { saveStoryWithScenes, findStoryWithScenes, UniquenessStatus } from "../core/persistence/story-repository.ts";
 import {
@@ -45,6 +56,44 @@ import { loadLedger, totalSpentUsd, CeilingExceededError } from "../lib/spend-le
 // STORY_ID_PATTERN. Fixed rather than random so --write and --read (run in
 // two separate process invocations) agree on which row to exercise.
 const PROBE_STORY_ID = "story-probe-persistence";
+
+// D-06-style segregated throwaway path (mirrors spend-ledger.ts's LEDGER_PATH
+// convention): records which story id --write or --real most recently
+// produced, so a --read invoked with no --id flag in a SEPARATE process
+// knows which row to read back without any in-memory state surviving
+// between the two process invocations.
+const LAST_STORY_ID_PATH = "storage/_smoketest/persistence-probe-last-id.txt";
+
+function writeLastStoryId(id: string): void {
+  const dir = dirname(LAST_STORY_ID_PATH);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+  writeFileSync(LAST_STORY_ID_PATH, id, "utf8");
+}
+
+function readLastStoryId(): string {
+  try {
+    return readFileSync(LAST_STORY_ID_PATH, "utf8").trim();
+  } catch {
+    // Neither --write nor --real has ever run in this environment -- fall
+    // back to the fixture id, preserving --read's pre-03-04 default.
+    return PROBE_STORY_ID;
+  }
+}
+
+/**
+ * Deletes the probe fixture's Story row and its children (generation
+ * records first, since they reference Scene rows). Shared by --write
+ * (so it stays re-runnable) and --real (D-05/T-03-23: the synthetic fixture
+ * story must never be part of the accepted history a real candidate is
+ * compared against).
+ */
+async function deleteProbeStoryRows(): Promise<void> {
+  await prisma.generationRecord.deleteMany({ where: { storyId: PROBE_STORY_ID } });
+  await prisma.scene.deleteMany({ where: { storyId: PROBE_STORY_ID } });
+  await prisma.story.deleteMany({ where: { id: PROBE_STORY_ID } });
+}
 
 function buildFixtureOutput(): StoryDirectorOutput {
   return {
@@ -103,12 +152,11 @@ async function runWrite(): Promise<void> {
   // children are deleted explicitly before the parent Story row --
   // generation records first, since Scene rows are themselves referenced by
   // GenerationRecord.sceneId).
-  await prisma.generationRecord.deleteMany({ where: { storyId: PROBE_STORY_ID } });
-  await prisma.scene.deleteMany({ where: { storyId: PROBE_STORY_ID } });
-  await prisma.story.deleteMany({ where: { id: PROBE_STORY_ID } });
+  await deleteProbeStoryRows();
 
   const output = buildFixtureOutput();
   await saveStoryWithScenes(PROBE_STORY_ID, output, UniquenessStatus.ACCEPTED, 0);
+  writeLastStoryId(PROBE_STORY_ID);
   console.log(`PERSISTENCE PROBE: wrote id=${PROBE_STORY_ID} scenes=${output.scenes.length}`);
 }
 
@@ -189,9 +237,12 @@ async function runSimulateAssets(): Promise<void> {
 }
 
 async function runRead(): Promise<void> {
-  const story = await findStoryWithScenes(PROBE_STORY_ID);
+  const idArg = process.argv.slice(2).find((arg) => arg.startsWith("--id="));
+  const storyId = idArg ? idArg.slice("--id=".length) : readLastStoryId();
+
+  const story = await findStoryWithScenes(storyId);
   if (!story) {
-    console.log(`PERSISTENCE PROBE: read missing id=${PROBE_STORY_ID}`);
+    console.log(`PERSISTENCE PROBE: read missing id=${storyId}`);
     process.exitCode = 1;
     return;
   }
@@ -209,12 +260,31 @@ async function runRead(): Promise<void> {
   );
 }
 
+// 03-04 Task 2: a genuinely fourth story idea, unrelated to Phase 2's three
+// real dev-test stories (boy-trades-marble-for-a-kite, girl-and-grandmother's
+// -broken-bangle, fisherman-and-paper-boat -- see 02-PROOF-RUN.md) in
+// protagonist, setting, central object, and emotional arc alike: an elderly
+// VILLAGE POSTMAN (not a child, not a fisherman) finds an old UNDELIVERED
+// LETTER (not a kite/bangle/boat) in his mailbag and sets out to finally
+// deliver it, an arc of quiet DUTY AND BELATED CLOSURE (not
+// longing/family-history/reunion). Written in Banglish, matching the
+// product's real expected input register (typed Bangla or Banglish), per
+// STORY-01/02.
+const REAL_PROBE_IDEA =
+  "Ekjon briddho postman tar chithir bag-e onek bochorer purono ekta na-deya chithi khuje pay, ebong seta " +
+  "thik thikanay pouche debar jonno gramer pothe rowna dey.";
+const REAL_PROBE_CHARACTER_DESCRIPTION =
+  "An elderly postman with silver hair and a weathered face, wearing a faded khaki uniform and cap, carrying a worn leather mail bag, riding an old bicycle.";
+
 async function runReal(): Promise<void> {
+  // D-05/T-03-23: delete the --write fixture row first so it is never part
+  // of the accepted history the real candidate below is compared against.
+  await deleteProbeStoryRows();
+
   try {
     const result = await createStoryAction({
-      idea:
-        "A young fisherman finds a paper boat washed up on the riverbank with a child's name on it, and sets out to find who lost it.",
-      characterDescription: "A young fisherman, weathered hands, simple cotton shirt, calm expression.",
+      idea: REAL_PROBE_IDEA,
+      characterDescription: REAL_PROBE_CHARACTER_DESCRIPTION,
       stylePresetId: "soft-hand-painted-2d",
       mood: "Emotional",
       sceneCount: 5,
@@ -225,6 +295,8 @@ async function runReal(): Promise<void> {
       process.exitCode = 1;
       return;
     }
+
+    writeLastStoryId(result.storyId);
 
     const ledger = loadLedger();
     console.log(

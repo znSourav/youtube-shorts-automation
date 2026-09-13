@@ -6,6 +6,7 @@ storage/_smoketest/*.jpg
 storage/_smoketest/*.webp
 storage/_smoketest/*.mp4
 storage/_smoketest/*.log
+storage/_smoketest/*.txt
 
 # GSD runtime artifacts — session-local, not project state
 .gsd/
