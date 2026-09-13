@@ -210,7 +210,12 @@ export async function generateStory(params: GenerateStoryParams): Promise<Genera
   // the full raw response before any parsing code runs.
   logRawResponse(`generateContent raw response (model=${modelUsed})`, response);
 
-  const estimatedUsd = LLM_PRICE_PER_CALL[primaryModel] ?? LLM_PRICE_PER_CALL[PRIMARY_MODEL];
+  // Priced off modelUsed (the model actually dispatched, reassigned to
+  // FALLBACK_MODEL above on a 403/404), not primaryModel (the model only
+  // intended before any fallback) -- otherwise a genuine fallback reports
+  // the more expensive primary model's price on the correctly-named
+  // fallback response (WR-04).
+  const estimatedUsd = LLM_PRICE_PER_CALL[modelUsed] ?? LLM_PRICE_PER_CALL[PRIMARY_MODEL];
 
   return classifyStoryResponse(response, modelUsed, fallbackUsed, estimatedUsd);
 }
