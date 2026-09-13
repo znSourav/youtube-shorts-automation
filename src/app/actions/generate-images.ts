@@ -10,6 +10,12 @@ import {
 } from "../../providers/image/gemini-image.ts";
 import { sceneDir, sceneImagePath } from "../../core/storage-paths.ts";
 import type { Scene, StoryDirectorOutput } from "../../core/story/schema.ts";
+import {
+  recordGeneration,
+  updateSceneImage,
+  GenerationType,
+  SceneAssetStatus,
+} from "../../core/persistence/generation-repository.ts";
 
 type CharacterBible = StoryDirectorOutput["character_bible"];
 type StyleBible = StoryDirectorOutput["style_bible"];
@@ -120,6 +126,11 @@ export async function generateSceneImagesAction(
         err instanceof CeilingExceededError
           ? "The generation budget was reached, so this scene's image could not be created."
           : "This scene's image could not be created due to an unexpected error.";
+      // No provider call was dispatched -- nothing was necessarily billed,
+      // so no generation record (mirrors the existing decision not to call
+      // recordSpend here). The scene's status is still written so it
+      // doesn't sit silently at WAITING forever.
+      await updateSceneImage(storyId, scene.scene_number, null, SceneAssetStatus.FAILED);
       statuses.push({ sceneNumber: scene.scene_number, imagePath: null, imageDataUrl: null, ok: false, message });
       continue;
     }
@@ -132,9 +143,11 @@ export async function generateSceneImagesAction(
     } catch (err) {
       // Not a classified block -- the call itself failed to complete (e.g. a
       // network error). Nothing was necessarily billed, so no recordSpend
-      // here; still stop rather than keep spending into an unknown state.
+      // and no generation record here; still stop rather than keep spending
+      // into an unknown state. The scene's status is still written.
       stopped = true;
       console.error(`generateSceneImagesAction: scene ${scene.scene_number} threw`, err);
+      await updateSceneImage(storyId, scene.scene_number, null, SceneAssetStatus.FAILED);
       statuses.push({
         sceneNumber: scene.scene_number,
         imagePath: null,
@@ -154,14 +167,28 @@ export async function generateSceneImagesAction(
       at: new Date().toISOString(),
     });
 
+    // Dual write for the same dispatched call recordSpend above just wrote
+    // to the real ledger -- IMAGE-03's durability requirement. Never a
+    // replacement for the ledger (unmodified above), never a bypass.
+    const generationRecordBase = {
+      generationType: GenerationType.IMAGE,
+      model: result.modelUsed,
+      estimatedUsd,
+      actualUsd: null,
+      billed: !result.blocked,
+    } as const;
+
     if (result.blocked || !result.bytes || !result.mimeType) {
       stopped = true;
+      const message = plainLanguageBlockMessage(result.block);
+      await updateSceneImage(storyId, scene.scene_number, null, SceneAssetStatus.FAILED);
+      await recordGeneration(storyId, { ...generationRecordBase, ok: false, message }, scene.scene_number);
       statuses.push({
         sceneNumber: scene.scene_number,
         imagePath: null,
         imageDataUrl: null,
         ok: false,
-        message: plainLanguageBlockMessage(result.block),
+        message,
       });
       continue;
     }
@@ -178,15 +205,25 @@ export async function generateSceneImagesAction(
       // gate and provider call for subsequent scenes are unaffected, so
       // already-paid-for progress on later scenes should not be discarded.
       console.error(`generateSceneImagesAction: failed to write scene ${scene.scene_number}'s image to disk`, err);
+      const message = "The image was generated but could not be saved. Please try again.";
+      await updateSceneImage(storyId, scene.scene_number, null, SceneAssetStatus.FAILED);
+      await recordGeneration(storyId, { ...generationRecordBase, ok: false, message }, scene.scene_number);
       statuses.push({
         sceneNumber: scene.scene_number,
         imagePath: null,
         imageDataUrl: null,
         ok: false,
-        message: "The image was generated but could not be saved. Please try again.",
+        message,
       });
       continue;
     }
+
+    await updateSceneImage(storyId, scene.scene_number, imagePath, SceneAssetStatus.READY);
+    await recordGeneration(
+      storyId,
+      { ...generationRecordBase, ok: true, message: "Image generated." },
+      scene.scene_number,
+    );
 
     statuses.push({
       sceneNumber: scene.scene_number,

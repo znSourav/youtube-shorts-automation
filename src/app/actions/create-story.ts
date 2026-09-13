@@ -6,6 +6,7 @@ import { CeilingExceededError } from "../../lib/spend-ledger.ts";
 import type { StoryDirectorOutput } from "../../core/story/schema.ts";
 import { generateStoryId } from "../../core/story/story-id.ts";
 import { saveStoryWithScenes, UniquenessStatus } from "../../core/persistence/story-repository.ts";
+import { recordGenerations } from "../../core/persistence/generation-repository.ts";
 
 // D-04's plain-language exhaustion warning. Deliberately: no story title, no
 // id, no similarity score, no attempt count, no reason code -- her choice to
@@ -103,6 +104,15 @@ export async function createStoryAction(input: StoryDirectorInput): Promise<Crea
         error: "The story was written but could not be saved. Please try again.",
       };
     }
+
+    // Best-effort durability flush of the story + uniqueness-comparison
+    // spend accumulated during runUniqueStoryDirector (IMAGE-03's dual
+    // write). Placed AFTER the save so the storyId foreign key resolves.
+    // recordGenerations never throws -- a failure here can only cost the
+    // durability record, never the already-persisted story (03-RESEARCH.md
+    // Architectural Responsibility Map), so it never changes this action's
+    // return value.
+    await recordGenerations(storyId, result.spend);
 
     return { ok: true, data: result.data, storyId, uniquenessWarning };
   } catch (err) {

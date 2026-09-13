@@ -7,6 +7,12 @@ import { CeilingExceededError, checkCeiling, recordSpend } from "../../lib/spend
 import { generateVideo, VIDEO_PRICE_PER_SECOND } from "../../providers/video/veo.ts";
 import { sceneVideoPath } from "../../core/storage-paths.ts";
 import type { Scene } from "../../core/story/schema.ts";
+import {
+  recordGeneration,
+  updateSceneVideo,
+  GenerationType,
+  SceneAssetStatus,
+} from "../../core/persistence/generation-repository.ts";
 
 // Veo 3.1 Lite only supports these three clip lengths (docs/original-brief.md
 // §14). The Story Director's own scene.duration is a creative-writing field
@@ -115,6 +121,10 @@ export async function generateSceneVideoAction(
       err instanceof CeilingExceededError
         ? "The generation budget was reached, so this scene's video could not be created."
         : "This scene's video could not be created due to an unexpected error.";
+    // No provider call was dispatched -- nothing was necessarily billed, so
+    // no generation record (mirrors the existing decision not to call
+    // recordSpend here). The scene's status is still written.
+    await updateSceneVideo(storyId, scene.scene_number, null, SceneAssetStatus.FAILED);
     return { ok: false, videoPath: null, videoDataUrl: null, message, durationSeconds };
   }
 
@@ -125,6 +135,9 @@ export async function generateSceneVideoAction(
     mimeType = mimeTypeForImagePath(imagePath);
   } catch (err) {
     console.error(`generateSceneVideoAction: failed to read scene image at ${imagePath}`, err);
+    // Still pre-dispatch -- the Veo call never happened, so no generation
+    // record; the scene's status is still written.
+    await updateSceneVideo(storyId, scene.scene_number, null, SceneAssetStatus.FAILED);
     return {
       ok: false,
       videoPath: null,
@@ -151,8 +164,9 @@ export async function generateSceneVideoAction(
   } catch (err) {
     // Not a classified block -- the call itself failed to complete. Nothing
     // was necessarily billed, so no recordSpend here (mirrors
-    // generate-images.ts's identical convention).
+    // generate-images.ts's identical convention), and no generation record.
     console.error(`generateSceneVideoAction: scene ${scene.scene_number} threw`, err);
+    await updateSceneVideo(storyId, scene.scene_number, null, SceneAssetStatus.FAILED);
     return {
       ok: false,
       videoPath: null,
@@ -178,24 +192,29 @@ export async function generateSceneVideoAction(
     at: new Date().toISOString(),
   });
 
+  // Dual write for the same dispatched call recordSpend above just wrote to
+  // the real ledger -- IMAGE-03's "same is true ... for video" durability
+  // requirement. Never a replacement for the ledger (unmodified above).
+  const generationRecordBase = {
+    generationType: GenerationType.VIDEO,
+    model: VIDEO_MODEL_ID,
+    estimatedUsd,
+    actualUsd: null,
+    billed: true,
+  } as const;
+
   if (result.timedOut) {
-    return {
-      ok: false,
-      videoPath: null,
-      videoDataUrl: null,
-      message: "Generating this scene's video took too long and was stopped. Please try again.",
-      durationSeconds,
-    };
+    const message = "Generating this scene's video took too long and was stopped. Please try again.";
+    await updateSceneVideo(storyId, scene.scene_number, null, SceneAssetStatus.FAILED);
+    await recordGeneration(storyId, { ...generationRecordBase, ok: false, message }, scene.scene_number);
+    return { ok: false, videoPath: null, videoDataUrl: null, message, durationSeconds };
   }
 
   if (result.blocked || !result.filePath) {
-    return {
-      ok: false,
-      videoPath: null,
-      videoDataUrl: null,
-      message: "The video could not be generated. Please try again.",
-      durationSeconds,
-    };
+    const message = "The video could not be generated. Please try again.";
+    await updateSceneVideo(storyId, scene.scene_number, null, SceneAssetStatus.FAILED);
+    await recordGeneration(storyId, { ...generationRecordBase, ok: false, message }, scene.scene_number);
+    return { ok: false, videoPath: null, videoDataUrl: null, message, durationSeconds };
   }
 
   let videoDataUrl: string | null = null;
@@ -204,14 +223,24 @@ export async function generateSceneVideoAction(
     videoDataUrl = `data:video/mp4;base64,${videoBytes.toString("base64")}`;
   } catch (err) {
     console.error(`generateSceneVideoAction: failed to read generated video at ${result.filePath}`, err);
+    const message = "The video was generated but could not be loaded for playback. Please try again.";
+    await updateSceneVideo(storyId, scene.scene_number, null, SceneAssetStatus.FAILED);
+    await recordGeneration(storyId, { ...generationRecordBase, ok: false, message }, scene.scene_number);
     return {
       ok: false,
       videoPath: result.filePath,
       videoDataUrl: null,
-      message: "The video was generated but could not be loaded for playback. Please try again.",
+      message,
       durationSeconds,
     };
   }
+
+  await updateSceneVideo(storyId, scene.scene_number, result.filePath, SceneAssetStatus.READY);
+  await recordGeneration(
+    storyId,
+    { ...generationRecordBase, ok: true, message: "Video generated." },
+    scene.scene_number,
+  );
 
   return {
     ok: true,

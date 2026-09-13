@@ -15,6 +15,10 @@ import {
 } from "../story/director.ts";
 import type { StoryDirectorOutput } from "../story/schema.ts";
 import { listAcceptedFingerprints, type AcceptedFingerprint } from "../persistence/story-repository.ts";
+import {
+  GenerationType,
+  type PendingGenerationRecord,
+} from "../persistence/generation-repository.ts";
 import { fingerprintFromStoryOutput, type StructuralFingerprint } from "./fingerprint.ts";
 import { preFilterVerdict, scoreFingerprints } from "./similarity.ts";
 import {
@@ -187,6 +191,15 @@ export interface CompareViaLlmOptions {
   // temp ledger path -- zero network calls, zero real ledger writes.
   comparator?: (params: CompareStructuralSimilarityParams) => Promise<ClassifyComparisonResult>;
   ledgerPath?: string;
+  // Plan 03-03 (IMAGE-03's "same is true for ... uniqueness-comparison
+  // call" durability requirement): when supplied, one PendingGenerationRecord
+  // is pushed onto this array for every DISPATCHED comparison -- i.e. every
+  // call that got past checkCeiling. A ceiling refusal pushes nothing, since
+  // nothing was dispatched (mirrors the real ledger's own recordSpend, which
+  // likewise never runs on a refused call). Collected as a side effect
+  // rather than returned so compareViaLlm's boolean return type -- and every
+  // existing caller of it -- stays unchanged.
+  spend?: PendingGenerationRecord[];
 }
 
 /**
@@ -240,6 +253,18 @@ export async function compareViaLlm(
     options.ledgerPath,
   );
 
+  options.spend?.push({
+    generationType: GenerationType.UNIQUENESS_CHECK,
+    model: result.modelUsed,
+    estimatedUsd,
+    actualUsd: null,
+    billed: !result.blocked,
+    ok: !result.blocked,
+    message: result.blocked
+      ? "The uniqueness comparison could not be completed."
+      : "Uniqueness comparison completed.",
+  });
+
   if (result.blocked) {
     return false;
   }
@@ -252,6 +277,13 @@ export interface UniqueStoryAccepted {
   status: "accepted";
   data: StoryDirectorOutput;
   attempt: number;
+  // Plan 03-03: one entry per dispatched Story Director attempt made while
+  // reaching this outcome, plus one per dispatched uniqueness comparison --
+  // the honest accounting of every paid call made in service of the story
+  // about to be persisted, including collided attempts whose text is
+  // deliberately never persisted (D-03). Flushed by create-story.ts via
+  // recordGenerations once the story row exists.
+  spend: PendingGenerationRecord[];
 }
 
 export interface UniqueStoryExhausted {
@@ -259,6 +291,7 @@ export interface UniqueStoryExhausted {
   status: "exhausted";
   data: StoryDirectorOutput;
   attempt: number;
+  spend: PendingGenerationRecord[];
 }
 
 export interface UniqueStoryFailure {
@@ -268,6 +301,7 @@ export interface UniqueStoryFailure {
   blockReason?: string;
   issues?: string[];
   attempt: number;
+  spend: PendingGenerationRecord[];
 }
 
 export type UniqueStoryResult = UniqueStoryAccepted | UniqueStoryExhausted | UniqueStoryFailure;
@@ -293,10 +327,17 @@ export async function runUniqueStoryDirector(
 ): Promise<UniqueStoryResult> {
   const director = deps.director ?? runStoryDirector;
   const historyReader = deps.historyReader ?? listAcceptedFingerprints;
+  // Plan 03-03: accumulates one entry per dispatched Story Director attempt
+  // (pushed just below) and one per dispatched uniqueness comparison (pushed
+  // by compareViaLlm itself, via the `spend` option wired into the default
+  // escalate hook here). A caller-supplied deps.escalate bypasses
+  // compareViaLlm entirely, so nothing is pushed for it -- tests that inject
+  // their own escalate don't need to know about spend at all.
+  const spend: PendingGenerationRecord[] = [];
   // Defaults to the real ceiling-gated LLM tie-breaker (compareViaLlm) --
   // checkUniqueness's own signature and every caller here are unaffected by
   // which implementation fills this hook.
-  const escalate = deps.escalate ?? ((candidate, past) => compareViaLlm(candidate, past));
+  const escalate = deps.escalate ?? ((candidate, past) => compareViaLlm(candidate, past, { spend }));
 
   const cap = maxRegenerationAttempts();
   let lastCandidate: StoryDirectorOutput | null = null;
@@ -311,17 +352,50 @@ export async function runUniqueStoryDirector(
         // A previous attempt already produced a candidate -- the wife having
         // a slightly-similar story beats her having nothing. attempt - 1 is
         // the number of attempts that actually completed.
-        return { ok: true, status: "exhausted", data: lastCandidate, attempt: attempt - 1 };
+        return { ok: true, status: "exhausted", data: lastCandidate, attempt: attempt - 1, spend };
       }
       // Either not a budget refusal, or the very first attempt was refused
       // with no candidate yet produced -- rethrow so createStoryAction's
-      // existing budget message reaches her unchanged.
+      // existing budget message reaches her unchanged. Nothing was
+      // dispatched this attempt, so nothing is pushed to spend either.
       throw err;
     }
 
+    // Every non-thrown directorResult -- ok or not -- represents a
+    // DISPATCHED Story Director call: runStoryDirector's own recordSpend
+    // already wrote this exact call to the real ledger regardless of
+    // outcome (blocked included, its own conservative-accounting
+    // convention). This durable record is the dual write for that same
+    // call (IMAGE-03's "same is true ... for story" requirement).
+    spend.push(
+      directorResult.ok
+        ? {
+            generationType: GenerationType.STORY,
+            model: directorResult.modelUsed,
+            estimatedUsd: directorResult.estimatedUsd,
+            actualUsd: null,
+            billed: true,
+            ok: true,
+            message: "Story generated.",
+          }
+        : {
+            generationType: GenerationType.STORY,
+            // StoryDirectorFailure (director.ts) carries no modelUsed --
+            // extending that shape is out of this plan's scope. estimatedUsd
+            // mirrors runStoryDirector's own conservative estimate, which is
+            // always the max of the two priced models regardless of outcome.
+            model: "unknown (story director attempt failed before model attribution)",
+            estimatedUsd: Math.max(...Object.values(LLM_PRICE_PER_CALL)),
+            actualUsd: null,
+            billed: true,
+            ok: false,
+            message: "The story could not be generated.",
+          },
+    );
+
     if (!directorResult.ok) {
       if (lastCandidate) {
-        return { ok: true, status: "exhausted", data: lastCandidate, attempt: attempt - 1 };
+        return { ok: true, status: "exhausted", data: lastCandidate, attempt: attempt - 1, spend };
       }
       return {
         ok: false,
@@ -330,6 +404,7 @@ export async function runUniqueStoryDirector(
         blockReason: directorResult.blockReason,
         issues: directorResult.issues,
         attempt,
+        spend,
       };
     }
 
@@ -339,7 +414,7 @@ export async function runUniqueStoryDirector(
     const verdict = await checkUniqueness(fingerprint, past, { escalate });
 
     if (!verdict.collided) {
-      return { ok: true, status: "accepted", data: directorResult.data, attempt };
+      return { ok: true, status: "accepted", data: directorResult.data, attempt, spend };
     }
 
     avoidPattern = verdict.withFingerprint;
@@ -348,5 +423,5 @@ export async function runUniqueStoryDirector(
   // Cap reached with every attempt colliding -- lastCandidate is always set
   // here because the loop ran at least once (cap >= 1 per
   // maxRegenerationAttempts's own guard).
-  return { ok: true, status: "exhausted", data: lastCandidate as StoryDirectorOutput, attempt: cap };
+  return { ok: true, status: "exhausted", data: lastCandidate as StoryDirectorOutput, attempt: cap, spend };
 }

@@ -17,6 +17,7 @@ import { CeilingExceededError } from "../../lib/spend-ledger.ts";
 import type { StoryDirectorInput, StoryDirectorResult } from "../story/director.ts";
 import type { StoryDirectorOutput } from "../story/schema.ts";
 import type { AcceptedFingerprint } from "../persistence/story-repository.ts";
+import type { PendingGenerationRecord } from "../persistence/generation-repository.ts";
 import type { StructuralFingerprint } from "./fingerprint.ts";
 import type { CompareStructuralSimilarityParams, ClassifyComparisonResult } from "../../providers/llm/gemini.ts";
 
@@ -497,4 +498,105 @@ test("buildComparisonPrompt places both fingerprints after the delimiter and tru
   // must NOT appear verbatim in the prompt.
   assert.ok(!prompt.includes(longField));
   assert.ok(prompt.includes("x".repeat(300)));
+});
+
+// -- Plan 03-03: spend accumulation (IMAGE-03's story/uniqueness-comparison
+// durability requirement) --
+
+test("an always-colliding three-attempt run produces three story-typed spend entries, one per dispatched attempt", async () => {
+  const director = async (input: StoryDirectorInput): Promise<StoryDirectorResult> => ({
+    ok: true,
+    data: fixtureOutput({ title: `Attempt ${input.avoidPattern ? "n" : "1"}` }),
+    usageMetadata: null,
+    modelUsed: "fake-model",
+    fallbackUsed: false,
+    estimatedUsd: 0.05,
+  });
+  const historyReader = async () => [DEFAULT_PAST];
+
+  const result = await runUniqueStoryDirector(BASE_INPUT, { director, historyReader });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.status, "exhausted");
+    const storyEntries = result.spend.filter((entry) => entry.generationType === "STORY");
+    assert.equal(storyEntries.length, DEFAULT_MAX_REGENERATION_ATTEMPTS);
+    for (const entry of storyEntries) {
+      assert.equal(entry.ok, true);
+      assert.ok(Number.isFinite(entry.estimatedUsd) && entry.estimatedUsd > 0);
+    }
+  }
+});
+
+test("an empty history's single accepted attempt produces exactly one story-typed spend entry and zero uniqueness entries", async () => {
+  const director = async (): Promise<StoryDirectorResult> => successResult(fixtureOutput());
+  const historyReader = async () => [];
+
+  const result = await runUniqueStoryDirector(BASE_INPUT, { director, historyReader });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.spend.length, 1);
+    assert.equal(result.spend[0].generationType, "STORY");
+  }
+});
+
+test("compareViaLlm pushes one uniqueness-typed spend entry when a comparison is dispatched", async () => {
+  const ledgerPath = tmpLedgerPath();
+  const spend: PendingGenerationRecord[] = [];
+
+  const collided = await compareViaLlm(MIDDLE_BAND_CANDIDATE, MIDDLE_BAND_PAST, {
+    ledgerPath,
+    spend,
+    comparator: async () => fakeComparisonResult({ protagonistMatch: true, obstacleMatch: true, endingMatch: true }),
+  });
+
+  assert.equal(collided, true);
+  assert.equal(spend.length, 1);
+  assert.equal(spend[0].generationType, "UNIQUENESS_CHECK");
+  assert.equal(spend[0].ok, true);
+  assert.ok(Number.isFinite(spend[0].estimatedUsd) && spend[0].estimatedUsd > 0);
+});
+
+test("compareViaLlm still pushes a uniqueness-typed spend entry (ok: false) for a blocked comparison", async () => {
+  const ledgerPath = tmpLedgerPath();
+  const spend: PendingGenerationRecord[] = [];
+
+  await compareViaLlm(MIDDLE_BAND_CANDIDATE, MIDDLE_BAND_PAST, {
+    ledgerPath,
+    spend,
+    comparator: async () =>
+      fakeComparisonResult({
+        blocked: true,
+        block: { stage: "prompt", reason: "SAFETY" },
+        protagonistMatch: undefined,
+        obstacleMatch: undefined,
+        endingMatch: undefined,
+      }),
+  });
+
+  assert.equal(spend.length, 1);
+  assert.equal(spend[0].ok, false);
+});
+
+test("a ceiling-refused comparison pushes nothing to spend -- nothing was dispatched", async () => {
+  const ledgerPath = tmpLedgerPath();
+  const seeded = {
+    ceilingUsd: 3.0,
+    entries: [
+      { call: "seed", model: "seed-model", estimatedUsd: 3.0, usageMetadata: null, billed: true, at: new Date().toISOString() },
+    ],
+  };
+  const { writeFileSync } = await import("node:fs");
+  writeFileSync(ledgerPath, JSON.stringify(seeded));
+
+  const spend: PendingGenerationRecord[] = [];
+  const result = await compareViaLlm(MIDDLE_BAND_CANDIDATE, MIDDLE_BAND_PAST, {
+    ledgerPath,
+    spend,
+    comparator: async () => fakeComparisonResult(),
+  });
+
+  assert.equal(result, false);
+  assert.equal(spend.length, 0);
 });
