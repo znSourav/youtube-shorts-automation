@@ -27,6 +27,10 @@ const STORAGE_ROOT = "storage/stories";
 // separator and a parent-directory ("..") segment in one check.
 const STORY_ID_PATTERN = /^[a-z0-9-]+$/;
 
+// Alphanumeric only. Rules out a path separator or a parent-directory
+// segment surviving the leading-dot strip below.
+const EXTENSION_PATTERN = /^[a-z0-9]+$/i;
+
 function assertValidStoryId(storyId: string): void {
   if (typeof storyId !== "string" || !STORY_ID_PATTERN.test(storyId)) {
     throw new Error(
@@ -57,6 +61,9 @@ export function sceneDir(storyId: string, sceneNumber: number): string {
 
 export function sceneImagePath(storyId: string, sceneNumber: number, extension: string): string {
   const ext = extension.replace(/^\./, "");
+  if (!EXTENSION_PATTERN.test(ext)) {
+    throw new Error(`Invalid file extension "${extension}": must be alphanumeric only.`);
+  }
   return `${sceneDir(storyId, sceneNumber)}/image.${ext}`;
 }
 
