@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { STYLE_PRESETS, MOOD_OPTIONS } from "@/core/story/styles";
 import type { StoryDirectorOutput } from "@/core/story/schema";
 import CreateStoryForm, { type CreateStoryFormValues } from "@/components/story/CreateStoryForm";
@@ -10,6 +10,7 @@ import type { SceneVideoState } from "@/components/scenes/SceneVideo";
 import { createStoryAction } from "./actions/create-story.ts";
 import { generateSceneImagesAction, type SceneImageStatus } from "./actions/generate-images.ts";
 import { generateSceneVideoAction, type GenerateSceneVideoResult } from "./actions/generate-video.ts";
+import { loadStoryAction } from "./actions/load-story.ts";
 
 type Screen = "create" | "review-story" | "review-images";
 
@@ -18,6 +19,13 @@ type Screen = "create" | "review-story" | "review-images";
 // primary key) and in this page's own local state, never shown to the
 // wife. The id itself is generated server-side (Phase 3) and returned from
 // createStoryAction -- the browser no longer invents one.
+
+// VIDEO-03 (soft, browser-resume half): the ONLY client-side pointer back to
+// a story -- a bare id, never a path, never story content. Cleared at the
+// start of every new creation attempt so a stale id can never outlive its
+// story (a failed creation, or a fresh one, must not resurrect a PREVIOUS
+// story's restore on the next mount).
+const LAST_STORY_ID_KEY = "yt-shorts-studio:last-story-id";
 
 export default function Home() {
   const [screen, setScreen] = useState<Screen>("create");
@@ -42,10 +50,75 @@ export default function Home() {
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoResult, setVideoResult] = useState<GenerateSceneVideoResult | null>(null);
 
+  // VIDEO-03 (soft): true only while the mount-time restore attempt is in
+  // flight. The create screen renders nothing while this is true, so a
+  // returning wife never sees a flash of the create form before her last
+  // story reappears.
+  const [restoring, setRestoring] = useState(true);
+
+  useEffect(() => {
+    const storedId = window.localStorage.getItem(LAST_STORY_ID_KEY);
+    if (!storedId) {
+      setRestoring(false);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      const result = await loadStoryAction(storedId);
+      if (cancelled) return;
+
+      if (!result.ok) {
+        // A stale id pointing at a deleted/renamed story -- fall back
+        // silently to the ordinary create screen, never an error.
+        window.localStorage.removeItem(LAST_STORY_ID_KEY);
+        setRestoring(false);
+        return;
+      }
+
+      setStory(result.data);
+      setStoryId(result.storyId);
+      setUniquenessWarning(null);
+      setSceneStatuses(
+        result.scenes.map((scene) => ({
+          sceneNumber: scene.sceneNumber,
+          // Deliberately null -- loadStoryAction never returns a filesystem
+          // path (T-03-15). A scene restored this way can be viewed but its
+          // video cannot be regenerated until a fresh full generation runs.
+          imagePath: null,
+          imageDataUrl: scene.imageDataUrl,
+          ok: scene.imageStatus === "READY",
+          message: scene.imageStatus === "READY" ? "Image generated." : "This scene's image isn't available.",
+        })),
+      );
+      const restoredVideoScene = result.scenes.find((scene) => scene.videoStatus !== "WAITING");
+      if (restoredVideoScene) {
+        setVideoResult({
+          ok: restoredVideoScene.videoStatus === "READY",
+          videoPath: null,
+          videoDataUrl: restoredVideoScene.videoDataUrl,
+          message:
+            restoredVideoScene.videoStatus === "READY" ? "Video generated." : "This scene's video isn't available.",
+          durationSeconds: 0,
+        });
+      }
+      setScreen("review-images");
+      setRestoring(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   async function handleCreateStory(values: CreateStoryFormValues) {
     setCreateLoading(true);
     setCreateError(null);
     setUniquenessWarning(null);
+    // A fresh creation attempt starts with no stale pointer -- if this
+    // attempt fails, a restore on the next mount must not resurrect a
+    // PREVIOUS story's id.
+    window.localStorage.removeItem(LAST_STORY_ID_KEY);
 
     const result = await createStoryAction(values);
 
@@ -60,6 +133,7 @@ export default function Home() {
     setSceneStatuses([]);
     setImagesError(null);
     setScreen("review-story");
+    window.localStorage.setItem(LAST_STORY_ID_KEY, result.storyId);
   }
 
   async function handleGenerateImages() {
@@ -108,17 +182,27 @@ export default function Home() {
     }
   }
 
+  // Checked against imageDataUrl (what actually renders) rather than
+  // imagePath (internal bookkeeping only -- generate-images.ts's own
+  // convention) so a restored story's readiness reads correctly: restored
+  // scenes carry a dataUrl but deliberately no path (T-03-15).
   const allImagesReady =
     story !== null &&
     sceneStatuses.length === story.scenes.length &&
-    sceneStatuses.every((status) => status.ok && Boolean(status.imagePath));
-  const readyCount = sceneStatuses.filter((status) => status.ok && Boolean(status.imagePath)).length;
+    sceneStatuses.every((status) => status.ok && Boolean(status.imageDataUrl));
+  const readyCount = sceneStatuses.filter((status) => status.ok && Boolean(status.imageDataUrl)).length;
   const videoSceneNumber = story?.scenes[0]?.scene_number ?? null;
+  const videoTargetStatus = sceneStatuses.find((status) => status.sceneNumber === videoSceneNumber);
+  // A restored scene's imagePath is deliberately null (T-03-15) -- video
+  // generation for it can only run again once a fresh, live generation in
+  // this session produces a real path. allImagesReady alone would otherwise
+  // enable a button that silently does nothing after a restore.
+  const canGenerateVideo = allImagesReady && Boolean(videoTargetStatus?.imagePath);
 
   return (
     <div className="flex flex-col flex-1 items-center bg-zinc-50 font-sans dark:bg-black">
       <main className="flex flex-1 w-full max-w-2xl flex-col gap-8 px-6 py-16">
-        {screen === "create" && (
+        {!restoring && screen === "create" && (
           <CreateStoryForm
             stylePresets={STYLE_PRESETS}
             moodOptions={MOOD_OPTIONS}
@@ -145,7 +229,8 @@ export default function Home() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {story.scenes.map((scene) => {
                 const status = sceneStatuses.find((s) => s.sceneNumber === scene.scene_number);
-                const state: SceneCardState = !status ? "waiting" : status.ok && status.imagePath ? "ready" : "failed";
+                const state: SceneCardState =
+                  !status ? "waiting" : status.ok && status.imageDataUrl ? "ready" : "failed";
 
                 const isVideoTarget = scene.scene_number === videoSceneNumber;
                 let videoState: SceneVideoState = "waiting";
@@ -166,7 +251,7 @@ export default function Home() {
                     videoState={videoState}
                     videoSrc={isVideoTarget ? videoResult?.videoDataUrl ?? null : null}
                     videoMessage={isVideoTarget ? videoResult?.message ?? null : null}
-                    onRetryVideo={isVideoTarget ? handleGenerateVideo : undefined}
+                    onRetryVideo={isVideoTarget && Boolean(status?.imagePath) ? handleGenerateVideo : undefined}
                     videoDisabled={videoLoading}
                     videoWaitingHint={
                       isVideoTarget
@@ -181,7 +266,7 @@ export default function Home() {
             <div className="flex flex-col gap-2">
               <button
                 type="button"
-                disabled={!allImagesReady || videoLoading}
+                disabled={!canGenerateVideo || videoLoading}
                 onClick={handleGenerateVideo}
                 className="rounded-full bg-foreground px-5 py-3 font-medium text-background transition-colors hover:bg-[#383838] disabled:opacity-50 dark:hover:bg-[#ccc]"
               >
@@ -190,9 +275,11 @@ export default function Home() {
                   : `Generate Video for Scene ${videoSceneNumber ?? 1} (one scene only, for now)`}
               </button>
               <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                {allImagesReady
-                  ? "This version animates one scene at a time so you can confirm the result before generating a full episode. Generating every scene is coming in a future update."
-                  : `Generate Video will unlock once every scene image is ready (${readyCount} of ${story.scenes.length} ready now).`}
+                {allImagesReady && !canGenerateVideo
+                  ? "This story was restored from an earlier session, so video generation for it isn't available here -- start a new story to try video generation again."
+                  : allImagesReady
+                    ? "This version animates one scene at a time so you can confirm the result before generating a full episode. Generating every scene is coming in a future update."
+                    : `Generate Video will unlock once every scene image is ready (${readyCount} of ${story.scenes.length} ready now).`}
               </p>
             </div>
           </div>
