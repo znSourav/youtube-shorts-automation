@@ -167,7 +167,14 @@ export async function generateSceneVideoAction(
     model: VIDEO_MODEL_ID,
     estimatedUsd,
     usageMetadata: result.usageMetadata,
-    billed: Boolean(result.filePath),
+    // Mirror the story/image convention (director.ts, generate-images.ts):
+    // any dispatched call counts, including a block or a client-side polling
+    // timeout, since by the time generateVideo() has returned here (rather
+    // than throwing) the initial ai.models.generateVideos() dispatch already
+    // succeeded -- timedOut and blocked are both post-dispatch outcomes that
+    // may have already cost money on Veo's side regardless of what this
+    // process could observe.
+    billed: true,
     at: new Date().toISOString(),
   });
 
