@@ -4,7 +4,10 @@ import { dirname } from "node:path";
 // D-05: dev/testing ceiling for Phases 1-4 combined, carved out of the real
 // $15 total the requester set (not additional to it), tracked in one file
 // across all four phases rather than reset per phase.
-export const DEV_CEILING_USD = 3.0;
+// Raised from $3.00 to $3.25 on 2026-09-14 by the requester's explicit,
+// pre-authorized instruction (not a bypass of a refusal) to cover Phase 3's
+// two remaining live-browser UAT checks (~$0.05 + up to ~$0.15).
+export const DEV_CEILING_USD = 3.25;
 
 // D-06: segregated throwaway path, deliberately distinct from the
 // storage/stories/<id>/ structure real episodes use from Phase 2 onward.
