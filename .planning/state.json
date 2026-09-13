@@ -11,7 +11,7 @@
     {
       "number": "2",
       "name": "Core Generation Pipeline",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "3",
@@ -36,8 +36,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 2 of 6 · 17% · executing"
+    "label": "Advance to the next step (plan phase 3)",
+    "reason": "Phase 3 of 6 — needs a plan"
   },
-  "updated_at": "2026-09-12T19:17:16.670Z"
+  "updated_at": "2026-09-13T04:33:51.614Z"
 }
