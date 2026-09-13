@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 03
 current_phase_name: Persistence & Structural Uniqueness
 status: executing
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-09-13T11:06:01.163Z"
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-09-13T11:31:34.634Z"
 last_activity: 2026-09-13
 last_activity_desc: Phase 03 execution started
-state_head: 34db202f487437e35756e54ed231059e720a1906
+state_head: 1a07bc9667028e1b0c6ebbc23a07e57b6bc6f928
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 12
-  completed_plans: 10
+  completed_plans: 11
   percent: 33
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-13)
 ## Current Position
 
 Phase: 03 (Persistence & Structural Uniqueness) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-09-13 — Phase 03 execution started
 
@@ -71,6 +71,7 @@ Progress: [███░░░░░░░] 33%
 | Phase quick-260913-4rr P01 | ~35min | 2 tasks | 4 files |
 | Phase 03 P01 | 55min | 3 tasks | 20 files |
 | Phase 03 P02 | 45min | 3 tasks | 14 files |
+| Phase 03 P03 | 23min | 2 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -107,6 +108,8 @@ Recent decisions affecting current work:
 - [Phase 03]: [Phase 3, 03-02] Kept RESEARCH.md's 0.75/0.40 similarity thresholds unchanged -- the two A1 fixture pairs validated them exactly as designed (reskin pair scored 0.778-0.846 on all fields, shared-surface pair scored 0.077-0.273), no move justified
 - [Phase 03]: [Phase 3, 03-02] COMPARISON_MODEL=gemini-3.8-flash (the existing GA-tier fallback id) per Assumption A2 -- a cost decision whose failure mode is judgement quality, not spend
 - [Phase 03]: [Phase 3, 03-02] npm run lint fails with a pre-existing typescript-eslint/TS-7.0.2 incompatibility, confirmed via git stash to predate this plan's changes; npm run build and npm run typecheck both pass clean. Logged to WINDOWS.md
+- [Phase 03]: [Phase 3, 03-03] GenerationRecord dual-write is best-effort by contract (try/catch, log, never throw) -- a database failure can only cost a durability record, never an already-paid-for image or video
+- [Phase 03]: [Phase 3, 03-03] VIDEO-03's browser-resume half SHIPPED (localStorage + loadStoryAction), verified directly against prisma/dev.db; the one accepted gap is that a restored scene's video cannot be regenerated without a fresh full generation, since T-03-15 forbids a filesystem path ever reaching the browser
 
 ### Pending Todos
 
@@ -137,6 +140,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-13T11:06:00.968Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-09-13T11:31:34.438Z
+Stopped at: Completed 03-03-PLAN.md
 Resume file: None

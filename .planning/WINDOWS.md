@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 5
+open_count: 7
 waived_count: 0
 fixed_count: 0
-total_count: 5
-last_updated: 2026-09-13T11:05:25.660Z
+total_count: 7
+last_updated: 2026-09-13T11:29:45.578Z
 ---
 
 # Broken Windows Ledger
@@ -20,6 +20,8 @@ last_updated: 2026-09-13T11:05:25.660Z
 | 3 | 2 | unrun-verify | package.json |  | npm run lint cannot run: typescript-eslint 8.70.0 (latest published) rejects TypeScript 7.0.2, no compatible upstream release exists yet -- confirmed pre-existing before this plan's changes | open |  | 2026-09-12T18:36:48.345Z |  |
 | 4 | 2 | unrun-verify | src/app/page.tsx |  | Full interactive three-screen human-check (create -> story review -> image review, Generate Videos gating, no leaked prompts/paths, character consistency) deferred to end-of-phase UAT -- no browser-driving tool available in this executor session | open |  | 2026-09-12T18:36:48.757Z |  |
 | 5 | 03 | lint-warning | package.json |  | npm run lint fails: typescript-eslint does not support TS 7.0 (project pins typescript@7.0.2) -- pre-existing environment issue, confirmed via git stash to predate 03-02's changes | open |  | 2026-09-13T11:05:25.660Z |  |
+| 6 | 03 | deviation | src/core/uniqueness/check.ts |  | A story-director attempt that fails (blocked/parse_failed/validation_failed) gets a durable spend record with model='unknown (...)' rather than the real model id, since StoryDirectorFailure carries no modelUsed and extending director.ts was out of 03-03's scope; estimatedUsd still mirrors runStoryDirector's real conservative estimate. | open |  | 2026-09-13T11:29:39.717Z |  |
+| 7 | 03 | deviation | src/app/page.tsx |  | After a browser restore (VIDEO-03 soft), the per-scene video Generate/Retry action is intentionally disabled -- a restored scene carries no filesystem path (T-03-15), which generateSceneVideoAction requires to re-read the source image. A fresh full generation is needed to regenerate that scene's video. | open |  | 2026-09-13T11:29:45.578Z |  |
 
 ````json
 [
@@ -81,6 +83,30 @@ last_updated: 2026-09-13T11:05:25.660Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-13T11:05:25.660Z",
+    "resolved_at": null
+  },
+  {
+    "id": 6,
+    "kind": "deviation",
+    "phase": "03",
+    "file": "src/core/uniqueness/check.ts",
+    "line": null,
+    "description": "A story-director attempt that fails (blocked/parse_failed/validation_failed) gets a durable spend record with model='unknown (...)' rather than the real model id, since StoryDirectorFailure carries no modelUsed and extending director.ts was out of 03-03's scope; estimatedUsd still mirrors runStoryDirector's real conservative estimate.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-13T11:29:39.717Z",
+    "resolved_at": null
+  },
+  {
+    "id": 7,
+    "kind": "deviation",
+    "phase": "03",
+    "file": "src/app/page.tsx",
+    "line": null,
+    "description": "After a browser restore (VIDEO-03 soft), the per-scene video Generate/Retry action is intentionally disabled -- a restored scene carries no filesystem path (T-03-15), which generateSceneVideoAction requires to re-read the source image. A fresh full generation is needed to regenerate that scene's video.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-13T11:29:45.578Z",
     "resolved_at": null
   }
 ]

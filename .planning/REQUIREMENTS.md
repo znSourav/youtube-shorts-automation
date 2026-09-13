@@ -35,9 +35,9 @@ Requirements for the 24-hour MVP. Each maps to a roadmap phase.
 
 ### Image
 
-- [ ] **IMAGE-01**: Wife can trigger scene image generation for an approved story and see every scene's image once ready, saved locally with paths recorded in the database
+- [x] **IMAGE-01**: Wife can trigger scene image generation for an approved story and see every scene's image once ready, saved locally with paths recorded in the database
 - [ ] **IMAGE-02**: Wife can regenerate a single scene's image without affecting any other scene's image, video, or status
-- [ ] **IMAGE-03**: Every image generation call is recorded with its estimated (and actual, where available) cost
+- [x] **IMAGE-03**: Every image generation call is recorded with its estimated (and actual, where available) cost
 
 ### Approval
 
@@ -47,7 +47,7 @@ Requirements for the 24-hour MVP. Each maps to a roadmap phase.
 
 - [x] **VIDEO-01**: Wife can animate a single approved scene image into a 9:16, 720p video clip via Veo 3.1 Lite and confirm the result end-to-end before committing to a full episode
 - [ ] **VIDEO-02**: Wife can generate videos for every approved scene in an episode, with each scene tracked as an independent job showing its own status
-- [ ] **VIDEO-03**: Closing and reopening the browser, or restarting the app, does not lose track of in-progress or completed video jobs
+- [x] **VIDEO-03**: Closing and reopening the browser, or restarting the app, does not lose track of in-progress or completed video jobs
 - [ ] **VIDEO-04**: Wife can retry a single failed scene's video without regenerating any other scene, and the retry counts toward that scene's retry limit
 
 ### Budget
@@ -68,7 +68,7 @@ Requirements for the 24-hour MVP. Each maps to a roadmap phase.
 
 ### Persistence
 
-- [ ] **PERSIST-01**: Every story, scene, and generation record persists in local SQLite and is still present, with the uniqueness system still able to use it, after the app is restarted
+- [x] **PERSIST-01**: Every story, scene, and generation record persists in local SQLite and is still present, with the uniqueness system still able to use it, after the app is restarted
 
 ### Library
 
@@ -129,13 +129,13 @@ Explicitly excluded from this project, not just this milestone. Documented to pr
 | UNIQUE-03 | Phase 3 | Pending |
 | SCENE-01 | Phase 2 | Complete |
 | SCENE-02 | Phase 2 | Complete |
-| IMAGE-01 | Phase 3 | Pending |
+| IMAGE-01 | Phase 3 | Complete |
 | IMAGE-02 | Phase 4 | Pending |
-| IMAGE-03 | Phase 3 | Pending |
+| IMAGE-03 | Phase 3 | Complete |
 | APPROVAL-01 | Phase 4 | Pending |
 | VIDEO-01 | Phase 2 | Complete |
 | VIDEO-02 | Phase 4 | Pending |
-| VIDEO-03 | Phase 3 | Pending (soft — documented limitation acceptable if time-constrained) |
+| VIDEO-03 | Phase 3 | Complete |
 | VIDEO-04 | Phase 4 | Pending |
 | BUDGET-01 | Phase 5 | Pending |
 | BUDGET-02 | Phase 5 | Pending |
@@ -144,7 +144,7 @@ Explicitly excluded from this project, not just this milestone. Documented to pr
 | BUDGET-05 | Phase 5 | Pending |
 | RELIABILITY-01 | Phase 6 | Pending |
 | SECURITY-01 | Phase 6 | Pending |
-| PERSIST-01 | Phase 3 | Pending |
+| PERSIST-01 | Phase 3 | Complete |
 | LIBRARY-01 | Phase 4 | Pending (soft — documented limitation acceptable if time-constrained) |
 | OUTPUT-01 | Phase 4 | Pending |
 | OUTPUT-02 | Phase 6 | Pending |
