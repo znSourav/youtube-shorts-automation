@@ -1,18 +1,18 @@
 ---
 gsd_state_version: 1.0
-current_phase: 4
+current_phase: 04
 current_phase_name: Wife-Facing Review & Approval Flow
 status: executing
-stopped_at: Phase 4 UI-SPEC approved
-last_updated: "2026-09-14T15:34:31.260Z"
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-09-14T15:56:45.077Z"
 last_activity: 2026-09-14
-last_activity_desc: Phase 3 complete, transitioned to Phase 4
-state_head: 36d3bb85b60911a28078f36cce48b0cad485e1ad
+last_activity_desc: Phase 04 execution started
+state_head: aa85904c7984d89a20e6efe7e81d699a4da2d1e8
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 16
-  completed_plans: 12
+  completed_plans: 13
   percent: 50
 ---
 
@@ -27,12 +27,12 @@ See: .planning/PROJECT.md (updated 2026-09-14)
 
 ## Current Position
 
-Phase: 4 (Wife-Facing Review & Approval Flow) — READY TO EXECUTE
-Plan: Not started
+Phase: 04 (Wife-Facing Review & Approval Flow) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-09-14 — Phase 3 complete, transitioned to Phase 4
+Last activity: 2026-09-14 — Phase 04 execution started
 
-Progress: [███░░░░░░░] 33%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
@@ -74,6 +74,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 03 P02 | 45min | 3 tasks | 14 files |
 | Phase 03 P03 | 23min | 2 tasks | 13 files |
 | Phase 03 P04 | 35min | 2 tasks | 5 files |
+| Phase 04 P01 | 19min | 3 tasks | 20 files |
 
 ## Accumulated Context
 
@@ -114,6 +115,10 @@ Recent decisions affecting current work:
 - [Phase 03]: [Phase 3, 03-03] VIDEO-03's browser-resume half SHIPPED (localStorage + loadStoryAction), verified directly against prisma/dev.db; the one accepted gap is that a restored scene's video cannot be regenerated without a fresh full generation, since T-03-15 forbids a filesystem path ever reaching the browser
 - [Phase 03]: [Phase 3, 03-04] Real proof run confirmed 03-RESEARCH.md's zero-extra-cost fingerprint bet against real data: all three structural fingerprint fields came back in English and fully abstracted on the first attempt (postman/undelivered-letter idea), with no non-English or proper-noun leakage. Ledger now $2.9870 of $3.00 ($0.0130 headroom remaining).
 - [Phase 03]: [Phase 3, 03-04] PERSIST-01/UNIQUE-01/UNIQUE-03 closed with real-data evidence: a separate node process read the real story back intact; uniqueness-probe.ts's new --prove-collision mode mechanically derived a near-duplicate (correctly rejected) and a shared-surface-words candidate (correctly passed) from the real accepted history at $0.00 additional cost.
+- [Phase 04]: [Phase 04, 04-01] Migration directory generated as 20260914153829_phase4_approval_and_attempts (real timestamp), not the plan's placeholder
+- [Phase 04]: [Phase 04, 04-01] Migration used a full Scene table RedefineTables (Prisma batches multiple new columns into a rebuild) instead of plain ALTER TABLE ADD COLUMN statements -- additive, no data loss, verified against real prisma/dev.db rows
+- [Phase 04]: [Phase 04, 04-01] safeMotionPrompt's camera/environment fallback narrowing accepted as documented, not a regression: Scene has no camera/environment columns so the server-resolved rewrite path always uses the existing fallback phrasing
+- [Phase 04]: [Phase 04, 04-01] evaluateImageRegeneration deliberately has no approval check (D-02 scopes approval to video only); alreadyApproved returned so plan 04-02 can surface a heads-up rather than silently voiding approval
 
 ### Pending Todos
 
@@ -144,6 +149,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-13T17:28:08.615Z
-Stopped at: Phase 4 UI-SPEC approved
-Resume file: .planning/phases/04-wife-facing-review-approval-flow/04-UI-SPEC.md
+Last session: 2026-09-14T15:56:44.795Z
+Stopped at: Completed 04-01-PLAN.md
+Resume file: None

@@ -135,12 +135,12 @@ Plans:
   5. (Soft) She can see a list of all past stories with title, date, status, and scene count, and open any one to view its details, with no duplicate entries created by normal use; if this proves out of reach in the available time, the limitation is documented rather than silently broken.
   6. She can complete the entire create → review → approve → generate → output flow using only plain-language buttons and status text, and any error explains what to do next rather than showing developer/API terminology.
 
-**Plans:** 4 plans
+**Plans:** 1/4 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 04-01-PLAN.md — Server-side unbypassable approval gate + per-scene retry caps inside the single video-dispatch function
+- [x] 04-01-PLAN.md — Server-side unbypassable approval gate + per-scene retry caps inside the single video-dispatch function
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -197,6 +197,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Provider Smoke Test | 4/4 | Complete    | 2026-09-12 |
 | 2. Core Generation Pipeline | 4/4 | Complete    | 2026-09-13 |
 | 3. Persistence & Structural Uniqueness | 4/4 | Complete    | 2026-09-14 |
-| 4. Wife-Facing Review & Approval Flow | 0/TBD | Not started | - |
+| 4. Wife-Facing Review & Approval Flow | 1/4 | In Progress|  |
 | 5. Budget & Retry Safeguards | 0/TBD | Not started | - |
 | 6. Reliability, Secrets Hygiene & Output Correctness | 0/TBD | Not started | - |
