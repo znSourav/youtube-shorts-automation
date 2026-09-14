@@ -40,10 +40,10 @@ function makeEntry(estimatedUsd: number): LedgerEntry {
   };
 }
 
-test("loadLedger returns { ceilingUsd: 3, entries: [] } when the file does not exist", () => {
+test("loadLedger returns { ceilingUsd: DEV_CEILING_USD, entries: [] } when the file does not exist", () => {
   const path = tmpLedgerPath();
   const ledger = loadLedger(path);
-  assert.deepEqual(ledger, { ceilingUsd: 3, entries: [] });
+  assert.deepEqual(ledger, { ceilingUsd: DEV_CEILING_USD, entries: [] });
 });
 
 test("loadLedger throws on a present-but-unparseable file rather than reading it as $0 spent", () => {
@@ -70,17 +70,23 @@ test("checkCeiling is inclusive at the exact boundary (2.60 + 0.40 = 3.00)", () 
   assert.doesNotThrow(() => checkCeiling(0.4, path));
 });
 
-test("checkCeiling throws CeilingExceededError with all three figures when it would cross $3.00", () => {
+test("checkCeiling throws CeilingExceededError with all three figures when it would cross the ceiling", () => {
   const path = tmpLedgerPath();
-  seedLedger(path, [makeEntry(2.8)]);
+  // Deliberately relative to DEV_CEILING_USD (not a hardcoded $3.00) so this
+  // stays correct across any future explicit ceiling change (Phase 3
+  // precedent: raised 3.00 -> 3.25 by requester approval) rather than
+  // silently drifting stale again.
+  const spent = DEV_CEILING_USD - 0.05;
+  const estimated = 0.4;
+  seedLedger(path, [makeEntry(spent)]);
   assert.throws(
-    () => checkCeiling(0.4, path),
+    () => checkCeiling(estimated, path),
     (err: unknown) => {
       assert.ok(err instanceof CeilingExceededError);
       const message = (err as Error).message;
-      assert.ok(message.includes("3"), `message should mention the ceiling 3.00: ${message}`);
-      assert.ok(message.includes("2.8"), `message should mention 2.80 already spent: ${message}`);
-      assert.ok(message.includes("0.4"), `message should mention the 0.40 refused: ${message}`);
+      assert.ok(message.includes(DEV_CEILING_USD.toFixed(2)), `message should mention the ceiling: ${message}`);
+      assert.ok(message.includes(spent.toFixed(2)), `message should mention what's already spent: ${message}`);
+      assert.ok(message.includes(estimated.toFixed(2)), `message should mention the amount refused: ${message}`);
       return true;
     },
   );

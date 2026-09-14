@@ -13,6 +13,7 @@ import { maxSceneRetryAttempts } from "../../core/retry/caps.ts";
 import {
   recordGeneration,
   updateSceneVideo,
+  incrementVideoAttempt,
   GenerationType,
   SceneAssetStatus,
 } from "../../core/persistence/generation-repository.ts";
@@ -171,6 +172,13 @@ export async function generateSceneVideoAction(
     await updateSceneVideo(storyId, sceneNumber, null, SceneAssetStatus.FAILED);
     return { ok: false, videoPath: null, videoDataUrl: null, message, durationSeconds };
   }
+
+  // D-03: the increment sits at the money-consuming boundary on purpose. A
+  // scene refused by the ceiling above has not cost anything and must not
+  // consume one of its own limited attempts, but a scene that reached
+  // dispatch must consume one even if the process dies mid-call -- that
+  // asymmetry is exactly what D-03's anti-click-loop guard is for.
+  await incrementVideoAttempt(storyId, sceneNumber);
 
   let imageBytes: Buffer;
   let mimeType: string;

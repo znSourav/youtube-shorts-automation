@@ -1,49 +1,27 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readdirSync, readFileSync, existsSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import Database from "better-sqlite3";
 
 import { createPrismaClient } from "../../lib/db.ts";
-import { saveStoryWithScenes, findStoryWithScenes, UniquenessStatus } from "./story-repository.ts";
+import { saveStoryWithScenes, findStoryWithScenes, markImagesApproved, UniquenessStatus } from "./story-repository.ts";
 import {
   recordGeneration,
   recordGenerations,
   updateSceneImage,
   updateSceneVideo,
+  incrementImageAttempt,
+  incrementVideoAttempt,
   GenerationType,
   SceneAssetStatus,
   type PendingGenerationRecord,
 } from "./generation-repository.ts";
 import type { StoryDirectorOutput } from "../story/schema.ts";
+import { tmpDatabaseUrl } from "../../lib/test-db.ts";
 
-// Duplicated from src/lib/db.test.ts (plan 03-01) rather than extracted into
-// a shared module -- db.test.ts is outside this plan's declared
-// files_modified list, and this project has no existing shared-test-helper
-// convention to extend into. See 03-03-SUMMARY.md for the tradeoff.
-function findMigrationSql(): string {
-  const migrationsDir = join(process.cwd(), "prisma", "migrations");
-  const entries = readdirSync(migrationsDir, { withFileTypes: true });
-  const migrationDir = entries.find((entry) => entry.isDirectory());
-  if (!migrationDir) {
-    throw new Error(`No migration directory found under ${migrationsDir}`);
-  }
-  const sqlPath = join(migrationsDir, migrationDir.name, "migration.sql");
-  if (!existsSync(sqlPath)) {
-    throw new Error(`No migration.sql found at ${sqlPath}`);
-  }
-  return readFileSync(sqlPath, "utf8");
-}
-
-function tmpDatabaseUrl(): string {
-  const dir = mkdtempSync(join(tmpdir(), "prisma-test-"));
-  const dbPath = join(dir, "test.db");
-  const db = new Database(dbPath);
-  db.exec(findMigrationSql());
-  db.close();
-  return `file:${dbPath}`;
-}
+// tmpDatabaseUrl() (src/lib/test-db.ts, plan 04-01 Task 2) supersedes this
+// file's former private findMigrationSql()/tmpDatabaseUrl() duplicate of
+// db.test.ts's own helper (03-03-SUMMARY.md's recorded tradeoff) -- it
+// applies EVERY migration directory, not just the first, which matters now
+// that migration count is no longer one.
 
 function fixtureOutput(): StoryDirectorOutput {
   return {
@@ -279,6 +257,89 @@ test("updateSceneVideo followed by a fresh client read returns the video status 
     const scene1 = story!.scenes.find((s) => s.sceneNumber === 1)!;
     assert.equal(scene1.videoStatus, "READY");
     assert.equal(scene1.videoPath, "storage/stories/story-genrepo-video/scenes/01/video.mp4");
+  } finally {
+    await reader.$disconnect();
+  }
+});
+
+test("incrementVideoAttempt called twice against scene 1 leaves scene 1 at videoAttempts=2 while other scenes/imageAttempts stay untouched", async () => {
+  const url = tmpDatabaseUrl();
+  const storyId = "story-genrepo-video-attempts";
+  await seedStory(storyId, url);
+
+  const client = createPrismaClient(url);
+  try {
+    await incrementVideoAttempt(storyId, 1, client);
+    await incrementVideoAttempt(storyId, 1, client);
+
+    const story = await findStoryWithScenes(storyId, client);
+    const scene1 = story!.scenes.find((s) => s.sceneNumber === 1)!;
+    assert.equal(scene1.videoAttempts, 2);
+    assert.equal(scene1.imageAttempts, 0);
+
+    const scene2 = story!.scenes.find((s) => s.sceneNumber === 2)!;
+    const scene3 = story!.scenes.find((s) => s.sceneNumber === 3)!;
+    assert.equal(scene2.videoAttempts, 0);
+    assert.equal(scene3.videoAttempts, 0);
+    for (const scene of story!.scenes) {
+      assert.equal(scene.imageAttempts, 0);
+    }
+  } finally {
+    await client.$disconnect();
+  }
+});
+
+test("incrementImageAttempt against scene 2 leaves only scene 2's imageAttempts at 1 and touches no imagePath/imageStatus/videoPath/videoStatus", async () => {
+  const url = tmpDatabaseUrl();
+  const storyId = "story-genrepo-image-attempts";
+  await seedStory(storyId, url);
+
+  const client = createPrismaClient(url);
+  try {
+    await incrementImageAttempt(storyId, 2, client);
+
+    const story = await findStoryWithScenes(storyId, client);
+    const scene2 = story!.scenes.find((s) => s.sceneNumber === 2)!;
+    assert.equal(scene2.imageAttempts, 1);
+    assert.equal(scene2.imagePath, null);
+    assert.equal(scene2.imageStatus, "WAITING");
+    assert.equal(scene2.videoPath, null);
+    assert.equal(scene2.videoStatus, "WAITING");
+
+    const scene1 = story!.scenes.find((s) => s.sceneNumber === 1)!;
+    const scene3 = story!.scenes.find((s) => s.sceneNumber === 3)!;
+    assert.equal(scene1.imageAttempts, 0);
+    assert.equal(scene3.imageAttempts, 0);
+  } finally {
+    await client.$disconnect();
+  }
+});
+
+test("markImagesApproved sets a non-null imagesApprovedAt readable by a second independently-constructed client; a freshly seeded story reads null (regression guard for the first-migration-only bug)", async () => {
+  const url = tmpDatabaseUrl();
+  const storyId = "story-genrepo-approved";
+  await seedStory(storyId, url);
+
+  const preApproval = createPrismaClient(url);
+  try {
+    const story = await findStoryWithScenes(storyId, preApproval);
+    assert.equal(story!.imagesApprovedAt, null);
+  } finally {
+    await preApproval.$disconnect();
+  }
+
+  const writer = createPrismaClient(url);
+  try {
+    await markImagesApproved(storyId, writer);
+  } finally {
+    await writer.$disconnect();
+  }
+
+  const reader = createPrismaClient(url);
+  try {
+    const story = await findStoryWithScenes(storyId, reader);
+    assert.notEqual(story!.imagesApprovedAt, null);
+    assert.ok(story!.imagesApprovedAt instanceof Date);
   } finally {
     await reader.$disconnect();
   }

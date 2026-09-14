@@ -164,3 +164,39 @@ export async function updateSceneVideo(
     console.error(`generation-repository: updateSceneVideo failed for story ${storyId} scene ${sceneNumber}`, err);
   }
 }
+
+/**
+ * D-03: increments a scene's image/video attempt counter by 1. Best-effort
+ * like every other write in this module -- deliberately: losing a counter
+ * increment costs one extra permitted retry, while throwing here would cost
+ * an already-paid-for generation.
+ */
+export async function incrementImageAttempt(
+  storyId: string,
+  sceneNumber: number,
+  client: PrismaClient = prisma,
+): Promise<void> {
+  try {
+    await client.scene.update({
+      where: { storyId_sceneNumber: { storyId, sceneNumber } },
+      data: { imageAttempts: { increment: 1 } },
+    });
+  } catch (err) {
+    console.error(`generation-repository: incrementImageAttempt failed for story ${storyId} scene ${sceneNumber}`, err);
+  }
+}
+
+export async function incrementVideoAttempt(
+  storyId: string,
+  sceneNumber: number,
+  client: PrismaClient = prisma,
+): Promise<void> {
+  try {
+    await client.scene.update({
+      where: { storyId_sceneNumber: { storyId, sceneNumber } },
+      data: { videoAttempts: { increment: 1 } },
+    });
+  } catch (err) {
+    console.error(`generation-repository: incrementVideoAttempt failed for story ${storyId} scene ${sceneNumber}`, err);
+  }
+}

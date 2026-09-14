@@ -1,9 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readdirSync, readFileSync, existsSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import Database from "better-sqlite3";
 
 import { createPrismaClient } from "./db.ts";
 import {
@@ -13,40 +9,14 @@ import {
   UniquenessStatus,
 } from "../core/persistence/story-repository.ts";
 import type { StoryDirectorOutput } from "../core/story/schema.ts";
+import { tmpDatabaseUrl } from "./test-db.ts";
 
 // Every test below points Prisma at a throwaway file inside
 // node:os.tmpdir() -- never at the real prisma/dev.db -- exactly as
-// spend-ledger.test.ts never points at the real ledger.
-//
-// A temp database has no schema until one is applied. Rather than shelling
-// out to the Prisma CLI's `migrate deploy` (adds a multi-second subprocess
-// per test run), this reads the already-committed migration.sql directly
-// and executes it against the fresh file through a plain better-sqlite3
-// connection -- faster, and exercises the exact SQL this project ships,
-// not a re-derived schema. The migrations directory name is timestamped,
-// so it's discovered rather than hardcoded.
-function findMigrationSql(): string {
-  const migrationsDir = join(process.cwd(), "prisma", "migrations");
-  const entries = readdirSync(migrationsDir, { withFileTypes: true });
-  const migrationDir = entries.find((entry) => entry.isDirectory());
-  if (!migrationDir) {
-    throw new Error(`No migration directory found under ${migrationsDir}`);
-  }
-  const sqlPath = join(migrationsDir, migrationDir.name, "migration.sql");
-  if (!existsSync(sqlPath)) {
-    throw new Error(`No migration.sql found at ${sqlPath}`);
-  }
-  return readFileSync(sqlPath, "utf8");
-}
-
-function tmpDatabaseUrl(): string {
-  const dir = mkdtempSync(join(tmpdir(), "prisma-test-"));
-  const dbPath = join(dir, "test.db");
-  const db = new Database(dbPath);
-  db.exec(findMigrationSql());
-  db.close();
-  return `file:${dbPath}`;
-}
+// spend-ledger.test.ts never points at the real ledger. tmpDatabaseUrl()
+// (src/lib/test-db.ts) applies EVERY migration directory, not just the
+// first -- see that module's doc comment for why this matters now that
+// migration count is no longer one.
 
 function fixtureOutput(overrides: Partial<StoryDirectorOutput["story"]> = {}): StoryDirectorOutput {
   return {

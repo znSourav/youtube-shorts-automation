@@ -8,7 +8,10 @@
 // require its own legitimacy checkpoint -- this ambient declaration avoids
 // that entirely while fully typing the one call shape this project needs.
 declare module "better-sqlite3" {
-  interface DatabaseInstance {
+  // Exported (plan 04-01 Task 2) so src/lib/test-db.ts's applyAllMigrations
+  // can name this type directly rather than re-deriving it via
+  // InstanceType<typeof Database> at every call site.
+  export interface DatabaseInstance {
     exec(sql: string): this;
     close(): this;
   }
