@@ -135,7 +135,25 @@ Plans:
   5. (Soft) She can see a list of all past stories with title, date, status, and scene count, and open any one to view its details, with no duplicate entries created by normal use; if this proves out of reach in the available time, the limitation is documented rather than silently broken.
   6. She can complete the entire create → review → approve → generate → output flow using only plain-language buttons and status text, and any error explains what to do next rather than showing developer/API terminology.
 
-**Plans**: TBD
+**Plans:** 4 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 04-01-PLAN.md — Server-side unbypassable approval gate + per-scene retry caps inside the single video-dispatch function
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 04-02-PLAN.md — "Approve These Images" story-level decision + per-scene "Regenerate this image" action
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 04-03-PLAN.md — "Generate All Videos" batch dispatch + new dedicated video-status screen with per-scene retry
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 04-04-PLAN.md — Output folder access (numbered clips + story documents) and the Story Library
+
 **UI hint**: yes
 
 ### Phase 5: Budget & Retry Safeguards
