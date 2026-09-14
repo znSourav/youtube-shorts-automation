@@ -6,10 +6,9 @@ import type { StoryDirectorOutput } from "@/core/story/schema";
 import CreateStoryForm, { type CreateStoryFormValues } from "@/components/story/CreateStoryForm";
 import StoryReview from "@/components/story/StoryReview";
 import SceneCard, { type SceneCardState } from "@/components/scenes/SceneCard";
-import type { SceneVideoState } from "@/components/scenes/SceneVideo";
 import { createStoryAction } from "./actions/create-story.ts";
 import { generateSceneImagesAction, type SceneImageStatus } from "./actions/generate-images.ts";
-import { generateSceneVideoAction, type GenerateSceneVideoResult } from "./actions/generate-video.ts";
+import { approveStoryImagesAction } from "./actions/approve-images.ts";
 import { loadStoryAction } from "./actions/load-story.ts";
 
 type Screen = "create" | "review-story" | "review-images";
@@ -44,11 +43,12 @@ export default function Home() {
   const [imagesError, setImagesError] = useState<string | null>(null);
   const [sceneStatuses, setSceneStatuses] = useState<SceneImageStatus[]>([]);
 
-  // VIDEO-01: this phase animates exactly ONE scene (the first scene of the
-  // story), not every scene -- generating every scene is VIDEO-02 (Phase 4).
-  // A single result slot is enough because only one scene is ever in flight.
-  const [videoLoading, setVideoLoading] = useState(false);
-  const [videoResult, setVideoResult] = useState<GenerateSceneVideoResult | null>(null);
+  // D-01/D-02: one deliberate approval action covers the whole story's set
+  // of scene images -- never an automatic unlock the moment every scene has
+  // an image. `approved` mirrors Story.imagesApprovedAt !== null.
+  const [approved, setApproved] = useState(false);
+  const [approveLoading, setApproveLoading] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
 
   // VIDEO-03 (soft): true only while the mount-time restore attempt is in
   // flight. The create screen renders nothing while this is true, so a
@@ -91,17 +91,11 @@ export default function Home() {
           message: scene.imageStatus === "READY" ? "Image generated." : "This scene's image isn't available.",
         })),
       );
-      const restoredVideoScene = result.scenes.find((scene) => scene.videoStatus !== "WAITING");
-      if (restoredVideoScene) {
-        setVideoResult({
-          ok: restoredVideoScene.videoStatus === "READY",
-          videoPath: null,
-          videoDataUrl: restoredVideoScene.videoDataUrl,
-          message:
-            restoredVideoScene.videoStatus === "READY" ? "Video generated." : "This scene's video isn't available.",
-          durationSeconds: 0,
-        });
-      }
+      // A returning wife who already approved this story's images must not
+      // be asked to approve it again -- re-derived from the persisted flag,
+      // never assumed false.
+      setApproved(result.imagesApproved);
+      setApproveError(null);
       setScreen("review-images");
       setRestoring(false);
     })();
@@ -132,6 +126,10 @@ export default function Home() {
     setUniquenessWarning(result.uniquenessWarning);
     setSceneStatuses([]);
     setImagesError(null);
+    // A fresh story never inherits a previous story's approval state.
+    setApproved(false);
+    setApproveError(null);
+    setApproveLoading(false);
     setScreen("review-story");
     window.localStorage.setItem(LAST_STORY_ID_KEY, result.storyId);
   }
@@ -157,30 +155,22 @@ export default function Home() {
     }
   }
 
-  async function handleGenerateVideo() {
-    if (!story || !storyId) return;
-    const targetScene = story.scenes[0];
-
-    setVideoLoading(true);
-    setVideoResult(null);
+  async function handleApproveImages() {
+    if (!storyId) return;
+    setApproveLoading(true);
+    setApproveError(null);
 
     try {
-      // generateSceneVideoAction resolves the scene's image path itself from
-      // the database (WINDOWS ledger item 7 closed) -- the browser no longer
-      // needs to hold a filesystem path, so a restored story's video
-      // generation works too.
-      const result = await generateSceneVideoAction(storyId, targetScene.scene_number);
-      setVideoResult(result);
+      const result = await approveStoryImagesAction(storyId);
+      if (result.ok) {
+        setApproved(true);
+      } else {
+        setApproveError(result.message);
+      }
     } catch {
-      setVideoResult({
-        ok: false,
-        videoPath: null,
-        videoDataUrl: null,
-        message: "Something went wrong while generating the video. Please try again.",
-        durationSeconds: 0,
-      });
+      setApproveError("Something went wrong while approving these images. Please try again.");
     } finally {
-      setVideoLoading(false);
+      setApproveLoading(false);
     }
   }
 
@@ -193,12 +183,6 @@ export default function Home() {
     sceneStatuses.length === story.scenes.length &&
     sceneStatuses.every((status) => status.ok && Boolean(status.imageDataUrl));
   const readyCount = sceneStatuses.filter((status) => status.ok && Boolean(status.imageDataUrl)).length;
-  const videoSceneNumber = story?.scenes[0]?.scene_number ?? null;
-  // generateSceneVideoAction resolves the scene's image path itself from the
-  // database, so the browser no longer needs a client-held imagePath to
-  // enable this button (WINDOWS ledger item 7 closed) -- readiness now
-  // depends only on every scene image being ready.
-  const canGenerateVideo = allImagesReady;
 
   return (
     <div className="flex flex-col flex-1 items-center bg-zinc-50 font-sans dark:bg-black">
@@ -233,14 +217,6 @@ export default function Home() {
                 const state: SceneCardState =
                   !status ? "waiting" : status.ok && status.imageDataUrl ? "ready" : "failed";
 
-                const isVideoTarget = scene.scene_number === videoSceneNumber;
-                let videoState: SceneVideoState = "waiting";
-                if (isVideoTarget) {
-                  if (videoLoading) videoState = "generating";
-                  else if (videoResult?.ok) videoState = "ready";
-                  else if (videoResult && !videoResult.ok) videoState = "failed";
-                }
-
                 return (
                   <SceneCard
                     key={scene.scene_number}
@@ -249,37 +225,39 @@ export default function Home() {
                     state={state}
                     imageSrc={status?.imageDataUrl ?? null}
                     message={status?.message ?? null}
-                    videoState={videoState}
-                    videoSrc={isVideoTarget ? videoResult?.videoDataUrl ?? null : null}
-                    videoMessage={isVideoTarget ? videoResult?.message ?? null : null}
-                    onRetryVideo={isVideoTarget ? handleGenerateVideo : undefined}
-                    videoDisabled={videoLoading}
-                    videoWaitingHint={
-                      isVideoTarget
-                        ? "This is the scene the Generate Video button below will animate."
-                        : undefined
-                    }
                   />
                 );
               })}
             </div>
 
             <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                disabled={!canGenerateVideo || videoLoading}
-                onClick={handleGenerateVideo}
-                className="rounded-full bg-foreground px-5 py-3 font-medium text-background transition-colors hover:bg-[#383838] disabled:opacity-50 dark:hover:bg-[#ccc]"
-              >
-                {videoLoading
-                  ? "Generating video..."
-                  : `Generate Video for Scene ${videoSceneNumber ?? 1} (one scene only, for now)`}
-              </button>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                {allImagesReady
-                  ? "This version animates one scene at a time so you can confirm the result before generating a full episode. Generating every scene is coming in a future update."
-                  : `Generate Video will unlock once every scene image is ready (${readyCount} of ${story.scenes.length} ready now).`}
-              </p>
+              {approveError && (
+                <p className="rounded border border-red-300 bg-red-50 p-3 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+                  {approveError}
+                </p>
+              )}
+
+              {!approved ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={!allImagesReady || approveLoading}
+                    onClick={handleApproveImages}
+                    className="rounded-full bg-foreground px-5 py-3 font-medium text-background transition-colors hover:bg-[#383838] disabled:opacity-50 dark:hover:bg-[#ccc]"
+                  >
+                    {approveLoading ? "Approving..." : "Approve These Images"}
+                  </button>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                    {allImagesReady
+                      ? "Look through every scene above. When you're happy with them, approve the whole set."
+                      : `Approving will unlock once every scene image is ready (${readyCount} of ${story.scenes.length} ready now).`}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-black dark:text-zinc-50">
+                  Images approved. You can now generate videos for every scene.
+                </p>
+              )}
             </div>
           </div>
         )}

@@ -24,6 +24,10 @@ export interface LoadStorySuccess {
   storyId: string;
   data: StoryDirectorOutput;
   scenes: LoadedSceneMedia[];
+  // D-01/D-02: a boolean, deliberately never the raw imagesApprovedAt
+  // timestamp -- the timestamp itself is server bookkeeping and has no
+  // place in the browser.
+  imagesApproved: boolean;
 }
 
 export interface LoadStoryNotFound {
@@ -129,5 +133,11 @@ export async function loadStoryAction(storyId: string): Promise<LoadStoryResult>
     };
   });
 
-  return { ok: true, storyId: loaded.storyId, data: loaded.data, scenes };
+  return {
+    ok: true,
+    storyId: loaded.storyId,
+    data: loaded.data,
+    scenes,
+    imagesApproved: row.imagesApprovedAt !== null,
+  };
 }
