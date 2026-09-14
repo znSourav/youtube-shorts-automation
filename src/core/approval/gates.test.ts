@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { evaluateVideoDispatch, evaluateApproval } from "./gates.ts";
+import { evaluateVideoDispatch, evaluateApproval, evaluateImageRegeneration } from "./gates.ts";
 import type { StoryWithScenes } from "../persistence/story-repository.ts";
 
 // Fixture-object convention matches src/core/uniqueness/check.test.ts --
@@ -155,4 +155,49 @@ test("evaluateApproval refuses when a scene is READY status but imagePath is nul
     !decision.allowed && decision.message,
     "All scene images need to be ready before you can approve them.",
   );
+});
+
+// --- evaluateImageRegeneration ---
+
+test("evaluateImageRegeneration refuses a null story", () => {
+  const decision = evaluateImageRegeneration(null, 1, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, false);
+  assert.equal(!decision.allowed && decision.message, "This story could not be found.");
+});
+
+test("evaluateImageRegeneration refuses an unknown scene", () => {
+  const story = storyFixture();
+  const decision = evaluateImageRegeneration(story, 99, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, false);
+  assert.equal(!decision.allowed && decision.message, "That scene could not be found in this story.");
+});
+
+test("evaluateImageRegeneration refuses a scene at exactly the cap, and the message contains the interpolated cap number", () => {
+  const story = storyFixture({ scenes: [sceneFixture(1, { imageAttempts: MAX_ATTEMPTS })] });
+  const decision = evaluateImageRegeneration(story, 1, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, false);
+  assert.equal(
+    !decision.allowed && decision.message,
+    "This scene's image has reached its limit of 3 attempts. You can keep the current image and move on, or start a new story for a different result.",
+  );
+});
+
+test("evaluateImageRegeneration grants a scene below the cap", () => {
+  const story = storyFixture({ scenes: [sceneFixture(1, { imageAttempts: MAX_ATTEMPTS - 1 })] });
+  const decision = evaluateImageRegeneration(story, 1, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, true);
+});
+
+test("evaluateImageRegeneration grants with alreadyApproved=false for an unapproved story", () => {
+  const story = storyFixture({ imagesApprovedAt: null });
+  const decision = evaluateImageRegeneration(story, 1, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, true);
+  assert.equal(decision.allowed && decision.alreadyApproved, false);
+});
+
+test("evaluateImageRegeneration grants with alreadyApproved=true for an approved story (regeneration is NOT blocked by approval)", () => {
+  const story = storyFixture({ imagesApprovedAt: new Date("2026-09-14T00:00:00Z") });
+  const decision = evaluateImageRegeneration(story, 1, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, true);
+  assert.equal(decision.allowed && decision.alreadyApproved, true);
 });

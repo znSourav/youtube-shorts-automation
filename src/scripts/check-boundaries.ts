@@ -27,6 +27,14 @@
 //    validation unskippable.
 // 4. No file under src/ calls Prisma's unchecked raw-query escape hatch
 //    (T-03-01) -- $queryRawUnsafe or $executeRawUnsafe.
+// 5. Outside src/scripts/, a file may import the video provider only if it
+//    IS src/app/actions/generate-video.ts, and may import the image
+//    provider only if it IS src/app/actions/generate-images.ts (Phase 4,
+//    plan 04-01 Task 3). This is what makes the approval gate and the
+//    per-scene retry caps (src/core/approval/gates.ts, checked inside
+//    generateSceneVideoAction) structurally unbypassable: a future Server
+//    Action cannot reach Veo or Gemini Image without going through the one
+//    function that already checks them (04-RESEARCH.md Pitfall 1).
 //
 // Run with: node src/scripts/check-boundaries.ts
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -38,6 +46,13 @@ const SRC_ROOT = "src";
 // from invariant 4's scan so the forbidden-method-name string constants
 // held here do not report themselves as an offender.
 const SELF_PATH = "src/scripts/check-boundaries.ts";
+
+// Invariant 5's allow-list -- the ONLY files outside src/scripts/ permitted
+// to import a video/image provider directly, held as named constants (not
+// inlined per-branch) so the rule is a single, clearly-named source of
+// truth rather than a repeated string literal.
+const ALLOWED_VIDEO_DISPATCH_PATH = "src/app/actions/generate-video.ts";
+const ALLOWED_IMAGE_DISPATCH_PATH = "src/app/actions/generate-images.ts";
 
 // Held as named constants (not inlined into the scan below) so invariant 4
 // can skip this file's own path without also needing string-literal
@@ -197,6 +212,40 @@ function main(): void {
     }
   } else {
     console.log("OK: no file calls Prisma's unchecked raw-query escape hatch");
+  }
+
+  // Invariant 5 -- outside src/scripts/ (developer probe tools, excluded --
+  // smoke-test.ts, story-probe.ts, and persistence-probe.ts legitimately
+  // import the providers directly), a file may import the video provider
+  // only if it IS the single allowed video dispatch file, and may import
+  // the image provider only if it IS the single allowed image dispatch
+  // file. This is what keeps the approval gate and per-scene retry caps
+  // (src/core/approval/gates.ts) unbypassable: a second Veo/Gemini-Image
+  // call site would fail this gate rather than silently skip the checks
+  // that live inside the one allowed dispatch function.
+  const offenders5: string[] = [];
+  for (const file of allFiles) {
+    if (file.startsWith("src/scripts/")) continue;
+    const specifiers = importSpecifiers(readFileSync(file, "utf8"));
+    for (const spec of specifiers) {
+      if (spec.includes("/providers/video/") && file !== ALLOWED_VIDEO_DISPATCH_PATH) {
+        offenders5.push(`${file} -> "${spec}"`);
+      }
+      if (spec.includes("/providers/image/") && file !== ALLOWED_IMAGE_DISPATCH_PATH) {
+        offenders5.push(`${file} -> "${spec}"`);
+      }
+    }
+  }
+  if (offenders5.length > 0) {
+    failed = true;
+    console.log(
+      "BOUNDARY CHECK FAILED (invariant 5 -- the video and image providers must each have a single paid dispatch point):",
+    );
+    for (const offender of offenders5) {
+      console.log(`  ${offender}`);
+    }
+  } else {
+    console.log("OK: the image and video providers each have a single paid dispatch point");
   }
 
   if (failed) {

@@ -20,6 +20,8 @@ export type VideoDispatchDecision = GateRefusal | { allowed: true; scene: SceneR
 
 export type ApprovalDecision = GateRefusal | { allowed: true };
 
+export type ImageRegenerationDecision = GateRefusal | { allowed: true; scene: SceneRow; alreadyApproved: boolean };
+
 /**
  * Decides whether a scene's video generation may be dispatched. Branch
  * order is load-bearing -- the approval check comes before anything that
@@ -85,4 +87,43 @@ export function evaluateApproval(story: StoryWithScenes | null): ApprovalDecisio
   }
 
   return { allowed: true };
+}
+
+/**
+ * Decides whether a single scene's image may be regenerated (IMAGE-02,
+ * D-03). Deliberately NO approval check on this path: regenerating an
+ * image spends image money, not video money, and D-02 scopes approval to
+ * gating video generation only. `alreadyApproved` reflects whether the
+ * story's images were already approved at the time of this decision -- it
+ * is how plan 04-02 decides whether to surface the UI-SPEC's one-time
+ * amber heads-up ("You already approved these images — this new one will
+ * be used for video generation without asking you to approve again."),
+ * resolving 04-RESEARCH.md Open Question 1 the way the UI-SPEC's
+ * state-persistence row settled it: the approval flag stays intact and the
+ * change is surfaced to her rather than silently voided.
+ */
+export function evaluateImageRegeneration(
+  story: StoryWithScenes | null,
+  sceneNumber: number,
+  maxImageAttempts: number,
+): ImageRegenerationDecision {
+  if (story === null) {
+    return { allowed: false, message: "This story could not be found." };
+  }
+
+  const scene = story.scenes.find((s) => s.sceneNumber === sceneNumber);
+  if (!scene) {
+    return { allowed: false, message: "That scene could not be found in this story." };
+  }
+
+  if (scene.imageAttempts >= maxImageAttempts) {
+    return {
+      allowed: false,
+      message:
+        `This scene's image has reached its limit of ${maxImageAttempts} attempts. You can keep the current ` +
+        "image and move on, or start a new story for a different result.",
+    };
+  }
+
+  return { allowed: true, scene, alreadyApproved: story.imagesApprovedAt !== null };
 }
