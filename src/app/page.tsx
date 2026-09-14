@@ -1,18 +1,35 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { STYLE_PRESETS, MOOD_OPTIONS } from "@/core/story/styles";
 import type { StoryDirectorOutput } from "@/core/story/schema";
 import CreateStoryForm, { type CreateStoryFormValues } from "@/components/story/CreateStoryForm";
 import StoryReview from "@/components/story/StoryReview";
 import SceneCard, { type SceneCardState } from "@/components/scenes/SceneCard";
+import type { SceneVideoState } from "@/components/scenes/SceneVideo";
+import VideoStatusScreen, {
+  POLL_INTERVAL_MS,
+  type VideoStatusSceneRow,
+} from "@/components/story/VideoStatusScreen";
 import { createStoryAction } from "./actions/create-story.ts";
 import { generateSceneImagesAction, type SceneImageStatus } from "./actions/generate-images.ts";
 import { approveStoryImagesAction } from "./actions/approve-images.ts";
 import { regenerateSceneImageAction } from "./actions/regenerate-scene-image.ts";
 import { loadStoryAction } from "./actions/load-story.ts";
+import { generateAllVideosAction } from "./actions/generate-all-videos.ts";
+import { getStoryStatusAction } from "./actions/get-story-status.ts";
 
-type Screen = "create" | "review-story" | "review-images";
+type Screen = "create" | "review-story" | "review-images" | "video-status";
+
+// D-04/D-05: per-scene video status the browser holds while on Screen 4,
+// keyed by scene number. Populated entirely from getStoryStatusAction's
+// polled reads (plus one loadStoryAction call per newly-ready scene to fetch
+// its playable data: URL) -- never from any client-supplied filesystem path.
+interface VideoSceneEntry {
+  videoState: SceneVideoState;
+  videoSrc: string | null;
+  videoMessage: string | null;
+}
 
 // D-03: no /stories/[id] route -- a story id is only ever used server-side
 // (as the storage/stories/<id>/ directory name and the database's Story.id
@@ -59,6 +76,19 @@ export default function Home() {
   const [regeneratingScene, setRegeneratingScene] = useState<number | null>(null);
   const [imageCapMessages, setImageCapMessages] = useState<Record<number, string>>({});
   const [postApprovalNotice, setPostApprovalNotice] = useState<string | null>(null);
+
+  // D-04/D-05: Screen 4's batch dispatch + per-scene polled status.
+  const [videoScenes, setVideoScenes] = useState<Record<number, VideoSceneEntry>>({});
+  const [batchDispatched, setBatchDispatched] = useState(false);
+  const [batchStarting, setBatchStarting] = useState(false);
+  const [batchError, setBatchError] = useState<string | null>(null);
+  // Read inside the polling effect's async callback, which is only
+  // recreated when `screen`/`storyId` change -- without a ref it would
+  // otherwise close over a stale `videoScenes` snapshot from effect setup.
+  const videoScenesRef = useRef<Record<number, VideoSceneEntry>>({});
+  useEffect(() => {
+    videoScenesRef.current = videoScenes;
+  }, [videoScenes]);
 
   // VIDEO-03 (soft): true only while the mount-time restore attempt is in
   // flight. The create screen renders nothing while this is true, so a
@@ -143,6 +173,10 @@ export default function Home() {
     setRegeneratingScene(null);
     setImageCapMessages({});
     setPostApprovalNotice(null);
+    setVideoScenes({});
+    setBatchDispatched(false);
+    setBatchStarting(false);
+    setBatchError(null);
     setScreen("review-story");
     window.localStorage.setItem(LAST_STORY_ID_KEY, result.storyId);
   }
@@ -224,6 +258,92 @@ export default function Home() {
     }
   }
 
+  async function handleGenerateAllVideos() {
+    if (!storyId) return;
+    setBatchStarting(true);
+    setBatchError(null);
+
+    try {
+      const result = await generateAllVideosAction(storyId);
+      if (result.ok) {
+        setBatchDispatched(true);
+      } else {
+        setBatchError(result.message);
+      }
+    } catch {
+      setBatchError("Something went wrong while starting video generation. Please try again.");
+    } finally {
+      setBatchStarting(false);
+    }
+  }
+
+  // D-05: polls getStoryStatusAction while Screen 4 is showing, mapping each
+  // scene's DB-backed videoStatus onto its own row -- the database, not any
+  // in-memory job registry, is the single source of truth this reads.
+  useEffect(() => {
+    if (screen !== "video-status" || !storyId) return;
+
+    let cancelled = false;
+
+    async function poll() {
+      const currentStoryId = storyId as string;
+      const status = await getStoryStatusAction(currentStoryId);
+      if (cancelled || !status.ok) return;
+
+      const needsMedia = status.scenes.some((row) => {
+        if (row.videoStatus !== "READY") return false;
+        const existing = videoScenesRef.current[row.sceneNumber];
+        return !existing || !existing.videoSrc;
+      });
+
+      let mediaByScene: Record<number, string | null> = {};
+      if (needsMedia) {
+        const loaded = await loadStoryAction(currentStoryId);
+        if (!cancelled && loaded.ok) {
+          mediaByScene = Object.fromEntries(
+            loaded.scenes.map((scene) => [scene.sceneNumber, scene.videoDataUrl]),
+          );
+        }
+      }
+
+      if (cancelled) return;
+
+      setVideoScenes((prev) => {
+        const next: Record<number, VideoSceneEntry> = { ...prev };
+        for (const row of status.scenes) {
+          const videoState: SceneVideoState =
+            row.videoStatus === "READY"
+              ? "ready"
+              : row.videoStatus === "FAILED"
+                ? "failed"
+                : row.videoStatus === "GENERATING"
+                  ? "generating"
+                  : "waiting";
+          const existingSrc = prev[row.sceneNumber]?.videoSrc ?? null;
+          const videoSrc = videoState === "ready" ? (existingSrc ?? mediaByScene[row.sceneNumber] ?? null) : null;
+          const videoMessage = videoState === "failed" ? "This scene's video could not be created." : null;
+          next[row.sceneNumber] = { videoState, videoSrc, videoMessage };
+        }
+        return next;
+      });
+
+      const allTerminal =
+        status.scenes.length > 0 &&
+        status.scenes.every((row) => row.videoStatus === "READY" || row.videoStatus === "FAILED");
+      if (allTerminal) {
+        clearInterval(intervalId);
+      }
+    }
+
+    const intervalId = setInterval(poll, POLL_INTERVAL_MS);
+    poll();
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [screen, storyId]);
+
   // Checked against imageDataUrl (what actually renders) rather than
   // imagePath (internal bookkeeping only -- generate-images.ts's own
   // convention) so a restored story's readiness reads correctly: restored
@@ -233,6 +353,23 @@ export default function Home() {
     sceneStatuses.length === story.scenes.length &&
     sceneStatuses.every((status) => status.ok && Boolean(status.imageDataUrl));
   const readyCount = sceneStatuses.filter((status) => status.ok && Boolean(status.imageDataUrl)).length;
+
+  const videoStatusScenes: VideoStatusSceneRow[] = story
+    ? story.scenes.map((scene) => {
+        const entry = videoScenes[scene.scene_number];
+        return {
+          sceneNumber: scene.scene_number,
+          storyPurpose: scene.story_purpose,
+          videoState: entry?.videoState ?? "waiting",
+          videoSrc: entry?.videoSrc ?? null,
+          videoMessage: entry?.videoMessage ?? null,
+        };
+      })
+    : [];
+  const allVideosReady =
+    story !== null &&
+    story.scenes.length > 0 &&
+    story.scenes.every((scene) => videoScenes[scene.scene_number]?.videoState === "ready");
 
   return (
     <div className="flex flex-col flex-1 items-center bg-zinc-50 font-sans dark:bg-black">
@@ -314,12 +451,33 @@ export default function Home() {
                   </p>
                 </>
               ) : (
-                <p className="text-sm text-black dark:text-zinc-50">
-                  Images approved. You can now generate videos for every scene.
-                </p>
+                <>
+                  <p className="text-sm text-black dark:text-zinc-50">
+                    Images approved. You can now generate videos for every scene.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setScreen("video-status")}
+                    className="rounded-full bg-foreground px-5 py-3 font-medium text-background transition-colors hover:bg-[#383838] disabled:opacity-50 dark:hover:bg-[#ccc]"
+                  >
+                    Continue to Video Generation
+                  </button>
+                </>
               )}
             </div>
           </div>
+        )}
+
+        {screen === "video-status" && story && (
+          <VideoStatusScreen
+            storyTitle={story.story.title}
+            scenes={videoStatusScenes}
+            dispatched={batchDispatched}
+            starting={batchStarting}
+            error={batchError}
+            allReady={allVideosReady}
+            onGenerateAll={handleGenerateAllVideos}
+          />
         )}
       </main>
     </div>

@@ -22,6 +22,8 @@ export type ApprovalDecision = GateRefusal | { allowed: true };
 
 export type ImageRegenerationDecision = GateRefusal | { allowed: true; scene: SceneRow; alreadyApproved: boolean };
 
+export type BatchDispatchDecision = GateRefusal | { allowed: true; sceneNumbers: number[] };
+
 /**
  * Decides whether a scene's video generation may be dispatched. Branch
  * order is load-bearing -- the approval check comes before anything that
@@ -126,4 +128,54 @@ export function evaluateImageRegeneration(
   }
 
   return { allowed: true, scene, alreadyApproved: story.imagesApprovedAt !== null };
+}
+
+/**
+ * Decides whether the "Generate All Videos" batch action (D-04, VIDEO-02) may
+ * dispatch, and if so, which scenes it should dispatch for. This is a FAST
+ * REFUSAL for the wife's benefit only -- it is never the gate itself
+ * (04-RESEARCH.md Pitfall 1). Every scene number this returns still passes
+ * through evaluateVideoDispatch a second time, inside generateSceneVideoAction,
+ * before any paid call is dispatched.
+ *
+ * Branch order:
+ *   1. story not found
+ *   2. story not approved (same locked string evaluateVideoDispatch uses)
+ *   3. compute the work list: READY-imaged, not-already-video-READY, under
+ *      the retry cap -- skipping already-READY scenes is a money decision
+ *      (makes pressing the button twice safe), skipping capped scenes keeps
+ *      the batch from burning attempts it would only refuse one layer down
+ *   4. an empty work list refuses with a plain-language "nothing left" message
+ */
+export function evaluateBatchDispatch(
+  story: StoryWithScenes | null,
+  maxVideoAttempts: number,
+): BatchDispatchDecision {
+  if (story === null) {
+    return { allowed: false, message: "This story could not be found." };
+  }
+
+  if (story.imagesApprovedAt === null) {
+    return {
+      allowed: false,
+      message: "These images haven't been approved yet. Approve them before generating video.",
+    };
+  }
+
+  const sceneNumbers = story.scenes
+    .filter(
+      (s) =>
+        s.imageStatus === "READY" &&
+        s.imagePath !== null &&
+        s.videoStatus !== "READY" &&
+        s.videoAttempts < maxVideoAttempts,
+    )
+    .map((s) => s.sceneNumber)
+    .sort((a, b) => a - b);
+
+  if (sceneNumbers.length === 0) {
+    return { allowed: false, message: "There aren't any scenes left to make videos for right now." };
+  }
+
+  return { allowed: true, sceneNumbers };
 }

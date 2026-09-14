@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { evaluateVideoDispatch, evaluateApproval, evaluateImageRegeneration } from "./gates.ts";
+import { evaluateVideoDispatch, evaluateApproval, evaluateImageRegeneration, evaluateBatchDispatch } from "./gates.ts";
 import type { StoryWithScenes } from "../persistence/story-repository.ts";
 
 // Fixture-object convention matches src/core/uniqueness/check.test.ts --
@@ -200,4 +200,70 @@ test("evaluateImageRegeneration grants with alreadyApproved=true for an approved
   const decision = evaluateImageRegeneration(story, 1, MAX_ATTEMPTS);
   assert.equal(decision.allowed, true);
   assert.equal(decision.allowed && decision.alreadyApproved, true);
+});
+
+// --- evaluateBatchDispatch ---
+
+test("evaluateBatchDispatch refuses a null story", () => {
+  const decision = evaluateBatchDispatch(null, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, false);
+  assert.equal(!decision.allowed && decision.message, "This story could not be found.");
+});
+
+test("evaluateBatchDispatch refuses an unapproved story with the exact approval string", () => {
+  const story = storyFixture({ imagesApprovedAt: null });
+  const decision = evaluateBatchDispatch(story, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, false);
+  assert.equal(
+    !decision.allowed && decision.message,
+    "These images haven't been approved yet. Approve them before generating video.",
+  );
+});
+
+test("evaluateBatchDispatch returns every eligible scene number in ascending order", () => {
+  const story = storyFixture({
+    scenes: [sceneFixture(3), sceneFixture(1), sceneFixture(2)],
+  });
+  const decision = evaluateBatchDispatch(story, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, true);
+  assert.deepEqual(decision.allowed && decision.sceneNumbers, [1, 2, 3]);
+});
+
+test("evaluateBatchDispatch excludes scenes whose videoStatus is already READY", () => {
+  const story = storyFixture({
+    scenes: [sceneFixture(1, { videoStatus: "READY" }), sceneFixture(2)],
+  });
+  const decision = evaluateBatchDispatch(story, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, true);
+  assert.deepEqual(decision.allowed && decision.sceneNumbers, [2]);
+});
+
+test("evaluateBatchDispatch excludes scenes at the retry cap", () => {
+  const story = storyFixture({
+    scenes: [sceneFixture(1, { videoAttempts: MAX_ATTEMPTS }), sceneFixture(2)],
+  });
+  const decision = evaluateBatchDispatch(story, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, true);
+  assert.deepEqual(decision.allowed && decision.sceneNumbers, [2]);
+});
+
+test("evaluateBatchDispatch excludes scenes whose image isn't READY", () => {
+  const story = storyFixture({
+    scenes: [sceneFixture(1, { imageStatus: "WAITING", imagePath: null }), sceneFixture(2)],
+  });
+  const decision = evaluateBatchDispatch(story, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, true);
+  assert.deepEqual(decision.allowed && decision.sceneNumbers, [2]);
+});
+
+test("evaluateBatchDispatch refuses with the nothing-left string when every scene is already READY", () => {
+  const story = storyFixture({
+    scenes: [sceneFixture(1, { videoStatus: "READY" }), sceneFixture(2, { videoStatus: "READY" })],
+  });
+  const decision = evaluateBatchDispatch(story, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, false);
+  assert.equal(
+    !decision.allowed && decision.message,
+    "There aren't any scenes left to make videos for right now.",
+  );
 });

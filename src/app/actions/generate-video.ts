@@ -180,6 +180,14 @@ export async function generateSceneVideoAction(
   // asymmetry is exactly what D-03's anti-click-loop guard is for.
   await incrementVideoAttempt(storyId, sceneNumber);
 
+  // Phase 4 (04-03): writes GENERATING before any file read or provider
+  // dispatch, so a scene interrupted mid-flight by a dev-server recompile
+  // (04-RESEARCH.md Pitfall 2) is visibly "in flight" on the status screen
+  // instead of indistinguishable from a scene that was never started (both
+  // would otherwise read WAITING). Every existing FAILED/READY write further
+  // down stays exactly as it was.
+  await updateSceneVideo(storyId, sceneNumber, null, SceneAssetStatus.GENERATING);
+
   let imageBytes: Buffer;
   let mimeType: string;
   try {

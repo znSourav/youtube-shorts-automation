@@ -13,7 +13,7 @@
 import type { StoryWithScenes } from "./story-repository.ts";
 import type { StoryDirectorOutput } from "../story/schema.ts";
 
-export type LoadedAssetStatus = "WAITING" | "READY" | "FAILED";
+export type LoadedAssetStatus = "WAITING" | "GENERATING" | "READY" | "FAILED";
 
 export interface LoadedSceneStatus {
   sceneNumber: number;
