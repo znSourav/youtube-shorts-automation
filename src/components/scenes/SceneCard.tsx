@@ -27,6 +27,15 @@ export interface SceneCardProps {
   onRetryVideo?: () => void;
   videoDisabled?: boolean;
   videoWaitingHint?: string;
+
+  // IMAGE-02 (plan 04-02): per-scene "Regenerate this image" action.
+  // `imageCapMessage` takes priority when set -- a reached retry cap (D-03)
+  // shows a calm amber explanation and no button, since retries are
+  // exhausted and nothing is left to offer but the explanation.
+  onRegenerateImage?: () => void;
+  regenerateDisabled?: boolean;
+  regenerateLabel?: string;
+  imageCapMessage?: string | null;
 }
 
 /**
@@ -45,6 +54,10 @@ export default function SceneCard({
   onRetryVideo,
   videoDisabled,
   videoWaitingHint,
+  onRegenerateImage,
+  regenerateDisabled,
+  regenerateLabel,
+  imageCapMessage,
 }: SceneCardProps) {
   return (
     <div className="flex flex-col gap-2 rounded border border-zinc-300 p-3 dark:border-zinc-700">
@@ -74,6 +87,21 @@ export default function SceneCard({
           <p className="text-xs text-zinc-400">{state === "generating" ? "Generating image..." : "Waiting..."}</p>
         )}
       </div>
+
+      {imageCapMessage ? (
+        <p className="text-xs text-amber-900 dark:text-amber-200">{imageCapMessage}</p>
+      ) : (
+        onRegenerateImage && (
+          <button
+            type="button"
+            onClick={onRegenerateImage}
+            disabled={regenerateDisabled}
+            className="self-start rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium text-black transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-50 dark:hover:bg-zinc-900"
+          >
+            {regenerateLabel ?? "Regenerate this image"}
+          </button>
+        )
+      )}
 
       <SceneVideo
         state={videoState}

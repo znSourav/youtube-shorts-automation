@@ -9,6 +9,7 @@ import SceneCard, { type SceneCardState } from "@/components/scenes/SceneCard";
 import { createStoryAction } from "./actions/create-story.ts";
 import { generateSceneImagesAction, type SceneImageStatus } from "./actions/generate-images.ts";
 import { approveStoryImagesAction } from "./actions/approve-images.ts";
+import { regenerateSceneImageAction } from "./actions/regenerate-scene-image.ts";
 import { loadStoryAction } from "./actions/load-story.ts";
 
 type Screen = "create" | "review-story" | "review-images";
@@ -49,6 +50,15 @@ export default function Home() {
   const [approved, setApproved] = useState(false);
   const [approveLoading, setApproveLoading] = useState(false);
   const [approveError, setApproveError] = useState<string | null>(null);
+
+  // IMAGE-02/D-03: which scene (if any) is currently regenerating -- only
+  // one at a time, guarded in the handler below. `imageCapMessages` holds
+  // the calm amber exhausted-cap note per scene number, once reached.
+  // `postApprovalNotice` is the one-time heads-up shown when a regeneration
+  // happens after the story was already approved (D-02).
+  const [regeneratingScene, setRegeneratingScene] = useState<number | null>(null);
+  const [imageCapMessages, setImageCapMessages] = useState<Record<number, string>>({});
+  const [postApprovalNotice, setPostApprovalNotice] = useState<string | null>(null);
 
   // VIDEO-03 (soft): true only while the mount-time restore attempt is in
   // flight. The create screen renders nothing while this is true, so a
@@ -130,6 +140,9 @@ export default function Home() {
     setApproved(false);
     setApproveError(null);
     setApproveLoading(false);
+    setRegeneratingScene(null);
+    setImageCapMessages({});
+    setPostApprovalNotice(null);
     setScreen("review-story");
     window.localStorage.setItem(LAST_STORY_ID_KEY, result.storyId);
   }
@@ -174,6 +187,43 @@ export default function Home() {
     }
   }
 
+  async function handleRegenerateImage(sceneNumber: number) {
+    if (!storyId || regeneratingScene !== null) return;
+    setRegeneratingScene(sceneNumber);
+
+    try {
+      const result = await regenerateSceneImageAction(storyId, sceneNumber);
+
+      if (result.capMessage) {
+        setImageCapMessages((prev) => ({ ...prev, [sceneNumber]: result.capMessage as string }));
+      }
+
+      if (result.ok) {
+        // Replace only the matching scene's entry -- every other element
+        // stays referentially and structurally untouched.
+        setSceneStatuses((prev) =>
+          prev.map((status) =>
+            status.sceneNumber === sceneNumber
+              ? {
+                  sceneNumber,
+                  imagePath: null,
+                  imageDataUrl: result.imageDataUrl,
+                  ok: true,
+                  message: result.message,
+                }
+              : status,
+          ),
+        );
+      }
+
+      if (result.approvalNotice) {
+        setPostApprovalNotice(result.approvalNotice);
+      }
+    } finally {
+      setRegeneratingScene(null);
+    }
+  }
+
   // Checked against imageDataUrl (what actually renders) rather than
   // imagePath (internal bookkeeping only -- generate-images.ts's own
   // convention) so a restored story's readiness reads correctly: restored
@@ -211,6 +261,12 @@ export default function Home() {
           <div className="flex flex-col gap-6">
             <h2 className="text-2xl font-semibold text-black dark:text-zinc-50">{story.story.title}</h2>
 
+            {postApprovalNotice && (
+              <p className="rounded border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                {postApprovalNotice}
+              </p>
+            )}
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {story.scenes.map((scene) => {
                 const status = sceneStatuses.find((s) => s.sceneNumber === scene.scene_number);
@@ -225,6 +281,10 @@ export default function Home() {
                     state={state}
                     imageSrc={status?.imageDataUrl ?? null}
                     message={status?.message ?? null}
+                    onRegenerateImage={() => handleRegenerateImage(scene.scene_number)}
+                    regenerateDisabled={regeneratingScene !== null}
+                    regenerateLabel={regeneratingScene === scene.scene_number ? "Regenerating..." : undefined}
+                    imageCapMessage={imageCapMessages[scene.scene_number] ?? null}
                   />
                 );
               })}
