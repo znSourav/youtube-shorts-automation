@@ -9,6 +9,7 @@ import SceneCard, { type SceneCardState } from "@/components/scenes/SceneCard";
 import type { SceneVideoState } from "@/components/scenes/SceneVideo";
 import VideoStatusScreen, {
   POLL_INTERVAL_MS,
+  STUCK_AFTER_MS,
   type VideoStatusSceneRow,
 } from "@/components/story/VideoStatusScreen";
 import { createStoryAction } from "./actions/create-story.ts";
@@ -18,6 +19,7 @@ import { regenerateSceneImageAction } from "./actions/regenerate-scene-image.ts"
 import { loadStoryAction } from "./actions/load-story.ts";
 import { generateAllVideosAction } from "./actions/generate-all-videos.ts";
 import { getStoryStatusAction } from "./actions/get-story-status.ts";
+import { retrySceneVideoAction } from "./actions/retry-scene-video.ts";
 
 type Screen = "create" | "review-story" | "review-images" | "video-status";
 
@@ -29,6 +31,7 @@ interface VideoSceneEntry {
   videoState: SceneVideoState;
   videoSrc: string | null;
   videoMessage: string | null;
+  stuck?: boolean;
 }
 
 // D-03: no /stories/[id] route -- a story id is only ever used server-side
@@ -89,6 +92,14 @@ export default function Home() {
   useEffect(() => {
     videoScenesRef.current = videoScenes;
   }, [videoScenes]);
+
+  // VIDEO-04: which scene (if any) is currently being retried -- only one at
+  // a time, guarded in the handler below, matching handleRegenerateImage's
+  // convention. `generatingStartedAtRef` records the timestamp each scene
+  // first entered "generating" (04-RESEARCH.md Pitfall 2's stuck detector),
+  // keyed by scene number, cleared whenever a scene leaves "generating".
+  const [retryingScene, setRetryingScene] = useState<number | null>(null);
+  const generatingStartedAtRef = useRef<Record<number, number>>({});
 
   // VIDEO-03 (soft): true only while the mount-time restore attempt is in
   // flight. The create screen renders nothing while this is true, so a
@@ -177,6 +188,8 @@ export default function Home() {
     setBatchDispatched(false);
     setBatchStarting(false);
     setBatchError(null);
+    setRetryingScene(null);
+    generatingStartedAtRef.current = {};
     setScreen("review-story");
     window.localStorage.setItem(LAST_STORY_ID_KEY, result.storyId);
   }
@@ -277,6 +290,27 @@ export default function Home() {
     }
   }
 
+  // VIDEO-04: retries exactly one scene through retrySceneVideoAction --
+  // the same gated dispatch the batch uses -- without touching any other
+  // scene. `retryingScene` guards against two retries in flight at once.
+  // The optimistic "generating" write here is superseded by the next poll
+  // tick, which reads the real DB-backed status.
+  async function handleRetryScene(sceneNumber: number) {
+    if (!storyId || retryingScene !== null) return;
+    setRetryingScene(sceneNumber);
+    generatingStartedAtRef.current[sceneNumber] = Date.now();
+    setVideoScenes((prev) => ({
+      ...prev,
+      [sceneNumber]: { videoState: "generating", videoSrc: null, videoMessage: null },
+    }));
+
+    try {
+      await retrySceneVideoAction(storyId, sceneNumber);
+    } finally {
+      setRetryingScene(null);
+    }
+  }
+
   // D-05: polls getStoryStatusAction while Screen 4 is showing, mapping each
   // scene's DB-backed videoStatus onto its own row -- the database, not any
   // in-memory job registry, is the single source of truth this reads.
@@ -311,7 +345,7 @@ export default function Home() {
       setVideoScenes((prev) => {
         const next: Record<number, VideoSceneEntry> = { ...prev };
         for (const row of status.scenes) {
-          const videoState: SceneVideoState =
+          let videoState: SceneVideoState =
             row.videoStatus === "READY"
               ? "ready"
               : row.videoStatus === "FAILED"
@@ -319,10 +353,36 @@ export default function Home() {
                 : row.videoStatus === "GENERATING"
                   ? "generating"
                   : "waiting";
+
+          // 04-RESEARCH.md Pitfall 2: a scene first observed "generating" is
+          // timestamped; a scene no longer "generating" has its timestamp
+          // cleared, so a fresh retry never inherits a stale stuck clock.
+          let stuck = false;
+          if (videoState === "generating") {
+            const startedAt = generatingStartedAtRef.current[row.sceneNumber] ?? Date.now();
+            generatingStartedAtRef.current[row.sceneNumber] = startedAt;
+            stuck = Date.now() - startedAt > STUCK_AFTER_MS;
+          } else {
+            delete generatingStartedAtRef.current[row.sceneNumber];
+          }
+
+          let videoMessage: string | null =
+            videoState === "failed" ? "This scene's video could not be created." : null;
+
+          // D-03: the cap is checked LAST so it takes priority over "failed"
+          // -- an exhausted scene shows the calm amber explanation, never
+          // the red failure message, even though its underlying videoStatus
+          // is also FAILED.
+          if (row.capReached && videoState !== "ready") {
+            videoState = "capped";
+            videoMessage =
+              `This scene's video has reached its limit of ${status.maxAttempts} attempts. The other scenes ` +
+              "aren't affected — you can continue with what's ready, or start a new story to try again.";
+          }
+
           const existingSrc = prev[row.sceneNumber]?.videoSrc ?? null;
           const videoSrc = videoState === "ready" ? (existingSrc ?? mediaByScene[row.sceneNumber] ?? null) : null;
-          const videoMessage = videoState === "failed" ? "This scene's video could not be created." : null;
-          next[row.sceneNumber] = { videoState, videoSrc, videoMessage };
+          next[row.sceneNumber] = { videoState, videoSrc, videoMessage, stuck };
         }
         return next;
       });
@@ -363,6 +423,7 @@ export default function Home() {
           videoState: entry?.videoState ?? "waiting",
           videoSrc: entry?.videoSrc ?? null,
           videoMessage: entry?.videoMessage ?? null,
+          stuck: entry?.stuck ?? false,
         };
       })
     : [];
@@ -477,6 +538,7 @@ export default function Home() {
             error={batchError}
             allReady={allVideosReady}
             onGenerateAll={handleGenerateAllVideos}
+            onRetryScene={handleRetryScene}
           />
         )}
       </main>

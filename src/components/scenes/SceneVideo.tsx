@@ -1,6 +1,6 @@
 "use client";
 
-export type SceneVideoState = "waiting" | "generating" | "ready" | "failed";
+export type SceneVideoState = "waiting" | "generating" | "ready" | "failed" | "capped";
 
 export interface SceneVideoProps {
   state: SceneVideoState;
@@ -21,6 +21,13 @@ export interface SceneVideoProps {
   // handler is supplied -- lets the one scene this phase animates (VIDEO-01)
   // read differently from every other scene, which has no action at all.
   waitingHint?: string;
+  // Phase 4 (04-03, 04-RESEARCH.md Pitfall 2): true when a "generating"
+  // scene has been in flight longer than VideoStatusScreen's STUCK_AFTER_MS
+  // -- a dev-server recompile can drop an after() callback mid-run, leaving
+  // a scene stuck at GENERATING forever with no error recorded. Renders the
+  // existing "Try again" affordance alongside the generating message so a
+  // stuck scene has a way out instead of spinning indefinitely.
+  stuck?: boolean;
 }
 
 /**
@@ -36,6 +43,7 @@ export default function SceneVideo({
   onRetry,
   disabled,
   waitingHint,
+  stuck,
 }: SceneVideoProps) {
   if (state === "ready" && videoSrc) {
     return (
@@ -47,11 +55,28 @@ export default function SceneVideo({
     );
   }
 
+  // Placed before the "failed" branch (UI-SPEC: retries are exhausted --
+  // nothing left to offer but the explanation, so no button here at all).
+  if (state === "capped") {
+    return <p className="text-xs text-amber-900 dark:text-amber-200">{message}</p>;
+  }
+
   if (state === "generating") {
     return (
-      <p className="text-xs text-zinc-400 dark:text-zinc-500">
-        Generating video... this can take a few minutes.
-      </p>
+      <div className="flex flex-col gap-2">
+        <p className="text-xs text-zinc-400 dark:text-zinc-500">
+          Generating video... this can take a few minutes.
+        </p>
+        {stuck && onRetry && (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="self-start rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium text-black transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-50 dark:hover:bg-zinc-900"
+          >
+            Try again
+          </button>
+        )}
+      </div>
     );
   }
 
