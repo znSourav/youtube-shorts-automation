@@ -5,8 +5,11 @@ import { extname } from "node:path";
 
 import { CeilingExceededError, checkCeiling, recordSpend } from "../../lib/spend-ledger.ts";
 import { generateVideo, VIDEO_PRICE_PER_SECOND } from "../../providers/video/veo.ts";
-import { sceneVideoPath } from "../../core/storage-paths.ts";
+import { storyDir, sceneVideoPath } from "../../core/storage-paths.ts";
 import type { Scene } from "../../core/story/schema.ts";
+import { findStoryWithScenes } from "../../core/persistence/story-repository.ts";
+import { evaluateVideoDispatch } from "../../core/approval/gates.ts";
+import { maxSceneRetryAttempts } from "../../core/retry/caps.ts";
 import {
   recordGeneration,
   updateSceneVideo,
@@ -98,19 +101,60 @@ function safeMotionPrompt(scene: Scene): string {
 }
 
 /**
- * Single gated dispatch point for a scene's video (T-02-04): checkCeiling
- * immediately before every call -- including any future retry, since callers
- * always go through this function -- generateVideo (Phase 1, unchanged),
- * then recordSpend immediately after. Every outcome maps to one
- * plain-language sentence; the provider's own blockReason/operation name
- * never crosses into the return value's `message` (T-02-06) -- only into the
- * server console via generateVideo's own logRawResponse call.
+ * Single gated dispatch point for a scene's video, with three gates in a
+ * fixed order -- approval, then per-scene retry cap, then the spend ceiling
+ * -- before any provider work happens. It resolves the scene's image path
+ * itself (from the database, via evaluateVideoDispatch/findStoryWithScenes)
+ * so no caller can supply one (RESEARCH.md Pattern 3) -- closing WINDOWS
+ * ledger item 7, since a restored story's browser state never needs to hold
+ * a filesystem path for this to work. checkCeiling runs immediately before
+ * every dispatch -- including any future retry, since callers always go
+ * through this function -- generateVideo (Phase 1, unchanged), then
+ * recordSpend immediately after. Every outcome maps to one plain-language
+ * sentence; the provider's own blockReason/operation name never crosses
+ * into the return value's `message` (T-02-06) -- only into the server
+ * console via generateVideo's own logRawResponse call.
  */
 export async function generateSceneVideoAction(
   storyId: string,
-  scene: Scene,
-  imagePath: string,
+  sceneNumber: number,
 ): Promise<GenerateSceneVideoResult> {
+  try {
+    storyDir(storyId);
+  } catch {
+    return { ok: false, videoPath: null, videoDataUrl: null, message: "This story could not be found.", durationSeconds: 0 };
+  }
+
+  let story = null;
+  try {
+    story = await findStoryWithScenes(storyId);
+  } catch (err) {
+    console.error(`generateSceneVideoAction: failed to read story ${storyId}`, err);
+  }
+
+  const decision = evaluateVideoDispatch(story, sceneNumber, maxSceneRetryAttempts());
+  if (!decision.allowed) {
+    // A refusal is not a generation failure -- do NOT call updateSceneVideo
+    // with a FAILED status here. Writing FAILED would corrupt the scene's
+    // own status for the status screen built in plan 04-03.
+    return { ok: false, videoPath: null, videoDataUrl: null, message: decision.message, durationSeconds: 0 };
+  }
+
+  const imagePath = decision.imagePath;
+  // camera/environment are absent because they are not Scene columns (only
+  // durationSeconds/storyPurpose/imagePrompt/motionPrompt are persisted) --
+  // an accepted, documented narrowing of the CR-03 guard's phrasing, not a
+  // behaviour regression, since safeMotionPrompt's existing fallbacks
+  // ("a slow, gentle camera drift" / "the scene") apply on this rewrite
+  // path exactly as they already do when a live-generated scene omits them.
+  const scene: Scene = {
+    scene_number: decision.scene.sceneNumber,
+    duration: decision.scene.durationSeconds ?? undefined,
+    story_purpose: decision.scene.storyPurpose,
+    image_prompt: decision.scene.imagePrompt,
+    motion_prompt: decision.scene.motionPrompt,
+  };
+
   const durationSeconds = clampDuration(scene.duration);
   const estimatedUsd = durationSeconds * VIDEO_PRICE_PER_SECOND["720p"];
 
@@ -124,7 +168,7 @@ export async function generateSceneVideoAction(
     // No provider call was dispatched -- nothing was necessarily billed, so
     // no generation record (mirrors the existing decision not to call
     // recordSpend here). The scene's status is still written.
-    await updateSceneVideo(storyId, scene.scene_number, null, SceneAssetStatus.FAILED);
+    await updateSceneVideo(storyId, sceneNumber, null, SceneAssetStatus.FAILED);
     return { ok: false, videoPath: null, videoDataUrl: null, message, durationSeconds };
   }
 
@@ -137,7 +181,7 @@ export async function generateSceneVideoAction(
     console.error(`generateSceneVideoAction: failed to read scene image at ${imagePath}`, err);
     // Still pre-dispatch -- the Veo call never happened, so no generation
     // record; the scene's status is still written.
-    await updateSceneVideo(storyId, scene.scene_number, null, SceneAssetStatus.FAILED);
+    await updateSceneVideo(storyId, sceneNumber, null, SceneAssetStatus.FAILED);
     return {
       ok: false,
       videoPath: null,
@@ -148,7 +192,7 @@ export async function generateSceneVideoAction(
   }
 
   const motionPrompt = safeMotionPrompt(scene);
-  const outputPath = sceneVideoPath(storyId, scene.scene_number);
+  const outputPath = sceneVideoPath(storyId, sceneNumber);
 
   let result;
   try {
@@ -165,8 +209,8 @@ export async function generateSceneVideoAction(
     // Not a classified block -- the call itself failed to complete. Nothing
     // was necessarily billed, so no recordSpend here (mirrors
     // generate-images.ts's identical convention), and no generation record.
-    console.error(`generateSceneVideoAction: scene ${scene.scene_number} threw`, err);
-    await updateSceneVideo(storyId, scene.scene_number, null, SceneAssetStatus.FAILED);
+    console.error(`generateSceneVideoAction: scene ${sceneNumber} threw`, err);
+    await updateSceneVideo(storyId, sceneNumber, null, SceneAssetStatus.FAILED);
     return {
       ok: false,
       videoPath: null,
@@ -177,7 +221,7 @@ export async function generateSceneVideoAction(
   }
 
   recordSpend({
-    call: `scene-video:${storyId}:${scene.scene_number}`,
+    call: `scene-video:${storyId}:${sceneNumber}`,
     model: VIDEO_MODEL_ID,
     estimatedUsd,
     usageMetadata: result.usageMetadata,
@@ -205,15 +249,15 @@ export async function generateSceneVideoAction(
 
   if (result.timedOut) {
     const message = "Generating this scene's video took too long and was stopped. Please try again.";
-    await updateSceneVideo(storyId, scene.scene_number, null, SceneAssetStatus.FAILED);
-    await recordGeneration(storyId, { ...generationRecordBase, ok: false, message }, scene.scene_number);
+    await updateSceneVideo(storyId, sceneNumber, null, SceneAssetStatus.FAILED);
+    await recordGeneration(storyId, { ...generationRecordBase, ok: false, message }, sceneNumber);
     return { ok: false, videoPath: null, videoDataUrl: null, message, durationSeconds };
   }
 
   if (result.blocked || !result.filePath) {
     const message = "The video could not be generated. Please try again.";
-    await updateSceneVideo(storyId, scene.scene_number, null, SceneAssetStatus.FAILED);
-    await recordGeneration(storyId, { ...generationRecordBase, ok: false, message }, scene.scene_number);
+    await updateSceneVideo(storyId, sceneNumber, null, SceneAssetStatus.FAILED);
+    await recordGeneration(storyId, { ...generationRecordBase, ok: false, message }, sceneNumber);
     return { ok: false, videoPath: null, videoDataUrl: null, message, durationSeconds };
   }
 
@@ -224,8 +268,8 @@ export async function generateSceneVideoAction(
   } catch (err) {
     console.error(`generateSceneVideoAction: failed to read generated video at ${result.filePath}`, err);
     const message = "The video was generated but could not be loaded for playback. Please try again.";
-    await updateSceneVideo(storyId, scene.scene_number, null, SceneAssetStatus.FAILED);
-    await recordGeneration(storyId, { ...generationRecordBase, ok: false, message }, scene.scene_number);
+    await updateSceneVideo(storyId, sceneNumber, null, SceneAssetStatus.FAILED);
+    await recordGeneration(storyId, { ...generationRecordBase, ok: false, message }, sceneNumber);
     return {
       ok: false,
       videoPath: result.filePath,
@@ -235,11 +279,11 @@ export async function generateSceneVideoAction(
     };
   }
 
-  await updateSceneVideo(storyId, scene.scene_number, result.filePath, SceneAssetStatus.READY);
+  await updateSceneVideo(storyId, sceneNumber, result.filePath, SceneAssetStatus.READY);
   await recordGeneration(
     storyId,
     { ...generationRecordBase, ok: true, message: "Video generated." },
-    scene.scene_number,
+    sceneNumber,
   );
 
   return {

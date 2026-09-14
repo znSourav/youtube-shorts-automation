@@ -32,6 +32,7 @@ function fixtureRow(overrides: Partial<StoryWithScenes> = {}): StoryWithScenes {
     },
     uniquenessStatus: "ACCEPTED" as StoryWithScenes["uniquenessStatus"],
     regenerationAttempt: 0,
+    imagesApprovedAt: null,
     createdAt: new Date("2026-01-01T00:00:00Z"),
     scenes: [
       {
@@ -45,6 +46,8 @@ function fixtureRow(overrides: Partial<StoryWithScenes> = {}): StoryWithScenes {
         imageStatus: "WAITING",
         videoPath: null,
         videoStatus: "WAITING",
+        imageAttempts: 0,
+        videoAttempts: 0,
       },
     ],
     ...overrides,
@@ -65,6 +68,8 @@ test("three scenes supplied out of order come back ordered 1, 2, 3", () => {
         imageStatus: "WAITING",
         videoPath: null,
         videoStatus: "WAITING",
+        imageAttempts: 0,
+        videoAttempts: 0,
       },
       {
         id: "s1",
@@ -77,6 +82,8 @@ test("three scenes supplied out of order come back ordered 1, 2, 3", () => {
         imageStatus: "WAITING",
         videoPath: null,
         videoStatus: "WAITING",
+        imageAttempts: 0,
+        videoAttempts: 0,
       },
       {
         id: "s2",
@@ -89,6 +96,8 @@ test("three scenes supplied out of order come back ordered 1, 2, 3", () => {
         imageStatus: "WAITING",
         videoPath: null,
         videoStatus: "WAITING",
+        imageAttempts: 0,
+        videoAttempts: 0,
       },
     ],
   });
@@ -119,6 +128,8 @@ test("the fully serialised payload contains no occurrence of the storage root di
         imageStatus: "READY",
         videoPath: "storage/stories/story-view-test/scenes/01/video.mp4",
         videoStatus: "READY",
+        imageAttempts: 0,
+        videoAttempts: 0,
       },
     ],
   });
@@ -146,6 +157,8 @@ test("a ready image status maps to ready and a failed one maps to failed", () =>
         imageStatus: "READY",
         videoPath: null,
         videoStatus: "WAITING",
+        imageAttempts: 0,
+        videoAttempts: 0,
       },
       {
         id: "s2",
@@ -158,6 +171,8 @@ test("a ready image status maps to ready and a failed one maps to failed", () =>
         imageStatus: "FAILED",
         videoPath: null,
         videoStatus: "WAITING",
+        imageAttempts: 0,
+        videoAttempts: 0,
       },
     ],
   });

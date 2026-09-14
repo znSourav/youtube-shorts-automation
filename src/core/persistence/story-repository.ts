@@ -35,6 +35,9 @@ export interface StoryWithScenes {
   styleBible: unknown;
   uniquenessStatus: UniquenessStatus;
   regenerationAttempt: number;
+  // D-01/D-02/APPROVAL-01: null = not approved. See the schema comment on
+  // Story.imagesApprovedAt for the full rationale.
+  imagesApprovedAt: Date | null;
   createdAt: Date;
   scenes: {
     id: string;
@@ -47,6 +50,9 @@ export interface StoryWithScenes {
     imageStatus: string;
     videoPath: string | null;
     videoStatus: string;
+    // D-03: per-scene click-loop guard counters.
+    imageAttempts: number;
+    videoAttempts: number;
   }[];
 }
 
@@ -155,5 +161,18 @@ export async function markUniquenessStatus(
   await client.story.update({
     where: { id: storyId },
     data: { uniquenessStatus: status },
+  });
+}
+
+/**
+ * The only writer of Story.imagesApprovedAt (D-01/D-02, APPROVAL-01) --
+ * records a single, deliberate approval decision covering every scene in
+ * the story. There is deliberately no function to clear this column: nothing
+ * in this phase un-approves a story.
+ */
+export async function markImagesApproved(storyId: string, client: PrismaClient = prisma): Promise<void> {
+  await client.story.update({
+    where: { id: storyId },
+    data: { imagesApprovedAt: new Date() },
   });
 }

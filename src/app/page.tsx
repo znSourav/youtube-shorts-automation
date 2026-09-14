@@ -160,14 +160,16 @@ export default function Home() {
   async function handleGenerateVideo() {
     if (!story || !storyId) return;
     const targetScene = story.scenes[0];
-    const targetStatus = sceneStatuses.find((status) => status.sceneNumber === targetScene.scene_number);
-    if (!targetStatus?.imagePath) return;
 
     setVideoLoading(true);
     setVideoResult(null);
 
     try {
-      const result = await generateSceneVideoAction(storyId, targetScene, targetStatus.imagePath);
+      // generateSceneVideoAction resolves the scene's image path itself from
+      // the database (WINDOWS ledger item 7 closed) -- the browser no longer
+      // needs to hold a filesystem path, so a restored story's video
+      // generation works too.
+      const result = await generateSceneVideoAction(storyId, targetScene.scene_number);
       setVideoResult(result);
     } catch {
       setVideoResult({
@@ -192,12 +194,11 @@ export default function Home() {
     sceneStatuses.every((status) => status.ok && Boolean(status.imageDataUrl));
   const readyCount = sceneStatuses.filter((status) => status.ok && Boolean(status.imageDataUrl)).length;
   const videoSceneNumber = story?.scenes[0]?.scene_number ?? null;
-  const videoTargetStatus = sceneStatuses.find((status) => status.sceneNumber === videoSceneNumber);
-  // A restored scene's imagePath is deliberately null (T-03-15) -- video
-  // generation for it can only run again once a fresh, live generation in
-  // this session produces a real path. allImagesReady alone would otherwise
-  // enable a button that silently does nothing after a restore.
-  const canGenerateVideo = allImagesReady && Boolean(videoTargetStatus?.imagePath);
+  // generateSceneVideoAction resolves the scene's image path itself from the
+  // database, so the browser no longer needs a client-held imagePath to
+  // enable this button (WINDOWS ledger item 7 closed) -- readiness now
+  // depends only on every scene image being ready.
+  const canGenerateVideo = allImagesReady;
 
   return (
     <div className="flex flex-col flex-1 items-center bg-zinc-50 font-sans dark:bg-black">
@@ -251,7 +252,7 @@ export default function Home() {
                     videoState={videoState}
                     videoSrc={isVideoTarget ? videoResult?.videoDataUrl ?? null : null}
                     videoMessage={isVideoTarget ? videoResult?.message ?? null : null}
-                    onRetryVideo={isVideoTarget && Boolean(status?.imagePath) ? handleGenerateVideo : undefined}
+                    onRetryVideo={isVideoTarget ? handleGenerateVideo : undefined}
                     videoDisabled={videoLoading}
                     videoWaitingHint={
                       isVideoTarget
@@ -275,11 +276,9 @@ export default function Home() {
                   : `Generate Video for Scene ${videoSceneNumber ?? 1} (one scene only, for now)`}
               </button>
               <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                {allImagesReady && !canGenerateVideo
-                  ? "This story was restored from an earlier session, so video generation for it isn't available here -- start a new story to try video generation again."
-                  : allImagesReady
-                    ? "This version animates one scene at a time so you can confirm the result before generating a full episode. Generating every scene is coming in a future update."
-                    : `Generate Video will unlock once every scene image is ready (${readyCount} of ${story.scenes.length} ready now).`}
+                {allImagesReady
+                  ? "This version animates one scene at a time so you can confirm the result before generating a full episode. Generating every scene is coming in a future update."
+                  : `Generate Video will unlock once every scene image is ready (${readyCount} of ${story.scenes.length} ready now).`}
               </p>
             </div>
           </div>

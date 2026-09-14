@@ -30,6 +30,10 @@ enum UniquenessStatus {
 
 enum SceneAssetStatus {
   WAITING
+  // Phase 4: written by the video dispatch immediately before the paid Veo
+  // call so a scene interrupted mid-flight is visibly in flight rather than
+  // indistinguishable from never-started.
+  GENERATING
   READY
   FAILED
 }
@@ -62,6 +66,14 @@ model Story {
   styleBible          Json
   uniquenessStatus    UniquenessStatus   @default(PENDING)
   regenerationAttempt Int                @default(0)
+  // D-01/D-02/APPROVAL-01: null = not approved. Set once, for the whole
+  // story, by markImagesApproved (approveStoryImagesAction). Deliberately
+  // NOT reset by a single-scene image regeneration -- D-02's literal
+  // "one Approve action covers every scene" wording, and the UI-SPEC's
+  // state-persistence row, both settle this: the approval flag stays
+  // intact and the change is surfaced to her instead of silently voiding
+  // the approval.
+  imagesApprovedAt    DateTime?
   createdAt           DateTime           @default(now())
   scenes              Scene[]
   generationRecords   GenerationRecord[]
@@ -80,6 +92,11 @@ model Scene {
   imageStatus       SceneAssetStatus   @default(WAITING)
   videoPath         String?
   videoStatus       SceneAssetStatus   @default(WAITING)
+  // D-03: a click-loop guard independent of Phase 5's monthly budget gate --
+  // each scene's own bounded number of image/video generation attempts,
+  // checked at the same server-side dispatch point as the approval gate.
+  imageAttempts     Int                @default(0)
+  videoAttempts     Int                @default(0)
   createdAt         DateTime           @default(now())
   generationRecords GenerationRecord[]
 
