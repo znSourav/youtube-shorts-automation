@@ -36,12 +36,12 @@ Requirements for the 24-hour MVP. Each maps to a roadmap phase.
 ### Image
 
 - [x] **IMAGE-01**: Wife can trigger scene image generation for an approved story and see every scene's image once ready, saved locally with paths recorded in the database
-- [ ] **IMAGE-02**: Wife can regenerate a single scene's image without affecting any other scene's image, video, or status
+- [x] **IMAGE-02**: Wife can regenerate a single scene's image without affecting any other scene's image, video, or status
 - [x] **IMAGE-03**: Every image generation call is recorded with its estimated (and actual, where available) cost
 
 ### Approval
 
-- [ ] **APPROVAL-01**: Video generation cannot start — through any path, not just the visible UI — until the wife has explicitly approved a story's scene images
+- [x] **APPROVAL-01**: Video generation cannot start — through any path, not just the visible UI — until the wife has explicitly approved a story's scene images
 
 ### Video
 
@@ -130,9 +130,9 @@ Explicitly excluded from this project, not just this milestone. Documented to pr
 | SCENE-01 | Phase 2 | Complete |
 | SCENE-02 | Phase 2 | Complete |
 | IMAGE-01 | Phase 3 | Complete |
-| IMAGE-02 | Phase 4 | Pending |
+| IMAGE-02 | Phase 4 | Complete |
 | IMAGE-03 | Phase 3 | Complete |
-| APPROVAL-01 | Phase 4 | Pending |
+| APPROVAL-01 | Phase 4 | Complete |
 | VIDEO-01 | Phase 2 | Complete |
 | VIDEO-02 | Phase 4 | Pending |
 | VIDEO-03 | Phase 3 | Complete |
