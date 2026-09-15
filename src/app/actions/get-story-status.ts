@@ -12,6 +12,19 @@ import { existsSync } from "node:fs";
 import { storyDir } from "../../core/storage-paths.ts";
 import { findStoryWithScenes } from "../../core/persistence/story-repository.ts";
 import { maxSceneRetryAttempts } from "../../core/retry/caps.ts";
+import { checkCeiling, CeilingExceededError } from "../../lib/spend-ledger.ts";
+
+// WR-02 (04-REVIEW.md, third pass): the worst-case per-scene cost this app
+// ever dispatches -- 8 seconds (the longest supported scene, per
+// smoke-test.ts's CHILD_VIDEO_DURATION_SECONDS comment) at the "720p" price
+// (veo.ts's VIDEO_PRICE_PER_SECOND["720p"]), the same conservative estimate
+// used elsewhere. Deliberately hardcoded rather than imported from
+// providers/video/veo.ts: invariant 5 (check-boundaries.ts) restricts
+// importing the video provider to the single allowed dispatch file, and
+// this is only an approximate headroom probe (see below), not the actual
+// per-call estimate a real dispatch would use -- keep this number in sync
+// with veo.ts's own price table if that ever changes.
+const MAX_SCENE_VIDEO_COST_USD = 8 * 0.05;
 
 export interface SceneVideoStatusRow {
   sceneNumber: number;
@@ -20,6 +33,14 @@ export interface SceneVideoStatusRow {
   videoStatus: string;
   videoAttempts: number;
   capReached: boolean;
+  // WR-02: true when this FAILED, not-already-capped scene's failure
+  // coincides with the project's spend ceiling currently having no room
+  // left for even one more scene's worst-case cost. This is a conservative,
+  // approximate signal -- "the whole project's budget is currently
+  // exhausted", not "this specific scene's specific failure was caused by
+  // the ceiling" (no schema column records why a scene failed) -- an
+  // intentional simplification for a Warning-severity UX message.
+  budgetExceeded: boolean;
 }
 
 export interface StoryStatusResult {
@@ -73,13 +94,35 @@ export async function getStoryStatusAction(storyId: string): Promise<StoryStatus
         videoStatus = "FAILED";
       }
 
+      const capReached = scene.videoAttempts >= maxAttempts;
+
+      // WR-02: a FAILED, not-already-capped scene whose failure coincides
+      // with the ledger having no room left for even one more worst-case
+      // scene is treated as a budget dead end, not a transient failure.
+      // checkCeiling throws CeilingExceededError purely to report "no
+      // headroom" -- it is not a real dispatch, so nothing is recorded and
+      // this cannot itself move the project any closer to the ceiling.
+      let budgetExceeded = false;
+      if (videoStatus === "FAILED" && !capReached) {
+        try {
+          checkCeiling(MAX_SCENE_VIDEO_COST_USD);
+        } catch (err) {
+          if (err instanceof CeilingExceededError) {
+            budgetExceeded = true;
+          } else {
+            throw err;
+          }
+        }
+      }
+
       return {
         sceneNumber: scene.sceneNumber,
         storyPurpose: scene.storyPurpose,
         imageStatus: scene.imageStatus,
         videoStatus,
         videoAttempts: scene.videoAttempts,
-        capReached: scene.videoAttempts >= maxAttempts,
+        capReached,
+        budgetExceeded,
       };
     });
 

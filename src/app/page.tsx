@@ -569,6 +569,15 @@ export default function Home() {
               "aren't affected — you can continue with what's ready, or start a new story to try again.";
           }
 
+          // WR-02: a budget-ceiling refusal is a permanent dead end, not a
+          // transient failure -- reuses the "capped" rendering (message-only,
+          // no retry button) rather than the generic failed message + an
+          // always-available "Try again" that would only refuse again.
+          if (row.budgetExceeded && videoState === "failed") {
+            videoState = "capped";
+            videoMessage = "The generation budget has been reached for this project.";
+          }
+
           const existingSrc = prev[row.sceneNumber]?.videoSrc ?? null;
           const videoSrc = videoState === "ready" ? (existingSrc ?? mediaByScene[row.sceneNumber] ?? null) : null;
           next[row.sceneNumber] = { videoState, videoSrc, videoMessage, stuck };
