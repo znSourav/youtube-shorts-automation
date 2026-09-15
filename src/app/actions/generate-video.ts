@@ -30,6 +30,11 @@ const DEFAULT_DURATION_SECONDS = 8;
 // matching smoke-test.ts's own VIDEO_MODEL_ID convention.
 const VIDEO_MODEL_ID = "veo-3.1-lite-generate-preview";
 
+// CR-03 (04-REVIEW.md, second pass): app-wide serialization mutex for every
+// call into dispatchSceneVideo -- see the generateSceneVideoAction wrapper
+// below for the full rationale.
+let videoDispatchChain: Promise<unknown> = Promise.resolve();
+
 // Second-layer guard (CR-03 / T-02-12): buildStoryPrompt's own instruction is
 // the primary control; this catches a pose-change motion_prompt that slipped
 // through anyway, BEFORE a real paid Veo call is dispatched on it.
@@ -115,8 +120,11 @@ function safeMotionPrompt(scene: Scene): string {
  * sentence; the provider's own blockReason/operation name never crosses
  * into the return value's `message` (T-02-06) -- only into the server
  * console via generateVideo's own logRawResponse call.
+ *
+ * Not exported -- every caller goes through generateSceneVideoAction below,
+ * which serializes calls into this function app-wide (CR-03).
  */
-export async function generateSceneVideoAction(
+async function dispatchSceneVideo(
   storyId: string,
   sceneNumber: number,
 ): Promise<GenerateSceneVideoResult> {
@@ -311,4 +319,28 @@ export async function generateSceneVideoAction(
     message: "Video generated.",
     durationSeconds,
   };
+}
+
+// CR-03 (04-REVIEW.md, second pass): serializes every call to
+// dispatchSceneVideo so at most one is ever mid-flight at a time app-wide.
+// batch.ts's own doc comment claims "exactly one paid call in flight at
+// once", but that only held WITHIN one runBatchVideoDispatch call -- an
+// independently-dispatched retrySceneVideoAction call had no coordination
+// with a still-running batch, so two concurrent calls could each pass
+// checkCeiling before either had called recordSpend (a Veo call takes
+// minutes; recordSpend only runs after it resolves). This restores the
+// invariant across every caller, not just within one batch.
+export async function generateSceneVideoAction(
+  storyId: string,
+  sceneNumber: number,
+): Promise<GenerateSceneVideoResult> {
+  const run = videoDispatchChain.then(
+    () => dispatchSceneVideo(storyId, sceneNumber),
+    () => dispatchSceneVideo(storyId, sceneNumber),
+  );
+  videoDispatchChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
 }
