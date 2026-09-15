@@ -562,7 +562,7 @@ export default function Home() {
           // -- an exhausted scene shows the calm amber explanation, never
           // the red failure message, even though its underlying videoStatus
           // is also FAILED.
-          if (row.capReached && videoState !== "ready") {
+          if (row.capReached && videoState === "failed") {
             videoState = "capped";
             videoMessage =
               `This scene's video has reached its limit of ${status.maxAttempts} attempts. The other scenes ` +
