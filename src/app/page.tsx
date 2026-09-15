@@ -486,8 +486,25 @@ export default function Home() {
     if (screen !== "video-status" || !storyId) return;
 
     let cancelled = false;
+    // WR-03: guards against overlapping poll() cycles -- without it, a slow
+    // cycle's loadStoryAction (reading/base64-encoding every ready scene's
+    // media) can still be in flight when the next 3s tick fires, and its
+    // eventually-stale status snapshot can then overwrite a faster, newer
+    // cycle's already-applied state (a scene visibly flips back from
+    // "ready" to "generating" for one tick).
+    let pollInFlight = false;
 
     async function poll() {
+      if (pollInFlight) return;
+      pollInFlight = true;
+      try {
+        await pollOnce();
+      } finally {
+        pollInFlight = false;
+      }
+    }
+
+    async function pollOnce() {
       const currentStoryId = storyId as string;
       const status = await getStoryStatusAction(currentStoryId);
       if (cancelled || !status.ok) return;
