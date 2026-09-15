@@ -16,13 +16,15 @@ import { createStoryAction } from "./actions/create-story.ts";
 import { generateSceneImagesAction, type SceneImageStatus } from "./actions/generate-images.ts";
 import { approveStoryImagesAction } from "./actions/approve-images.ts";
 import { regenerateSceneImageAction } from "./actions/regenerate-scene-image.ts";
-import { loadStoryAction } from "./actions/load-story.ts";
+import { loadStoryAction, type LoadStorySuccess } from "./actions/load-story.ts";
 import { generateAllVideosAction } from "./actions/generate-all-videos.ts";
 import { getStoryStatusAction } from "./actions/get-story-status.ts";
 import { retrySceneVideoAction } from "./actions/retry-scene-video.ts";
 import { openStoryFolderAction, finalizeEpisodeAction } from "./actions/open-story-folder.ts";
+import { listStoriesAction, type LibraryStoryRow } from "./actions/list-stories.ts";
+import MyStoriesList from "@/components/story/MyStoriesList";
 
-type Screen = "create" | "review-story" | "review-images" | "video-status";
+type Screen = "create" | "review-story" | "review-images" | "video-status" | "library";
 
 // D-04/D-05: per-scene video status the browser holds while on Screen 4,
 // keyed by scene number. Populated entirely from getStoryStatusAction's
@@ -118,11 +120,88 @@ export default function Home() {
     finalizedStoryIdRef.current = finalizedStoryId;
   }, [finalizedStoryId]);
 
+  // LIBRARY-01 (soft, plan 04-04): "My Stories" list state.
+  const [libraryStories, setLibraryStories] = useState<LibraryStoryRow[]>([]);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+  const [libraryError, setLibraryError] = useState<string | null>(null);
+  const [openingStoryId, setOpeningStoryId] = useState<string | null>(null);
+
   // VIDEO-03 (soft): true only while the mount-time restore attempt is in
   // flight. The create screen renders nothing while this is true, so a
   // returning wife never sees a flash of the create form before her last
   // story reappears.
   const [restoring, setRestoring] = useState(true);
+
+  // The one restore mapping shared by the mount-time restore effect and the
+  // Library's "open this story" path (handleOpenLibraryStory below) -- so
+  // the two restores cannot drift apart from each other over time.
+  function applyLoadedStory(result: LoadStorySuccess) {
+    setStory(result.data);
+    setStoryId(result.storyId);
+    setUniquenessWarning(null);
+    setSceneStatuses(
+      result.scenes.map((scene) => ({
+        sceneNumber: scene.sceneNumber,
+        // Deliberately null -- loadStoryAction never returns a filesystem
+        // path (T-03-15). A scene restored this way can be viewed but its
+        // video cannot be regenerated until a fresh full generation runs.
+        imagePath: null,
+        imageDataUrl: scene.imageDataUrl,
+        ok: scene.imageStatus === "READY",
+        message: scene.imageStatus === "READY" ? "Image generated." : "This scene's image isn't available.",
+      })),
+    );
+    // A returning wife who already approved this story's images must not
+    // be asked to approve it again -- re-derived from the persisted flag,
+    // never assumed false.
+    setApproved(result.imagesApproved);
+    setApproveError(null);
+
+    if (result.imagesApproved) {
+      // D-05: a returning wife whose story is already approved must be
+      // able to reach Screen 4 again with the same per-scene states, not
+      // just land back on Screen 3 one click away from it. loadStoryAction
+      // already carries each scene's own videoStatus/videoDataUrl, so this
+      // seeds videoScenes directly -- no flash of "waiting" before the
+      // polling effect's own immediate poll() call corrects it further
+      // (e.g. to "capped", which needs getStoryStatusAction's videoAttempts
+      // that loadStoryAction deliberately does not carry).
+      //
+      // `batchDispatched` is deliberately left false here rather than
+      // inferred from whether any scene is already past "waiting": D-04's
+      // batch dispatch is idempotent (it skips already-READY/at-cap
+      // scenes), so re-showing "Generate All Videos" is always safe --
+      // and it is the ONLY way to nudge forward a scene left at WAITING by
+      // an after() callback an earlier session's dev-server restart
+      // dropped mid-batch (04-RESEARCH.md Pitfall 2). Inferring
+      // `batchDispatched: true` from partial progress would hide that
+      // button and strand such a scene with no way forward, since
+      // VideoStatusScreen has no per-scene "start" action -- only retry.
+      const initialVideoScenes: Record<number, VideoSceneEntry> = {};
+      for (const scene of result.scenes) {
+        const videoState: SceneVideoState =
+          scene.videoStatus === "READY"
+            ? "ready"
+            : scene.videoStatus === "FAILED"
+              ? "failed"
+              : scene.videoStatus === "GENERATING"
+                ? "generating"
+                : "waiting";
+        initialVideoScenes[scene.sceneNumber] = {
+          videoState,
+          videoSrc: videoState === "ready" ? scene.videoDataUrl : null,
+          videoMessage: videoState === "failed" ? "This scene's video could not be created." : null,
+        };
+      }
+      setVideoScenes(initialVideoScenes);
+      setBatchDispatched(false);
+      setBatchStarting(false);
+      setBatchError(null);
+      setScreen("video-status");
+    } else {
+      setScreen("review-images");
+    }
+  }
 
   useEffect(() => {
     const storedId = window.localStorage.getItem(LAST_STORY_ID_KEY);
@@ -144,72 +223,7 @@ export default function Home() {
         return;
       }
 
-      setStory(result.data);
-      setStoryId(result.storyId);
-      setUniquenessWarning(null);
-      setSceneStatuses(
-        result.scenes.map((scene) => ({
-          sceneNumber: scene.sceneNumber,
-          // Deliberately null -- loadStoryAction never returns a filesystem
-          // path (T-03-15). A scene restored this way can be viewed but its
-          // video cannot be regenerated until a fresh full generation runs.
-          imagePath: null,
-          imageDataUrl: scene.imageDataUrl,
-          ok: scene.imageStatus === "READY",
-          message: scene.imageStatus === "READY" ? "Image generated." : "This scene's image isn't available.",
-        })),
-      );
-      // A returning wife who already approved this story's images must not
-      // be asked to approve it again -- re-derived from the persisted flag,
-      // never assumed false.
-      setApproved(result.imagesApproved);
-      setApproveError(null);
-
-      if (result.imagesApproved) {
-        // D-05: a returning wife whose story is already approved must be
-        // able to reach Screen 4 again with the same per-scene states, not
-        // just land back on Screen 3 one click away from it. loadStoryAction
-        // already carries each scene's own videoStatus/videoDataUrl, so this
-        // seeds videoScenes directly -- no flash of "waiting" before the
-        // polling effect's own immediate poll() call corrects it further
-        // (e.g. to "capped", which needs getStoryStatusAction's videoAttempts
-        // that loadStoryAction deliberately does not carry).
-        //
-        // `batchDispatched` is deliberately left false here rather than
-        // inferred from whether any scene is already past "waiting": D-04's
-        // batch dispatch is idempotent (it skips already-READY/at-cap
-        // scenes), so re-showing "Generate All Videos" is always safe --
-        // and it is the ONLY way to nudge forward a scene left at WAITING by
-        // an after() callback an earlier session's dev-server restart
-        // dropped mid-batch (04-RESEARCH.md Pitfall 2). Inferring
-        // `batchDispatched: true` from partial progress would hide that
-        // button and strand such a scene with no way forward, since
-        // VideoStatusScreen has no per-scene "start" action -- only retry.
-        const initialVideoScenes: Record<number, VideoSceneEntry> = {};
-        for (const scene of result.scenes) {
-          const videoState: SceneVideoState =
-            scene.videoStatus === "READY"
-              ? "ready"
-              : scene.videoStatus === "FAILED"
-                ? "failed"
-                : scene.videoStatus === "GENERATING"
-                  ? "generating"
-                  : "waiting";
-          initialVideoScenes[scene.sceneNumber] = {
-            videoState,
-            videoSrc: videoState === "ready" ? scene.videoDataUrl : null,
-            videoMessage: videoState === "failed" ? "This scene's video could not be created." : null,
-          };
-        }
-        setVideoScenes(initialVideoScenes);
-        setBatchDispatched(false);
-        setBatchStarting(false);
-        setBatchError(null);
-        setScreen("video-status");
-      } else {
-        setScreen("review-images");
-      }
-
+      applyLoadedStory(result);
       setRestoring(false);
     })();
 
@@ -255,8 +269,80 @@ export default function Home() {
     setOpeningFolder(false);
     setOutputMessage(null);
     setFinalizedStoryId(null);
+    setLibraryError(null);
+    setOpeningStoryId(null);
     setScreen("review-story");
     window.localStorage.setItem(LAST_STORY_ID_KEY, result.storyId);
+  }
+
+  // LIBRARY-01: clears the current story and returns to the create screen,
+  // without submitting anything -- the "Create New Story" control on both
+  // the Library screen and the create screen's own nav link route here.
+  function handleReturnToCreate() {
+    window.localStorage.removeItem(LAST_STORY_ID_KEY);
+    setStory(null);
+    setStoryId(null);
+    setUniquenessWarning(null);
+    setSceneStatuses([]);
+    setImagesError(null);
+    setApproved(false);
+    setApproveError(null);
+    setApproveLoading(false);
+    setRegeneratingScene(null);
+    setImageCapMessages({});
+    setPostApprovalNotice(null);
+    setVideoScenes({});
+    setBatchDispatched(false);
+    setBatchStarting(false);
+    setBatchError(null);
+    setRetryingScene(null);
+    generatingStartedAtRef.current = {};
+    setOpeningFolder(false);
+    setOutputMessage(null);
+    setFinalizedStoryId(null);
+    setLibraryError(null);
+    setOpeningStoryId(null);
+    setScreen("create");
+  }
+
+  // LIBRARY-01: opens the Library, replacing (never appending to)
+  // libraryStories on every call -- the second half of the no-duplicates
+  // clause (the first half is listStoriesWithSceneCounts' own query shape).
+  async function handleOpenLibrary() {
+    setScreen("library");
+    setLibraryError(null);
+    setLibraryLoading(true);
+
+    try {
+      const result = await listStoriesAction();
+      setLibraryStories(result.stories);
+      if (!result.ok) {
+        setLibraryError(result.message);
+      }
+    } finally {
+      setLibraryLoading(false);
+    }
+  }
+
+  // LIBRARY-01: opens a Library row through the same restore mapping the
+  // mount effect uses (applyLoadedStory), so a story opened from the
+  // Library and a story restored on page load land in exactly the same
+  // place with exactly the same state.
+  async function handleOpenLibraryStory(storyId: string) {
+    if (openingStoryId !== null) return;
+    setOpeningStoryId(storyId);
+
+    try {
+      const result = await loadStoryAction(storyId);
+      if (result.ok) {
+        applyLoadedStory(result);
+        window.localStorage.setItem(LAST_STORY_ID_KEY, result.storyId);
+      } else {
+        setLibraryError("That story could not be opened. Please try another one.");
+      }
+    } finally {
+      setOpeningStoryId(null);
+    }
   }
 
   async function handleGenerateImages() {
@@ -532,12 +618,32 @@ export default function Home() {
     <div className="flex flex-col flex-1 items-center bg-zinc-50 font-sans dark:bg-black">
       <main className="flex flex-1 w-full max-w-2xl flex-col gap-8 px-6 py-16">
         {!restoring && screen === "create" && (
-          <CreateStoryForm
-            stylePresets={STYLE_PRESETS}
-            moodOptions={MOOD_OPTIONS}
-            loading={createLoading}
-            error={createError}
-            onSubmit={handleCreateStory}
+          <div className="flex flex-col gap-6">
+            <button
+              type="button"
+              onClick={handleOpenLibrary}
+              className="self-end text-sm text-zinc-600 underline-offset-4 hover:underline dark:text-zinc-400"
+            >
+              My Stories
+            </button>
+            <CreateStoryForm
+              stylePresets={STYLE_PRESETS}
+              moodOptions={MOOD_OPTIONS}
+              loading={createLoading}
+              error={createError}
+              onSubmit={handleCreateStory}
+            />
+          </div>
+        )}
+
+        {screen === "library" && (
+          <MyStoriesList
+            stories={libraryStories}
+            loading={libraryLoading}
+            error={libraryError}
+            openingStoryId={openingStoryId}
+            onOpenStory={handleOpenLibraryStory}
+            onCreateStory={handleReturnToCreate}
           />
         )}
 

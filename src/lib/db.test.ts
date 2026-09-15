@@ -6,6 +6,7 @@ import {
   saveStoryWithScenes,
   findStoryWithScenes,
   listAcceptedFingerprints,
+  listStoriesWithSceneCounts,
   UniquenessStatus,
 } from "../core/persistence/story-repository.ts";
 import type { StoryDirectorOutput } from "../core/story/schema.ts";
@@ -188,6 +189,47 @@ test("a Scene's video status and path written before a second client is construc
     assert.equal(scene.videoPath, "storage/stories/story-db-test-video/scenes/01/video.mp4");
   } finally {
     await reader.$disconnect();
+  }
+});
+
+test("listStoriesWithSceneCounts returns exactly one row per seeded story, newest first, with correct scene counts, and is stable across two calls (LIBRARY-01's no-duplicates clause)", async () => {
+  const url = tmpDatabaseUrl();
+  const client = createPrismaClient(url);
+  try {
+    function outputWithScenes(title: string, sceneCount: number): StoryDirectorOutput {
+      const base = fixtureOutput({ title });
+      return {
+        ...base,
+        scenes: Array.from({ length: sceneCount }, (_, i) => ({
+          scene_number: i + 1,
+          duration: 4,
+          story_purpose: `scene ${i + 1}`,
+          image_prompt: `image prompt ${i + 1}`,
+          motion_prompt: `motion prompt ${i + 1}`,
+        })),
+      };
+    }
+
+    await saveStoryWithScenes("story-library-a", outputWithScenes("Library Story A", 2), UniquenessStatus.ACCEPTED, 0, client);
+    await saveStoryWithScenes("story-library-b", outputWithScenes("Library Story B", 5), UniquenessStatus.ACCEPTED, 0, client);
+    await saveStoryWithScenes("story-library-c", outputWithScenes("Library Story C", 3), UniquenessStatus.ACCEPTED, 0, client);
+
+    const firstCall = await listStoriesWithSceneCounts(client);
+    const secondCall = await listStoriesWithSceneCounts(client);
+
+    for (const rows of [firstCall, secondCall]) {
+      assert.equal(rows.length, 3, "expected exactly three rows");
+      const ids = rows.map((r) => r.id);
+      assert.equal(new Set(ids).size, 3, "expected unique ids");
+      assert.deepEqual(ids, ["story-library-c", "story-library-b", "story-library-a"], "expected newest-first order");
+
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      assert.equal(byId.get("story-library-a")!.scenes.length, 2);
+      assert.equal(byId.get("story-library-b")!.scenes.length, 5);
+      assert.equal(byId.get("story-library-c")!.scenes.length, 3);
+    }
+  } finally {
+    await client.$disconnect();
   }
 });
 

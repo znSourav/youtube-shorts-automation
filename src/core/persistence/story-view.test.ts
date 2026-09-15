@@ -1,8 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { toLoadedStory } from "./story-view.ts";
-import type { StoryWithScenes } from "./story-repository.ts";
+import { toLoadedStory, computeLibraryStatus, toLibraryRow, type LibrarySceneSummary } from "./story-view.ts";
+import type { StoryWithScenes, LibraryStorySource } from "./story-repository.ts";
+
+const MAX_ATTEMPTS = 3;
+
+function sceneSummary(overrides: Partial<LibrarySceneSummary> = {}): LibrarySceneSummary {
+  return {
+    imageStatus: "READY",
+    videoStatus: "WAITING",
+    videoAttempts: 0,
+    ...overrides,
+  };
+}
 
 // Hand-built row fixtures only -- no database, no filesystem (story-view.ts
 // is a pure mapper).
@@ -189,4 +200,89 @@ test("the character and style bibles round-trip out of their Json columns into t
   assert.deepEqual(loaded.data.style_bible, row.styleBible);
   assert.equal(loaded.data.story.title, row.title);
   assert.equal(loaded.storyId, row.id);
+});
+
+// --- computeLibraryStatus (LIBRARY-01) -------------------------------------
+
+test("all videos ready gives Complete", () => {
+  const scenes = [sceneSummary({ videoStatus: "READY" }), sceneSummary({ videoStatus: "READY" })];
+  assert.equal(computeLibraryStatus(new Date(), scenes, MAX_ATTEMPTS), "Complete");
+});
+
+test("one scene failed at the cap with a second scene generating gives Generating Videos, not Needs Attention", () => {
+  const scenes = [
+    sceneSummary({ videoStatus: "FAILED", videoAttempts: MAX_ATTEMPTS }),
+    sceneSummary({ videoStatus: "GENERATING" }),
+  ];
+  assert.equal(computeLibraryStatus(new Date(), scenes, MAX_ATTEMPTS), "Generating Videos");
+});
+
+test("one scene failed at the cap with nothing generating gives Needs Attention", () => {
+  const scenes = [
+    sceneSummary({ videoStatus: "FAILED", videoAttempts: MAX_ATTEMPTS }),
+    sceneSummary({ videoStatus: "READY" }),
+  ];
+  assert.equal(computeLibraryStatus(new Date(), scenes, MAX_ATTEMPTS), "Needs Attention");
+});
+
+test("one scene failed but below the cap with approval set gives Generating Videos", () => {
+  const scenes = [
+    sceneSummary({ videoStatus: "FAILED", videoAttempts: MAX_ATTEMPTS - 1 }),
+    sceneSummary({ videoStatus: "WAITING" }),
+  ];
+  assert.equal(computeLibraryStatus(new Date(), scenes, MAX_ATTEMPTS), "Generating Videos");
+});
+
+test("approval set with every scene waiting gives Generating Videos", () => {
+  const scenes = [sceneSummary({ videoStatus: "WAITING" }), sceneSummary({ videoStatus: "WAITING" })];
+  assert.equal(computeLibraryStatus(new Date(), scenes, MAX_ATTEMPTS), "Generating Videos");
+});
+
+test("approval null with every image ready gives Ready to Approve", () => {
+  const scenes = [sceneSummary({ imageStatus: "READY" }), sceneSummary({ imageStatus: "READY" })];
+  assert.equal(computeLibraryStatus(null, scenes, MAX_ATTEMPTS), "Ready to Approve");
+});
+
+test("approval null with one image waiting gives Draft", () => {
+  const scenes = [sceneSummary({ imageStatus: "READY" }), sceneSummary({ imageStatus: "WAITING" })];
+  assert.equal(computeLibraryStatus(null, scenes, MAX_ATTEMPTS), "Draft");
+});
+
+test("an empty scene array gives Draft", () => {
+  assert.equal(computeLibraryStatus(null, [], MAX_ATTEMPTS), "Draft");
+});
+
+// --- toLibraryRow -----------------------------------------------------------
+
+function librarySourceFixture(overrides: Partial<LibraryStorySource> = {}): LibraryStorySource {
+  return {
+    id: "story-library-test",
+    title: "Library Test Story",
+    createdAt: new Date("2026-02-01T00:00:00Z"),
+    imagesApprovedAt: null,
+    scenes: [sceneSummary(), sceneSummary()],
+    ...overrides,
+  };
+}
+
+test("toLibraryRow's sceneCount equals the scenes array length", () => {
+  const row = librarySourceFixture({ scenes: [sceneSummary(), sceneSummary(), sceneSummary()] });
+  const result = toLibraryRow(row, MAX_ATTEMPTS);
+  assert.equal(result.sceneCount, 3);
+});
+
+test("toLibraryRow's createdAt is a string that round-trips through new Date(...) to the original instant", () => {
+  const original = new Date("2026-02-01T12:34:56Z");
+  const row = librarySourceFixture({ createdAt: original });
+  const result = toLibraryRow(row, MAX_ATTEMPTS);
+  assert.equal(typeof result.createdAt, "string");
+  assert.equal(new Date(result.createdAt).getTime(), original.getTime());
+});
+
+test("toLibraryRow's returned object carries no key name that matches /path/i", () => {
+  const row = librarySourceFixture();
+  const result = toLibraryRow(row, MAX_ATTEMPTS);
+  for (const key of Object.keys(result)) {
+    assert.ok(!/path/i.test(key), `key "${key}" should not match /path/i`);
+  }
 });

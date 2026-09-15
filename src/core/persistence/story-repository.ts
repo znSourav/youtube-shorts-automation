@@ -64,6 +64,25 @@ export interface AcceptedFingerprint {
 }
 
 /**
+ * The narrow shape listStoriesWithSceneCounts below selects -- five things
+ * per story (id, title, createdAt, imagesApprovedAt, and each scene's
+ * imageStatus/videoStatus/videoAttempts), nothing more. No scene id, no
+ * image path, no video path -- the Library needs a count and three
+ * status-shaped values per scene and nothing else (LIBRARY-01).
+ */
+export interface LibraryStorySource {
+  id: string;
+  title: string;
+  createdAt: Date;
+  imagesApprovedAt: Date | null;
+  scenes: {
+    imageStatus: string;
+    videoStatus: string;
+    videoAttempts: number;
+  }[];
+}
+
+/**
  * Writes the Story row plus one Scene row per entry in output.scenes inside
  * a single transaction, so a partial story can never exist. Routes storyId
  * through storyDir() before the write -- an id that cannot produce a valid
@@ -161,6 +180,36 @@ export async function markUniquenessStatus(
   await client.story.update({
     where: { id: storyId },
     data: { uniquenessStatus: status },
+  });
+}
+
+/**
+ * Returns every story (newest first) with the five fields the Library
+ * screen needs to render its list and compute its status label (LIBRARY-01).
+ * Mirrors listAcceptedFingerprints' findMany+select shape exactly, with a
+ * nested scene selection instead of a flat one.
+ *
+ * The no-duplicates clause needs no defensive work: Story.id is the table's
+ * primary key and this is a single findMany over that table with a nested
+ * scene selection rather than a flat join, so one row per story is
+ * structural, not a query-shape guarantee that could quietly break.
+ */
+export async function listStoriesWithSceneCounts(client: PrismaClient = prisma): Promise<LibraryStorySource[]> {
+  return client.story.findMany({
+    select: {
+      id: true,
+      title: true,
+      createdAt: true,
+      imagesApprovedAt: true,
+      scenes: {
+        select: {
+          imageStatus: true,
+          videoStatus: true,
+          videoAttempts: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
   });
 }
 
