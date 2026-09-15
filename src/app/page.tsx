@@ -396,23 +396,25 @@ export default function Home() {
         setImageCapMessages((prev) => ({ ...prev, [sceneNumber]: result.capMessage as string }));
       }
 
-      if (result.ok) {
-        // Replace only the matching scene's entry -- every other element
-        // stays referentially and structurally untouched.
-        setSceneStatuses((prev) =>
-          prev.map((status) =>
-            status.sceneNumber === sceneNumber
-              ? {
-                  sceneNumber,
-                  imagePath: null,
-                  imageDataUrl: result.imageDataUrl,
-                  ok: true,
-                  message: result.message,
-                }
-              : status,
-          ),
-        );
-      }
+      // CR-01 (04-REVIEW.md, second pass): reflect every outcome, not just
+      // the cap-refusal and success cases -- a genuine mid-flight failure
+      // (result.ok === false, result.capMessage === null) previously left
+      // sceneStatuses untouched, so the UI kept showing the old "ready"
+      // state and image while the DB had already recorded imageStatus =
+      // FAILED, silently stranding the wife with no error and no signal.
+      setSceneStatuses((prev) =>
+        prev.map((status) =>
+          status.sceneNumber === sceneNumber
+            ? {
+                sceneNumber,
+                imagePath: null,
+                imageDataUrl: result.ok ? result.imageDataUrl : null,
+                ok: result.ok,
+                message: result.message,
+              }
+            : status,
+        ),
+      );
 
       if (result.approvalNotice) {
         setPostApprovalNotice(result.approvalNotice);
