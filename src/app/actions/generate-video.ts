@@ -173,13 +173,6 @@ export async function generateSceneVideoAction(
     return { ok: false, videoPath: null, videoDataUrl: null, message, durationSeconds };
   }
 
-  // D-03: the increment sits at the money-consuming boundary on purpose. A
-  // scene refused by the ceiling above has not cost anything and must not
-  // consume one of its own limited attempts, but a scene that reached
-  // dispatch must consume one even if the process dies mid-call -- that
-  // asymmetry is exactly what D-03's anti-click-loop guard is for.
-  await incrementVideoAttempt(storyId, sceneNumber);
-
   // Phase 4 (04-03): writes GENERATING before any file read or provider
   // dispatch, so a scene interrupted mid-flight by a dev-server recompile
   // (04-RESEARCH.md Pitfall 2) is visibly "in flight" on the status screen
@@ -196,7 +189,8 @@ export async function generateSceneVideoAction(
   } catch (err) {
     console.error(`generateSceneVideoAction: failed to read scene image at ${imagePath}`, err);
     // Still pre-dispatch -- the Veo call never happened, so no generation
-    // record; the scene's status is still written.
+    // record, and (WR-02 fix) no attempt consumed either: this is a purely
+    // local failure that never reached the money-consuming boundary below.
     await updateSceneVideo(storyId, sceneNumber, null, SceneAssetStatus.FAILED);
     return {
       ok: false,
@@ -209,6 +203,14 @@ export async function generateSceneVideoAction(
 
   const motionPrompt = safeMotionPrompt(scene);
   const outputPath = sceneVideoPath(storyId, sceneNumber);
+
+  // D-03 (WR-02 fix): the increment now sits immediately before the actual
+  // Veo dispatch, not before the pre-dispatch image read above. A scene
+  // refused by the ceiling check above, or one whose local image read fails
+  // before this point, has not cost anything and must not consume one of
+  // its limited attempts -- only a scene that reaches this real dispatch
+  // boundary must consume one, even if the process dies mid-call.
+  await incrementVideoAttempt(storyId, sceneNumber);
 
   let result;
   try {
