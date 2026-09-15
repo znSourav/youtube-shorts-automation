@@ -46,9 +46,9 @@ Requirements for the 24-hour MVP. Each maps to a roadmap phase.
 ### Video
 
 - [x] **VIDEO-01**: Wife can animate a single approved scene image into a 9:16, 720p video clip via Veo 3.1 Lite and confirm the result end-to-end before committing to a full episode
-- [ ] **VIDEO-02**: Wife can generate videos for every approved scene in an episode, with each scene tracked as an independent job showing its own status
+- [x] **VIDEO-02**: Wife can generate videos for every approved scene in an episode, with each scene tracked as an independent job showing its own status
 - [x] **VIDEO-03**: Closing and reopening the browser, or restarting the app, does not lose track of in-progress or completed video jobs
-- [ ] **VIDEO-04**: Wife can retry a single failed scene's video without regenerating any other scene, and the retry counts toward that scene's retry limit
+- [x] **VIDEO-04**: Wife can retry a single failed scene's video without regenerating any other scene, and the retry counts toward that scene's retry limit
 
 ### Budget
 
@@ -82,7 +82,7 @@ Requirements for the 24-hour MVP. Each maps to a roadmap phase.
 
 ### UI
 
-- [ ] **UI-01**: A non-technical user can complete the full flow (create story → review story → review images → approve → generate videos → open output) using only plain-language buttons and status text, with errors that explain what to do next rather than developer/API terminology
+- [x] **UI-01**: A non-technical user can complete the full flow (create story → review story → review images → approve → generate videos → open output) using only plain-language buttons and status text, with errors that explain what to do next rather than developer/API terminology
 
 ## v2 Requirements
 
@@ -134,9 +134,9 @@ Explicitly excluded from this project, not just this milestone. Documented to pr
 | IMAGE-03 | Phase 3 | Complete |
 | APPROVAL-01 | Phase 4 | Complete |
 | VIDEO-01 | Phase 2 | Complete |
-| VIDEO-02 | Phase 4 | Pending |
+| VIDEO-02 | Phase 4 | Complete |
 | VIDEO-03 | Phase 3 | Complete |
-| VIDEO-04 | Phase 4 | Pending |
+| VIDEO-04 | Phase 4 | Complete |
 | BUDGET-01 | Phase 5 | Pending |
 | BUDGET-02 | Phase 5 | Pending |
 | BUDGET-03 | Phase 5 | Pending |
@@ -149,7 +149,7 @@ Explicitly excluded from this project, not just this milestone. Documented to pr
 | OUTPUT-01 | Phase 4 | Pending |
 | OUTPUT-02 | Phase 6 | Pending |
 | OUTPUT-03 | Phase 4 | Pending |
-| UI-01 | Phase 4 | Pending |
+| UI-01 | Phase 4 | Complete |
 
 **Coverage:** 33/33 v1 requirements mapped. No orphans, no duplicates.
 

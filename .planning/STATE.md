@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 04
 current_phase_name: Wife-Facing Review & Approval Flow
 status: executing
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-09-14T16:12:19.403Z"
+stopped_at: Completed 04-03-PLAN.md
+last_updated: "2026-09-15T13:00:40.695Z"
 last_activity: 2026-09-14
 last_activity_desc: Phase 04 execution started
-state_head: 1984b62f1b7890dc1f7594a0d314bdc349e4f973
+state_head: 102e06dc70096cef1bcb21c041bc943ad1830ae3
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 16
-  completed_plans: 14
+  completed_plans: 15
   percent: 50
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-14)
 ## Current Position
 
 Phase: 04 (Wife-Facing Review & Approval Flow) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-09-14 — Phase 04 execution started
 
@@ -76,6 +76,7 @@ Progress: [█████░░░░░] 50%
 | Phase 03 P04 | 35min | 2 tasks | 5 files |
 | Phase 04 P01 | 19min | 3 tasks | 20 files |
 | Phase 04 P02 | 12min | 3 tasks | 5 files |
+| Phase 04 P03 | ~21h wall-clock (checkpoint-paused; short active work) | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -121,6 +122,9 @@ Recent decisions affecting current work:
 - [Phase 04]: [Phase 04, 04-01] safeMotionPrompt's camera/environment fallback narrowing accepted as documented, not a regression: Scene has no camera/environment columns so the server-resolved rewrite path always uses the existing fallback phrasing
 - [Phase 04]: [Phase 04, 04-01] evaluateImageRegeneration deliberately has no approval check (D-02 scopes approval to video only); alreadyApproved returned so plan 04-02 can surface a heads-up rather than silently voiding approval
 - [Phase 04]: [Phase 04, 04-02] Task 3's live-browser checkpoint was verified by the orchestrator (browser tool + source reading substituting for a click-through) rather than the wife -- no real story has all-ready images and a live approval would cost ~$0.40 against $0.1630 remaining headroom; all 7 items PASS, a live human click-through is still recommended once a real story reaches full image-ready state
+- [Phase 04]: [Phase 4, 04-03] Task 3's live-browser checkpoint verified by the orchestrator via source reading (StoryReview.tsx/VideoStatusScreen.tsx/page.tsx), not a live wife click-through -- no real story has all-ready images and a real click-through risks an accidental real spend against $0.1630 remaining dev-ceiling headroom; 7 of 8 checklist items PASSED
+- [Phase 04]: [Phase 4, 04-03] Item 7 of the Task 3 checklist (reload restores Screen 4, not Screen 3, for an already-approved story) genuinely FAILED on first check -- the restore-on-mount effect in page.tsx unconditionally landed on review-images -- and was fixed (commit 5c0b06d) to branch on result.imagesApproved and seed videoScenes from the loaded story
+- [Phase 04]: [Phase 4, 04-03] batchDispatched is deliberately left false on restore rather than inferred true from partial per-scene progress -- D-04's batch dispatch is idempotent so re-showing the button is always safe, whereas inferring true would strand a scene left at WAITING by a dropped after() callback with no way to restart it
 
 ### Pending Todos
 
@@ -151,6 +155,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-14T16:12:19.093Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-09-15T13:00:40.397Z
+Stopped at: Completed 04-03-PLAN.md
 Resume file: None
