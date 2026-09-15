@@ -79,6 +79,21 @@ test("evaluateVideoDispatch grants an approved story with a READY scene, handing
   }
 });
 
+test("evaluateVideoDispatch refuses a scene whose video is already READY (fourth-pass review CR-01: no caller may re-dispatch an already-succeeded scene)", () => {
+  const story = storyFixture({
+    scenes: [sceneFixture(1, { videoStatus: "READY", videoPath: "storage/stories/fixture-story/scenes/01/video.mp4" })],
+  });
+  const decision = evaluateVideoDispatch(story, 1, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, false);
+  assert.equal(!decision.allowed && decision.message, "This scene's video has already been generated.");
+});
+
+test("evaluateVideoDispatch still grants a scene whose video is GENERATING (the legitimate stuck-retry path must remain open)", () => {
+  const story = storyFixture({ scenes: [sceneFixture(1, { videoStatus: "GENERATING" })] });
+  const decision = evaluateVideoDispatch(story, 1, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, true);
+});
+
 test("evaluateVideoDispatch refuses an unknown scene number", () => {
   const story = storyFixture();
   const decision = evaluateVideoDispatch(story, 99, MAX_ATTEMPTS);

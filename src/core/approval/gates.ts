@@ -40,8 +40,19 @@ export type BatchDispatchDecision = GateRefusal | { allowed: true; sceneNumbers:
  *   2. story not approved (APPROVAL-01's "through any path" gate)
  *   3. scene not found
  *   4. scene's video-attempt cap reached (D-03)
- *   5. scene's image isn't ready
- *   6. grant, handing back the scene row and its own server-resolved
+ *   5. scene's video is already READY (fourth-pass review CR-01: a scene
+ *      that has already succeeded must never be re-dispatched by any
+ *      caller -- batch or single-scene retry -- since two overlapping
+ *      "Generate All Videos" batches for the same story, each computing
+ *      their own eligibility snapshot at a different moment, can otherwise
+ *      both reach a scene the other has already finished, re-billing it
+ *      for no benefit and risking a spurious downgrade to FAILED if the
+ *      redundant call trips the ceiling). Deliberately does NOT refuse
+ *      "GENERATING" -- that status is what a legitimate stuck-scene retry
+ *      (a dropped after() callback, 04-RESEARCH.md Pitfall 2) must still be
+ *      able to re-dispatch through this same gate.
+ *   6. scene's image isn't ready
+ *   7. grant, handing back the scene row and its own server-resolved
  *      imagePath (RESEARCH.md Pattern 3 -- never a client-supplied path)
  */
 export function evaluateVideoDispatch(
@@ -72,6 +83,10 @@ export function evaluateVideoDispatch(
         `This scene's video has reached its limit of ${maxVideoAttempts} attempts. The other scenes aren't ` +
         "affected — you can continue with what's ready, or start a new story to try again.",
     };
+  }
+
+  if (scene.videoStatus === "READY") {
+    return { allowed: false, message: "This scene's video has already been generated." };
   }
 
   if (scene.imageStatus !== "READY" || scene.imagePath === null) {
