@@ -2,89 +2,105 @@
 phase: 04-wife-facing-review-approval-flow
 fixed_at: 2026-09-16T00:00:00Z
 review_path: .planning/phases/04-wife-facing-review-approval-flow/04-REVIEW.md
-iteration: 5
+iteration: 6
 findings_in_scope: 2
-fixed: 2
-skipped: 0
-status: all_fixed
+fixed: 1
+skipped: 1
+status: partial
 ---
 
 # Phase 04: Code Review Fix Report
 
 **Fixed at:** 2026-09-16T00:00:00Z
 **Source review:** .planning/phases/04-wife-facing-review-approval-flow/04-REVIEW.md
-**Iteration:** 5 (final)
+**Iteration:** 6 (final -- this was the sixth and last review-fix cycle for this phase)
 
 **Summary:**
-- Findings in scope: 2 (CR-01, WR-01)
-- Fixed: 2
-- Skipped: 0
+- Findings in scope: 2 (1 Blocker/Critical, 1 Warning)
+- Fixed: 1 (the Blocker)
+- Skipped: 1 (the Warning, deliberately deferred and documented)
 
-Iterations 1-4's seventeen findings were fixed and re-confirmed correct in separate, earlier commits.
-This pass's fixes were applied directly by the orchestrator (not a dispatched fixer agent), matching
-the fourth pass's approach given the design nuance involved.
+Iterations 1-5's nineteen findings were fixed and re-confirmed correct in separate, earlier commits.
+This pass's fix was applied directly by the orchestrator.
 
-## Fixed Issues
+## Fixed Issue
 
-### CR-01: `recordSpend` in `dispatchSceneVideo` had no try/catch, unlike every other write in the function
+### CR-01 (BLOCKER): A successfully-generated, already-paid-for video was discarded when its immediate playback-preview readback failed
 
 **Files modified:** `src/app/actions/generate-video.ts`
-**Commit:** `c076f81`
+**Commit:** `651e914`
 
-**Applied fix:** Wrapped the `recordSpend(...)` call in a try/catch. `spend-ledger.ts`'s own
-`withLedgerFileLock` can genuinely throw (a lock-acquisition timeout, or a non-`EEXIST` filesystem
-error) — its own comment documents both as real possibilities ("another process may be mid-write, or
-a stale lock file was left behind by a crash"). Before this fix, an uncaught throw here would have
-propagated out of `dispatchSceneVideo` entirely: the scene's status would never advance past
-`GENERATING`, the just-completed (and already-billed) Veo call's cost would never be recorded, and —
-because `evaluateVideoDispatch` deliberately allows re-dispatching a `GENERATING` scene (to preserve
-the legitimate stuck-scene retry path established across the third and fourth passes) — her own "Try
-again" affordance could dispatch a second real, billed Veo call for the same scene with the first
-one's cost silently missing from the ledger entirely.
+**Applied fix:** When `generateVideo()` succeeds (Veo genuinely writes `result.filePath` to disk and the
+call is billed) but the immediate `readFileSync(result.filePath)` used to build this response's inline
+`data:` URL preview throws, the code previously called `updateSceneVideo(storyId, sceneNumber, null,
+SceneAssetStatus.FAILED)` — discarding the real, already-paid-for video the success branch four lines
+below would have kept. This orphaned the clip: `exportEpisodeAssets`, `getStoryStatusAction`, and
+`loadStoryAction` all gate on `videoStatus === "READY"`, so the finished video would never reach the
+CapCut output folder even though the file was genuinely on disk; and a "Try again" click would dispatch
+a brand-new paid Veo call and consume one of the scene's three limited retry attempts, for a failure
+that had nothing to do with whether the generation itself succeeded.
 
-The fix deliberately does **not** treat a `recordSpend` failure as a generation failure: the Veo call
-already succeeded and already cost real money by that point regardless of whether the bookkeeping
-write lands, so the scene still advances to `READY` exactly as it would have — discarding an
-already-generated, already-paid-for video over a ledger-file hiccup would be strictly worse. The
-failure is instead logged loudly via `console.error` (never swallowed silently), giving an operator
-the one signal that the ledger and real spend may have drifted apart.
+Now mirrors the success path exactly: writes `READY` with the real `filePath`, and records the
+generation as a true success (`ok: true, message: "Video generated."`) — an accurate reflection of
+reality, since the generation genuinely succeeded and only this response's own inline preview failed.
+The next poll tick or page reload gets an independent chance to read the same file again — likely
+succeeding, since the original failure was local and transient (a locked file, an antivirus scan
+mid-write, a momentary disk hiccup), not a property of the file itself. This immediate response still
+cannot show her the video inline right now, so it still returns `ok: false` with a plain explanation —
+but per this function's own documented callers, that return value is discarded by every real production
+path (both `runBatchVideoDispatch`'s batch loop and `retrySceneVideoAction`'s single-scene retry rely
+entirely on the next poll tick reading the real DB-backed status, never on this function's own return
+value), so the corrected database write is what actually matters here.
 
-**Known, tracked, out-of-scope sibling gap:** the identical unprotected-`recordSpend` pattern exists in
-`src/app/actions/generate-images.ts` (line ~161) and likely `src/core/story/director.ts` — both Phase
-1/2 files, outside this phase's own file scope (Phase 4's `files_modified` list never touched either).
-Rather than silently leave this undiscussed or scope-creep into fixing unrelated phases' files, this is
-recorded as a known limitation for Phase 6 (Reliability, Secrets Hygiene & Output Correctness, per
-ROADMAP.md) to address, matching this project's established convention of explicitly documenting a
-deferred gap rather than either silently fixing it out-of-scope or silently ignoring it.
+This fix also reinforces the fourth-pass's `evaluateVideoDispatch` READY-refusal: once this scene
+correctly reaches `READY`, it can never again be accidentally re-dispatched by any caller.
 
-### WR-01: The story-scoped in-flight guard (fourth pass) had no protection between reservation and scheduling
+**Verification:** `npx tsc --noEmit` (clean), `npm run test:lib` (214/214, unchanged — this is an
+error-handling correction around an existing I/O call, not a change to any pure function a unit test
+exercises), `npm run build` (compiles), dev spend ledger re-confirmed unchanged at exactly `$3.0870` of
+`$3.25`.
 
-**Files modified:** `src/app/actions/generate-all-videos.ts`
-**Commit:** `c076f81`
+## Skipped Issue
 
-**Applied fix:** Wrapped the region between `storiesWithRunningBatch.add(storyId)` and the point where
-`after()` is successfully scheduled (or an early refusal is returned) in a try/catch that releases the
-guard and rethrows on any exception. Not currently exploitable — `evaluateBatchDispatch` and
-`maxSceneRetryAttempts` cannot throw today — but this is defense-in-depth against a future change to
-either making it throw, which would otherwise permanently strand that story's guard (blocking every
-future legitimate "Generate All Videos" attempt for it) until the server process itself restarts.
+### WR-01 (Warning): The stuck-generation detector's clock resets to zero on a page reload
 
-## Skipped Issues
+**Files:** `src/app/page.tsx:546-556, 104-105`, `src/components/story/VideoStatusScreen.tsx:9-13`
 
-None — both in-scope findings were fixed.
+**Why deferred:** The stuck-scene detector's 12-minute countdown lives only in a client-side `useRef`
+(`generatingStartedAtRef`), with no server-side timestamp anchor — a browser refresh silently resets it
+to zero even for a scene that has already been stuck (a dropped `after()` callback, 04-RESEARCH.md
+Pitfall 2) for far longer, delaying the "Try again" recovery affordance's reappearance by up to another
+12 minutes at exactly the moment (a screen that looks stuck) she'd be most likely to reload.
 
-## Verification
+A correct fix requires a schema migration — a server-recorded "generating since" timestamp column on
+`Scene`, written when a scene transitions to `GENERATING` and consumed by `getStoryStatusAction` to
+compute "stuck" server-side instead of the client guessing elapsed time from its own mount — a
+materially bigger, riskier change than any other fix across this six-pass review cycle, for a
+Warning-severity UX delay with no budget or data-integrity consequence (the worst case is a longer wait
+before the recovery button reappears, not lost money or lost work). Recorded as a known, tracked
+limitation in `STATE.md` for a future phase (Phase 6, Reliability, Secrets Hygiene & Output Correctness,
+or wherever D-05's stuck-recovery mechanism is next hardened) rather than expanding this already
+six-pass review cycle's scope further.
 
-- `npx tsc --noEmit`: clean.
-- `npm run test:lib`: 214/214 pass (unchanged from the fourth pass — neither fix altered any pure-function
-  behavior a unit test would exercise; both are error-handling/defense-in-depth changes around existing
-  I/O calls), all six `check-boundaries.ts` structural invariants pass.
-- `npm run build`: compiles, static routes generate.
-- Dev spend ledger re-confirmed unchanged at exactly `$3.0870` of `$3.25`.
-- A fifth-and-final re-review pass was commissioned after these two fixes; see the phase's own closeout
-  summary for its result.
+## Review Cycle Summary (all six passes)
+
+| Pass | Critical | Warning | Info | Fixed |
+|------|----------|---------|------|-------|
+| 1 | 1 | 3 | 0 | 4/4 |
+| 2 | 3 | 4 | 2 | 7/7 (critical+warning scope) |
+| 3 | 2 | 2 | 1 | 5/5 (critical+warning scope) |
+| 4 | 1 | 0 | 0 | 1/1 |
+| 5 | 1 | 1 | 0 | 2/2 |
+| 6 | 1 | 1 | 0 | 1/2 (1 deliberately deferred and documented) |
+
+Twenty findings fixed across six independent review passes, each pass verified by the orchestrator
+directly reading every diff (not solely trusting a fixer agent's own report), with standalone empirical
+proofs written for both concurrency-sensitive fixes (the CR-03 dispatch mutex, and the fourth-pass
+story-scoped batch guard). One Warning-severity item explicitly deferred and documented rather than
+silently dropped or scope-crept into a bigger change. This is the final review-fix cycle for this
+phase — no further passes are planned.
 
 ---
 *Fixed: 2026-09-16*
 *Fixer: Claude (orchestrator, direct implementation)*
-*Iteration: 5 (final)*
+*Iteration: 6 (final)*

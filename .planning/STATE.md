@@ -4,10 +4,10 @@ current_phase: 04
 current_phase_name: Wife-Facing Review & Approval Flow
 status: verifying
 stopped_at: Completed 04-04-PLAN.md
-last_updated: "2026-09-15T13:42:18.058Z"
+last_updated: "2026-09-15T18:33:17.178Z"
 last_activity: 2026-09-14
 last_activity_desc: Phase 04 execution started
-state_head: 1ca2d1469a3d1373fd34a0f6d3ab7275bf85c8cc
+state_head: 651e914ef0d64a7ef408030ba26803cbef3e5fa6
 progress:
   total_phases: 6
   completed_phases: 3
@@ -127,6 +127,8 @@ Recent decisions affecting current work:
 - [Phase 04]: [Phase 4, 04-03] Item 7 of the Task 3 checklist (reload restores Screen 4, not Screen 3, for an already-approved story) genuinely FAILED on first check -- the restore-on-mount effect in page.tsx unconditionally landed on review-images -- and was fixed (commit 5c0b06d) to branch on result.imagesApproved and seed videoScenes from the loaded story
 - [Phase 04]: [Phase 4, 04-03] batchDispatched is deliberately left false on restore rather than inferred true from partial per-scene progress -- D-04's batch dispatch is idempotent so re-showing the button is always safe, whereas inferring true would strand a scene left at WAITING by a dropped after() callback with no way to restart it
 - [Phase 04]: [Phase 4, 04-04] Task 4 checkpoint item 10 genuinely FAILED (a story's vanished folder was silently recreated with no message) and was fixed, not waived -- exportEpisodeAssets now reports folderMissing when a story recorded a real asset but its directory is gone, instead of transparently recreating an empty shell — Matches this project's established convention of recording real findings honestly and fixing them at the checkpoint rather than presenting a sanitized all-pass narrative (same precedent as 04-03's item 7). Verified by two new unit tests rather than a live rename-the-folder click-through, since no real database story currently has any ready asset that would make that exact scenario reachable without a real paid provider call.
+- [Phase 04]: [Phase 4, code review pass 5] Fixed generate-video.ts's unprotected recordSpend call (could silently lose a real, billed cost from the ledger if the file lock throws) -- the identical pattern exists in generate-images.ts and director.ts (Phase 1/2 files, out of Phase 4's scope) and is deliberately NOT fixed here — Recorded as a known, tracked limitation for Phase 6 (Reliability, Secrets Hygiene & Output Correctness) rather than either silently scope-creeping into unrelated phases' files or silently leaving the gap undiscussed.
+- [Phase 04]: [Phase 4, code review pass 6] The stuck-generation detector's 12-minute countdown lives only in a client-side useRef, with no server-side timestamp anchor -- a page reload silently resets it to zero even for a scene that has been stuck far longer, deferring the "Try again" recovery affordance's appearance. Deliberately NOT fixed in this pass. — A real fix requires a schema migration (a server-recorded "generating since" timestamp on Scene, consumed by getStoryStatusAction instead of the client guessing elapsed time) -- a materially bigger, riskier change than any other fix in this six-pass review cycle, for a Warning-severity UX delay with no budget or data-integrity consequence (worst case she waits up to 24 minutes instead of 12 before the recovery button appears). Tracked for a future phase (Phase 6, Reliability, Secrets Hygiene & Output Correctness, or wherever D-05's stuck-recovery mechanism next gets hardened) rather than expanding this review cycle's scope further.
 
 ### Pending Todos
 
