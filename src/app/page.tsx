@@ -555,10 +555,18 @@ export default function Home() {
         return next;
       });
 
-      const allTerminal =
+      // CR-01: stop polling only once there is truly nothing left she could
+      // ever retry -- every scene READY, or FAILED *and* at its retry cap.
+      // A scene that is still GENERATING, or FAILED-but-not-capped (and thus
+      // eligible for the VIDEO-04 "Try again" action), keeps this false so
+      // the poll stays alive to observe the outcome of a later single-scene
+      // retry dispatched after the rest of the batch has already settled.
+      const nothingLeftToRetry =
         status.scenes.length > 0 &&
-        status.scenes.every((row) => row.videoStatus === "READY" || row.videoStatus === "FAILED");
-      if (allTerminal) {
+        status.scenes.every(
+          (row) => row.videoStatus === "READY" || (row.videoStatus === "FAILED" && row.capReached),
+        );
+      if (nothingLeftToRetry) {
         clearInterval(intervalId);
 
         // OUTPUT-01: this is what makes plan 04-03's locked sentence "Every
