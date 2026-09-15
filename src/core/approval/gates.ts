@@ -150,10 +150,14 @@ export function evaluateImageRegeneration(
  * Branch order:
  *   1. story not found
  *   2. story not approved (same locked string evaluateVideoDispatch uses)
- *   3. compute the work list: READY-imaged, not-already-video-READY, under
- *      the retry cap -- skipping already-READY scenes is a money decision
- *      (makes pressing the button twice safe), skipping capped scenes keeps
- *      the batch from burning attempts it would only refuse one layer down
+ *   3. compute the work list: READY-imaged, not-already-video-READY,
+ *      not-already-GENERATING, under the retry cap -- skipping
+ *      already-READY scenes is a money decision (makes pressing the button
+ *      twice safe), skipping already-GENERATING scenes keeps a re-run batch
+ *      from re-dispatching a scene that's already mid-flight (CR-01: e.g.
+ *      re-clicking "Generate All Videos" after reopening a story mid-batch),
+ *      skipping capped scenes keeps the batch from burning attempts it
+ *      would only refuse one layer down
  *   4. an empty work list refuses with a plain-language "nothing left" message
  */
 export function evaluateBatchDispatch(
@@ -177,6 +181,7 @@ export function evaluateBatchDispatch(
         s.imageStatus === "READY" &&
         s.imagePath !== null &&
         s.videoStatus !== "READY" &&
+        s.videoStatus !== "GENERATING" &&
         s.videoAttempts < maxVideoAttempts,
     )
     .map((s) => s.sceneNumber)

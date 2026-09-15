@@ -238,6 +238,15 @@ test("evaluateBatchDispatch excludes scenes whose videoStatus is already READY",
   assert.deepEqual(decision.allowed && decision.sceneNumbers, [2]);
 });
 
+test("evaluateBatchDispatch excludes scenes whose videoStatus is already GENERATING (CR-01: a re-run batch must not re-dispatch a scene already mid-flight)", () => {
+  const story = storyFixture({
+    scenes: [sceneFixture(1, { videoStatus: "GENERATING" }), sceneFixture(2)],
+  });
+  const decision = evaluateBatchDispatch(story, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, true);
+  assert.deepEqual(decision.allowed && decision.sceneNumbers, [2]);
+});
+
 test("evaluateBatchDispatch excludes scenes at the retry cap", () => {
   const story = storyFixture({
     scenes: [sceneFixture(1, { videoAttempts: MAX_ATTEMPTS }), sceneFixture(2)],

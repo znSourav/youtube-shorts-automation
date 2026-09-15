@@ -169,8 +169,10 @@ export default function Home() {
       //
       // `batchDispatched` is deliberately left false here rather than
       // inferred from whether any scene is already past "waiting": D-04's
-      // batch dispatch is idempotent (it skips already-READY/at-cap
-      // scenes), so re-showing "Generate All Videos" is always safe --
+      // batch dispatch is idempotent (it skips already-READY/at-cap/
+      // already-GENERATING scenes -- CR-01, so a scene mid-flight when the
+      // story was reopened is never re-dispatched by a re-run batch), so
+      // re-showing "Generate All Videos" is always safe even mid-batch --
       // and it is the ONLY way to nudge forward a scene left at WAITING by
       // an after() callback an earlier session's dev-server restart
       // dropped mid-batch (04-RESEARCH.md Pitfall 2). Inferring
