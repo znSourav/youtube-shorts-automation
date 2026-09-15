@@ -1,191 +1,124 @@
 ---
 phase: 04-wife-facing-review-approval-flow
-fixed_at: 2026-09-15T00:00:00Z
+fixed_at: 2026-09-15T18:01:00Z
 review_path: .planning/phases/04-wife-facing-review-approval-flow/04-REVIEW.md
-iteration: 2
-findings_in_scope: 7
-fixed: 7
+iteration: 3
+findings_in_scope: 5
+fixed: 5
 skipped: 0
 status: all_fixed
 ---
 
 # Phase 04: Code Review Fix Report
 
-**Fixed at:** 2026-09-15T00:00:00Z
+**Fixed at:** 2026-09-15T18:01:00Z
 **Source review:** .planning/phases/04-wife-facing-review-approval-flow/04-REVIEW.md
-**Iteration:** 2
-
-**Note on scope:** This is the second fix pass over `04-REVIEW.md`, which was overwritten by a
-re-review after iteration 1. Iteration 1's four findings (CR-01, WR-01, WR-02, WR-03 — different
-issues from this iteration's CR-01, both under the same ID because the re-review renumbered) were
-separately fixed and verified in commits `781f291`, `06ead28`, `171ce0e`, `3a13538` (see iteration 1's
-report, preserved in git history at commit `160ae22`). The re-review's own "Verification of
-previously-fixed issues" section independently re-confirmed all four as correct and complete before
-surfacing the seven findings fixed in this iteration.
-
-`fix_scope: critical_warning` — only Critical (CR-*) and Warning (WR-*) findings were in scope.
-IN-01 and IN-02 (Info-severity) were left untouched, per instruction, and remain open for a future
-`--fix all` pass or manual follow-up.
-
-**Environment note:** `workflow.use_worktrees` is `false` in `.planning/config.json`, so all fixes
-were made and committed directly in the main checkout (`master`) — no isolated worktree was created,
-per the documented opt-out. All verification (tsc, `node --test`) ran in the main checkout; these
-results are reproducible directly from this tree.
+**Iteration:** 3
 
 **Summary:**
-- Findings in scope: 7
-- Fixed: 7
+- Findings in scope: 5 (CR-01, CR-02, WR-01, WR-02, IN-01)
+- Fixed: 5
 - Skipped: 0
+
+Iterations 1 and 2's eleven findings were fixed and re-confirmed correct in separate, earlier commits
+(see `git log` around `0d7e452` and before) -- this is a documentation-only overwrite of the fix
+report for the third re-review pass. None of iteration 1/2's findings were touched again in this pass.
 
 ## Fixed Issues
 
-### CR-01: A failed image regeneration is silently swallowed by the browser
+### CR-01: video dispatch has no guard against an already-GENERATING scene
+
+**Files modified:** `src/core/approval/gates.ts`, `src/core/approval/gates.test.ts`, `src/app/page.tsx`
+**Commit:** f220a57
+**Applied fix:** Per the orchestrator's narrower override of 04-REVIEW.md's own suggested fix (which
+would have added a `videoStatus === "GENERATING"` refusal directly inside the shared
+`evaluateVideoDispatch` gate -- rejected because `retrySceneVideoAction`'s legitimate stuck-recovery
+path depends on that shared gate allowing a re-dispatch of a scene whose DB `videoStatus` is still
+`GENERATING` after a dropped `after()` callback): added `s.videoStatus !== "GENERATING"` to
+`evaluateBatchDispatch`'s eligibility filter in `gates.ts`, so a re-run "Generate All Videos" batch
+never re-selects a scene already mid-flight. `evaluateVideoDispatch` itself and
+`retry-scene-video.ts`/the stuck-retry UI path were left untouched, exactly as instructed. Added a
+test in `gates.test.ts` asserting a `videoStatus: "GENERATING"` scene is excluded from
+`evaluateBatchDispatch`'s returned `sceneNumbers` (mirroring the existing `"READY"`-exclusion test).
+Corrected the now-inaccurate comment in `page.tsx`'s `applyLoadedStory` to also mention the
+already-GENERATING skip and why it makes re-showing "Generate All Videos" safe even mid-batch.
+
+### CR-02: false "reached its limit" dead-end shown for a scene still actively generating
 
 **Files modified:** `src/app/page.tsx`
-**Commit:** `8358c4e`
-**Applied fix:** Applied the fix exactly as written in REVIEW.md's CR-01 section.
-`handleRegenerateImage` now updates `sceneStatuses` on every outcome of `regenerateSceneImageAction`
-(`ok`, `imageDataUrl`, `message`), not only the cap-refusal and success cases — a genuine mid-flight
-failure (`result.ok === false`, `result.capMessage === null`) is now reflected in the UI instead of
-leaving the wife looking at a stale "ready" state while the database has already recorded
-`imageStatus = FAILED`. Verified with `npx tsc --noEmit` (no errors in `page.tsx`).
+**Commit:** 7a749e5
+**Applied fix:** Changed the polling effect's cap-priority check from
+`if (row.capReached && videoState !== "ready")` to `if (row.capReached && videoState === "failed")`,
+exactly as 04-REVIEW.md's own suggested fix specified. This restores the comment's already-stated
+intent (cap takes priority over "failed" only) -- the broader `!== "ready"` condition was
+accidentally also matching "generating", flipping an in-flight scene straight to the calm amber
+"capped" dead-end message even though it was still actively generating and could still succeed. A
+scene that later resolves to "failed" while at cap still correctly flips to "capped" on the next poll
+tick.
 
-### CR-02 (narrow fix only): `computeLibraryStatus` now surfaces a post-approval image failure
+### WR-01: SceneCard renders a dead, out-of-context video message on the Review Images screen
 
-**Files modified:** `src/core/persistence/story-view.ts`, `src/core/persistence/story-view.test.ts`
-**Commit:** `eb85dc7`
-**Applied fix:** Per orchestrator instruction, applied ONLY the narrow fix — no new UI control or
-navigation back to the review-images screen was added; that remains a documented, tracked
-limitation, not resolved by this pass. Added a new branch to `computeLibraryStatus`, inserted
-immediately before the existing `imagesApprovedAt !== null -> "Generating Videos"` branch: an
-approved story (`imagesApprovedAt !== null`) with at least one scene whose `imageStatus !== "READY"`
-now returns `"Needs Attention"` instead of the indistinguishable `"Generating Videos"`. This is safe
-because `evaluateApproval` (`gates.ts`) already refuses approval unless every scene's `imageStatus`
-is `READY`, so the new branch's `hasUnreadyImage` check can only be true after a post-approval image
-regeneration (explicitly allowed by D-02) has since failed and degraded an already-approved story.
-Updated the function's numbered doc-comment precedence list to insert this as the new case 4 (renumbering
-the two branches below it). Added the required test — `imagesApprovedAt` set, one scene with
-`imageStatus: "FAILED"` and `videoStatus: "WAITING"` (not `GENERATING`, not a capped video `FAILED`,
-so it exercises this new branch specifically and not the pre-existing `hasCappedFailure`/
-`hasGenerating` branch above it) — asserting `"Needs Attention"`. Verified with `npx tsc --noEmit`
-(no errors) and `node --test src/core/persistence/story-view.test.ts` (all 16 tests pass, including
-the 8 pre-existing `computeLibraryStatus` tests, confirming the new branch does not change any
-existing precedence outcome).
+**Files modified:** `src/components/scenes/SceneCard.tsx`
+**Commit:** 688377c
+**Applied fix:** Confirmed via grep that `SceneCard` is called from exactly one place in the codebase
+(`src/app/page.tsx`'s Review Images screen render), and that call site passes none of the video-slot
+props. Removed the video slot entirely: deleted the `SceneVideo` import, removed
+`videoState`/`videoSrc`/`videoMessage`/`onGenerateVideo`/`onRetryVideo`/`videoDisabled`/
+`videoWaitingHint` from `SceneCardProps` and the function's destructured parameters/defaults, and
+deleted the `<SceneVideo ... />` render block. The image slot, regenerate-image button, and
+`imageCapMessage` were left untouched. `npx tsc --noEmit` confirmed no other file imports the removed
+fields from `SceneCardProps`.
 
-### CR-03: Budget-ceiling race between the video batch and a single-scene retry
+### WR-02: a budget-ceiling refusal renders identically to a transient failure
 
-**Files modified:** `src/app/actions/generate-video.ts`
-**Commit:** `ad93745`
-**Applied fix:** Applied exactly the structural fix specified by the orchestrator (no new npm
-dependency, no database-backed lock — an in-process promise-chain mutex, correct for this
-single-Node-process app). Renamed the original `generateSceneVideoAction` function body to a new,
-non-exported `dispatchSceneVideo` with an identical signature and body. Added a module-level
-`videoDispatchChain: Promise<unknown>` mutex. Reintroduced `generateSceneVideoAction` as a thin
-exported wrapper (same name/signature) that chains every call through `videoDispatchChain`,
-guaranteeing at most one dispatch is ever mid-flight app-wide — not just within one
-`runBatchVideoDispatch` call, as the previous implementation only achieved. This closes the race
-where an independently-dispatched `retrySceneVideoAction` call had no coordination with an in-flight
-"Generate All Videos" batch: both could pass `checkCeiling` before either had called `recordSpend`
-(a Veo call takes minutes; `recordSpend` only runs after it resolves), risking combined spend past
-`DEV_CEILING_USD`/`MONTHLY_BUDGET_USD` — exactly the "no bypass via retry" scenario CLAUDE.md's hard
-budget constraint forbids. Zero caller-visible change: `generate-all-videos.ts`, `retry-scene-video.ts`,
-and `story-probe.ts` all call the unchanged exported name/signature and required no edits. No
-dedicated unit test file exists for `generate-video.ts` (thin Server Action wrapper, per WR-02's
-iteration-1 fix report); verified with `npx tsc --noEmit` (no errors anywhere in the project) and by
-reading the final file to confirm both functions are correctly wired — the export calls
-`dispatchSceneVideo`, `dispatchSceneVideo` is not separately exported, and `check-boundaries.ts`'s
-structural invariant ("the image and video providers each have a single paid dispatch point") still
-passes.
+**Files modified:** `src/app/actions/get-story-status.ts`, `src/app/page.tsx`
+**Commit:** 3004d22
+**Applied fix:** Added an approximate, conservative headroom check to `get-story-status.ts`: for each
+scene whose `videoStatus` is `"FAILED"` and not already `capReached`, calls `checkCeiling` (from
+`../../lib/spend-ledger.ts`) with the worst-case per-scene cost (8 seconds at the "720p" price) inside
+a try/catch, setting a new `budgetExceeded: boolean` field on that scene's row when it throws
+`CeilingExceededError`. One deliberate adaptation from the orchestrator's literal instruction: rather
+than importing `VIDEO_PRICE_PER_SECOND` from `../../providers/video/veo.ts` (which the review guidance
+suggested), the 720p price was hardcoded locally as `8 * 0.05` with a comment cross-referencing
+`veo.ts`'s price table -- importing the video provider directly from `get-story-status.ts` fails
+`check-boundaries.ts`'s invariant 5 ("the video and image providers must each have a single paid
+dispatch point"), which exists specifically to keep the approval gate and per-scene retry caps
+unbypassable. Hardcoding preserves the intent (an approximate worst-case estimate, consistent with the
+same figure used in `smoke-test.ts`) without opening a second import site into the video provider.
+In `page.tsx`'s polling effect, when a scene's `budgetExceeded` is true and its computed `videoState`
+is `"failed"`, the scene is switched to the existing `"capped"` rendering (message-only, no retry
+button -- reusing the same mechanism the attempt-cap case already uses) with the message "The
+generation budget has been reached for this project." instead of the generic failed message and
+always-available "Try again". Verified with `npx tsc --noEmit` and the full test suite (boundary
+check `invariant 5` passes).
 
-### WR-04: Retry/regenerate re-entrancy guards can be defeated by a fast double click
-
-**Files modified:** `src/components/scenes/SceneVideo.tsx`, `src/components/story/VideoStatusScreen.tsx`,
-`src/app/page.tsx`
-**Commit:** `eb0aa92`
-**Applied fix:** `SceneVideo`'s existing `disabled` prop (already wired to the waiting-state
-"Generate video" button) is now also passed to the "Try again" button in both the `failed` branch and
-the `generating`+`stuck` branch. `VideoStatusScreenProps` gained a new `retryDisabled?: boolean` prop
-(rather than overloading the existing `disabled` prop's name across a different component boundary),
-threaded straight through to every scene row's `SceneVideo`. `page.tsx` wires
-`retryDisabled={retryingScene !== null}` — the same state `handleRetryScene`'s existing re-entrancy
-guard already reads — so a fast double click can no longer read a stale, not-yet-re-rendered guard
-value and dispatch two `retrySceneVideoAction` calls for the same (or a different) scene while one
-retry is already in flight. Combined with CR-03's app-wide mutex, this closes both the UI-level and
-the process-level halves of this re-entrancy gap. Verified with `npx tsc --noEmit` (no errors); no
-dedicated component test files exist for `SceneVideo.tsx` or `VideoStatusScreen.tsx`.
-
-### WR-05: `getStoryStatusAction` trusts the raw DB video status without checking the file still exists
+### IN-01: get-story-status.ts logs a fresh console.error every poll tick for the same missing-file scene
 
 **Files modified:** `src/app/actions/get-story-status.ts`
-**Commit:** `e0ad8bc`
-**Applied fix:** Mirrored `load-story.ts`'s existing file-existence downgrade pattern, but used
-`existsSync` (a cheap metadata stat) instead of `readFileSync`, per orchestrator instruction — this
-action is polled every `POLL_INTERVAL_MS` (3s) and its own file header documents it as a cheap SELECT
-with no file reads; reading full video bytes on every poll tick would have been a real performance
-regression. A scene reporting `videoStatus === "READY"` whose recorded `videoPath` is missing or does
-not exist on disk is now downgraded to `"FAILED"` before being returned, with a `console.error` log
-line (matching this file's existing error-logging convention). `capReached` is computed independently
-from `videoAttempts` vs. `maxAttempts` and is unaffected by this status change, so no separate
-recomputation was needed. Verified with `npx tsc --noEmit` (no errors); no dedicated unit test file
-exists for this Server Action.
-
-### WR-06: Image-regeneration attempt counter is still consumed on a purely local, pre-dispatch failure
-
-**Files modified:** `src/app/actions/regenerate-scene-image.ts`
-**Commit:** `e5b606f`
-**Applied fix:** Applied the same fix pattern WR-02 (iteration 1) already applied to
-`generate-video.ts`. Moved `incrementImageAttempt` from before this file's local pre-dispatch work
-(constructing `thatOneScene`, reading `characterBible`/`styleBible` off the story row) to immediately
-before the actual call into `generateSceneImagesAction` — the real per-scene provider dispatch
-boundary from this file's perspective, exactly mirroring `generate-video.ts`'s now-corrected
-placement immediately before its `generateVideo(...)` call. Verified with `npx tsc --noEmit` (no
-errors); no dedicated unit test file exists for this Server Action.
-
-### WR-07: Silent, unlogged catch branch in the ceiling check
-
-**Files modified:** `src/app/actions/generate-video.ts`
-**Commit:** `c87fbbf`
-**Applied fix:** Applied exactly the fix already written in REVIEW.md's WR-07 section, adapted to
-land inside `dispatchSceneVideo` (the function CR-03 renamed the original `checkCeiling` catch block
-into) rather than inside the new thin `generateSceneVideoAction` wrapper, per orchestrator
-instruction — CR-03 only wraps the exported function; this file's internal `checkCeiling` catch logic
-is otherwise untouched by CR-03's restructuring. Added a `console.error` call for any `checkCeiling`
-failure that is not a `CeilingExceededError`, matching every other failure branch in this file. A
-corrupted ledger file or other unexpected budget-check error is no longer invisible in the server
-console. Committed as a separate atomic commit on top of CR-03's rename (isolated by temporarily
-reverting this hunk, committing CR-03 alone, then reapplying and committing WR-07), so each finding's
-diff is independently reviewable and revertible. Verified with `npx tsc --noEmit` (no errors).
+**Commit:** cd3e66d
+**Applied fix:** Added a module-level `const loggedMissingVideo = new Set<string>();`, keyed by
+`` `${storyId}:${sceneNumber}` ``. The existing `console.error` for a `READY` scene whose video file is
+missing on disk now only fires the first time a given key is seen (check-then-add to the Set before
+logging). Accepted as a long-lived-process, single-user local app where an ever-growing in-memory Set
+cannot realistically accumulate enough distinct entries to matter.
 
 ## Skipped Issues
 
-None — all seven in-scope findings were fixed.
+None -- every in-scope finding was fixed.
 
-## Verification Summary
+## Verification
 
-- `npx tsc --noEmit -p tsconfig.json`: zero errors across the whole project, checked after every
-  individual fix and again after the full set of changes. Ran in the main checkout (no worktree was
-  created; `workflow.use_worktrees: false`), so these results are directly reproducible from this
-  tree.
-- `npm run test:lib` (full suite, 211 tests across every `*.test.ts` file plus
-  `check-boundaries.ts`'s structural invariants): all 211 pass, including the new
-  `story-view.test.ts` CR-02 test and every pre-existing `computeLibraryStatus`/`batch`/`gates` test
-  — confirming none of this iteration's fixes changed any existing behavior unexpectedly.
-  `check-boundaries.ts`'s "the image and video providers each have a single paid dispatch point"
-  invariant still passes after CR-03's rename, confirming `dispatchSceneVideo` was not accidentally
-  exported as a second dispatch point.
-- Logic-classification note: CR-03 (the budget-ceiling mutex) is a concurrency fix, not a pure logic
-  branch — its correctness rests on JavaScript's single-threaded event-loop promise-chaining
-  semantics, which `tsc`/unit tests cannot directly exercise (no test harness in this codebase
-  simulates two genuinely concurrent Server Action invocations). The fix was verified by structural
-  code reading (confirming the wrapper always chains through `videoDispatchChain` before calling
-  `dispatchSceneVideo`, and that `videoDispatchChain` is reassigned before `run` is returned) rather
-  than a concurrency test. **This finding should be treated as `fixed: requires human verification`**
-  rather than a fully test-verified fix — a manual check (e.g. dispatching a batch and a retry
-  together against a low `DEV_CEILING_USD` and confirming only one call proceeds at a time) is
-  recommended before relying on this for real spend protection.
+All five fixes were verified individually and as a whole:
+- `npx tsc --noEmit` -- clean, no errors, after each fix and at the end.
+- `npm run test:lib` (211 pre-existing tests + 1 new test added for CR-01 = 212 tests, plus
+  `check-boundaries.ts`'s six structural invariants) -- all 212 tests pass, all six invariants pass
+  (including invariant 5, which the WR-02 fix was specifically adapted to keep passing).
+- Verification ran in the main checkout directly (`workflow.use_worktrees` is `false` for this
+  project, per `.planning/config.json` -- no isolated worktree was created for this run), so these
+  results are reproducible from the tree as committed.
 
 ---
 
-_Fixed: 2026-09-15T00:00:00Z_
+_Fixed: 2026-09-15T18:01:00Z_
 _Fixer: Claude (gsd-code-fixer)_
-_Iteration: 2_
+_Iteration: 3_
