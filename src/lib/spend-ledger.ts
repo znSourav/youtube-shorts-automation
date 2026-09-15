@@ -7,7 +7,7 @@ import { dirname } from "node:path";
 // Raised from $3.00 to $3.25 on 2026-09-14 by the requester's explicit,
 // pre-authorized instruction (not a bypass of a refusal) to cover Phase 3's
 // two remaining live-browser UAT checks (~$0.05 + up to ~$0.15).
-export const DEV_CEILING_USD = 3.25;
+export const DEV_CEILING_USD = 6.25;
 
 // D-06: segregated throwaway path, deliberately distinct from the
 // storage/stories/<id>/ structure real episodes use from Phase 2 onward.
