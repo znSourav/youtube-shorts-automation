@@ -86,10 +86,6 @@ export async function regenerateSceneImageAction(
     };
   }
 
-  // D-03: the increment sits before any dispatch -- a regeneration that
-  // dies mid-call still consumes one of its limited attempts.
-  await incrementImageAttempt(storyId, sceneNumber);
-
   const thatOneScene: Scene = {
     scene_number: decision.scene.sceneNumber,
     duration: decision.scene.durationSeconds ?? undefined,
@@ -100,6 +96,16 @@ export async function regenerateSceneImageAction(
 
   const characterBible = story?.characterBible as StoryDirectorOutput["character_bible"];
   const styleBible = story?.styleBible as StoryDirectorOutput["style_bible"];
+
+  // D-03 (WR-06 fix, 04-REVIEW.md second pass): the increment now sits
+  // immediately before the real per-scene dispatch boundary (the call into
+  // generateSceneImagesAction), not before this file's own local
+  // pre-dispatch work above -- mirroring WR-02's identical fix already
+  // applied to generate-video.ts. A local failure that never reaches
+  // Gemini's Image API must not consume one of the scene's limited
+  // image-regeneration attempts; only a call that reaches the real
+  // dispatch boundary must, even if it dies mid-call.
+  await incrementImageAttempt(storyId, sceneNumber);
 
   const statuses = await generateSceneImagesAction(storyId, [thatOneScene], characterBible, styleBible);
   const status = statuses[0];
