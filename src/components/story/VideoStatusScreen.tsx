@@ -35,6 +35,12 @@ export interface VideoStatusScreenProps {
   // batch uses. Wired to a "failed" row's "Try again" button and, when
   // `stuck` is true, to a "generating" row's own "Try again" affordance.
   onRetryScene: (sceneNumber: number) => void;
+  // WR-04 (04-REVIEW.md, second pass): true while any single-scene retry is
+  // in flight (page.tsx's retryingScene !== null). Passed straight through
+  // to every scene's SceneVideo `disabled` prop so a fast double click
+  // cannot read a stale pre-re-render guard and dispatch a second paid call
+  // for the same (or a different) scene while one retry is already running.
+  retryDisabled?: boolean;
   // OUTPUT-01 (plan 04-04): exports the episode's files then opens the
   // folder. All three optional so this component doesn't require every
   // caller (e.g. an earlier test) to supply them.
@@ -61,6 +67,7 @@ export default function VideoStatusScreen({
   allReady,
   onGenerateAll,
   onRetryScene,
+  retryDisabled,
   onOpenOutputFolder,
   openingFolder,
   outputMessage,
@@ -88,6 +95,7 @@ export default function VideoStatusScreen({
               videoSrc={scene.videoSrc}
               message={scene.videoMessage}
               stuck={scene.stuck}
+              disabled={retryDisabled}
               onRetry={
                 scene.videoState === "failed" || (scene.videoState === "generating" && scene.stuck)
                   ? () => onRetryScene(scene.sceneNumber)

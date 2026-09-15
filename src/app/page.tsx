@@ -768,6 +768,7 @@ export default function Home() {
             allReady={allVideosReady}
             onGenerateAll={handleGenerateAllVideos}
             onRetryScene={handleRetryScene}
+            retryDisabled={retryingScene !== null}
             onOpenOutputFolder={handleOpenOutputFolder}
             openingFolder={openingFolder}
             outputMessage={outputMessage}

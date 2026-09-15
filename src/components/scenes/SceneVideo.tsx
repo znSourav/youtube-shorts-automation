@@ -16,6 +16,12 @@ export interface SceneVideoProps {
   // action available yet (VIDEO-02 is Phase 4).
   onGenerate?: () => void;
   onRetry?: () => void;
+  // WR-04 (04-REVIEW.md, second pass): disables every button this component
+  // renders -- the "waiting" state's Generate button AND the "failed"/
+  // "generating"+stuck state's "Try again" button -- so a caller with a
+  // single app-wide in-flight guard (e.g. page.tsx's retryingScene) can
+  // close the fast-double-click window where two clicks read the same
+  // stale not-yet-re-rendered guard state and both dispatch a paid call.
   disabled?: boolean;
   // Plain-language hint shown in the "waiting" state when no onGenerate
   // handler is supplied -- lets the one scene this phase animates (VIDEO-01)
@@ -71,7 +77,8 @@ export default function SceneVideo({
           <button
             type="button"
             onClick={onRetry}
-            className="self-start rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium text-black transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-50 dark:hover:bg-zinc-900"
+            disabled={disabled}
+            className="self-start rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium text-black transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-50 dark:hover:bg-zinc-900"
           >
             Try again
           </button>
@@ -90,7 +97,8 @@ export default function SceneVideo({
           <button
             type="button"
             onClick={onRetry}
-            className="self-start rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium text-black transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-50 dark:hover:bg-zinc-900"
+            disabled={disabled}
+            className="self-start rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium text-black transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-50 dark:hover:bg-zinc-900"
           >
             Try again
           </button>
