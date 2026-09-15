@@ -1,7 +1,5 @@
 "use client";
 
-import SceneVideo, { type SceneVideoState } from "./SceneVideo";
-
 export type SceneCardState = "waiting" | "generating" | "ready" | "failed";
 
 export interface SceneCardProps {
@@ -15,18 +13,6 @@ export interface SceneCardProps {
   // Already plain-language (generate-images.ts's job, not this component's) --
   // rendered verbatim on failure, nothing else.
   message?: string | null;
-
-  // Plan 02-04: video slot. `onGenerateVideo` is only passed for the one
-  // scene this phase can animate (VIDEO-01's single-scene scope) -- every
-  // other scene renders SceneVideo in its plain "waiting" state with no
-  // action available (VIDEO-02 is Phase 4).
-  videoState?: SceneVideoState;
-  videoSrc?: string | null;
-  videoMessage?: string | null;
-  onGenerateVideo?: () => void;
-  onRetryVideo?: () => void;
-  videoDisabled?: boolean;
-  videoWaitingHint?: string;
 
   // IMAGE-02 (plan 04-02): per-scene "Regenerate this image" action.
   // `imageCapMessage` takes priority when set -- a reached retry cap (D-03)
@@ -47,13 +33,6 @@ export default function SceneCard({
   state,
   imageSrc,
   message,
-  videoState = "waiting",
-  videoSrc,
-  videoMessage,
-  onGenerateVideo,
-  onRetryVideo,
-  videoDisabled,
-  videoWaitingHint,
   onRegenerateImage,
   regenerateDisabled,
   regenerateLabel,
@@ -102,16 +81,6 @@ export default function SceneCard({
           </button>
         )
       )}
-
-      <SceneVideo
-        state={videoState}
-        videoSrc={videoSrc}
-        message={videoMessage}
-        onGenerate={onGenerateVideo}
-        onRetry={onRetryVideo}
-        disabled={videoDisabled}
-        waitingHint={videoWaitingHint}
-      />
     </div>
   );
 }
