@@ -147,7 +147,52 @@ export default function Home() {
       // never assumed false.
       setApproved(result.imagesApproved);
       setApproveError(null);
-      setScreen("review-images");
+
+      if (result.imagesApproved) {
+        // D-05: a returning wife whose story is already approved must be
+        // able to reach Screen 4 again with the same per-scene states, not
+        // just land back on Screen 3 one click away from it. loadStoryAction
+        // already carries each scene's own videoStatus/videoDataUrl, so this
+        // seeds videoScenes directly -- no flash of "waiting" before the
+        // polling effect's own immediate poll() call corrects it further
+        // (e.g. to "capped", which needs getStoryStatusAction's videoAttempts
+        // that loadStoryAction deliberately does not carry).
+        //
+        // `batchDispatched` is deliberately left false here rather than
+        // inferred from whether any scene is already past "waiting": D-04's
+        // batch dispatch is idempotent (it skips already-READY/at-cap
+        // scenes), so re-showing "Generate All Videos" is always safe --
+        // and it is the ONLY way to nudge forward a scene left at WAITING by
+        // an after() callback an earlier session's dev-server restart
+        // dropped mid-batch (04-RESEARCH.md Pitfall 2). Inferring
+        // `batchDispatched: true` from partial progress would hide that
+        // button and strand such a scene with no way forward, since
+        // VideoStatusScreen has no per-scene "start" action -- only retry.
+        const initialVideoScenes: Record<number, VideoSceneEntry> = {};
+        for (const scene of result.scenes) {
+          const videoState: SceneVideoState =
+            scene.videoStatus === "READY"
+              ? "ready"
+              : scene.videoStatus === "FAILED"
+                ? "failed"
+                : scene.videoStatus === "GENERATING"
+                  ? "generating"
+                  : "waiting";
+          initialVideoScenes[scene.sceneNumber] = {
+            videoState,
+            videoSrc: videoState === "ready" ? scene.videoDataUrl : null,
+            videoMessage: videoState === "failed" ? "This scene's video could not be created." : null,
+          };
+        }
+        setVideoScenes(initialVideoScenes);
+        setBatchDispatched(false);
+        setBatchStarting(false);
+        setBatchError(null);
+        setScreen("video-status");
+      } else {
+        setScreen("review-images");
+      }
+
       setRestoring(false);
     })();
 
