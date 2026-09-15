@@ -72,38 +72,46 @@ export async function generateAllVideosAction(storyId: string): Promise<Generate
   // (e.g. a fast double-click, before either request's own DB read below
   // resolves) could both pass the check before either reserves, recreating
   // the exact TOCTOU shape CR-03 already closed for individual dispatches,
-  // just one level up. Released below on every path that does NOT end in a
-  // scheduled after() -- otherwise a refused/empty batch would permanently
-  // strand this story as "running" with nothing ever there to release it.
+  // just one level up. Released on every path below that does NOT end in a
+  // scheduled after() -- otherwise a refused/empty batch, or an unexpected
+  // throw, would permanently strand this story as "running" with nothing
+  // ever there to release it (fifth-pass review WR-01: the outer try/catch
+  // is defense-in-depth against a future change to evaluateBatchDispatch or
+  // maxSceneRetryAttempts making either throw -- neither can today).
   storiesWithRunningBatch.add(storyId);
 
-  let story = null;
   try {
-    story = await findStoryWithScenes(storyId);
-  } catch (err) {
-    console.error(`generateAllVideosAction: failed to read story ${storyId}`, err);
-  }
-
-  const decision = evaluateBatchDispatch(story, maxSceneRetryAttempts());
-  if (!decision.allowed) {
-    storiesWithRunningBatch.delete(storyId);
-    return { ok: false, message: decision.message };
-  }
-
-  const sceneNumbers = decision.sceneNumbers;
-
-  after(async () => {
-    // Runs AFTER the response below has already returned to the browser.
-    // generateSceneVideoAction writes each scene's own GENERATING/READY/
-    // FAILED status -- this callback never touches Scene rows directly.
+    let story = null;
     try {
-      await runBatchVideoDispatch(sceneNumbers, {
-        dispatch: (sceneNumber) => generateSceneVideoAction(storyId, sceneNumber),
-      });
-    } finally {
-      storiesWithRunningBatch.delete(storyId);
+      story = await findStoryWithScenes(storyId);
+    } catch (err) {
+      console.error(`generateAllVideosAction: failed to read story ${storyId}`, err);
     }
-  });
 
-  return { ok: true, message: "Video generation has started for every approved scene." };
+    const decision = evaluateBatchDispatch(story, maxSceneRetryAttempts());
+    if (!decision.allowed) {
+      storiesWithRunningBatch.delete(storyId);
+      return { ok: false, message: decision.message };
+    }
+
+    const sceneNumbers = decision.sceneNumbers;
+
+    after(async () => {
+      // Runs AFTER the response below has already returned to the browser.
+      // generateSceneVideoAction writes each scene's own GENERATING/READY/
+      // FAILED status -- this callback never touches Scene rows directly.
+      try {
+        await runBatchVideoDispatch(sceneNumbers, {
+          dispatch: (sceneNumber) => generateSceneVideoAction(storyId, sceneNumber),
+        });
+      } finally {
+        storiesWithRunningBatch.delete(storyId);
+      }
+    });
+
+    return { ok: true, message: "Video generation has started for every approved scene." };
+  } catch (err) {
+    storiesWithRunningBatch.delete(storyId);
+    throw err;
+  }
 }

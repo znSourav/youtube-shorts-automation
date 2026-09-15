@@ -256,21 +256,42 @@ async function dispatchSceneVideo(
     };
   }
 
-  recordSpend({
-    call: `scene-video:${storyId}:${sceneNumber}`,
-    model: VIDEO_MODEL_ID,
-    estimatedUsd,
-    usageMetadata: result.usageMetadata,
-    // Mirror the story/image convention (director.ts, generate-images.ts):
-    // any dispatched call counts, including a block or a client-side polling
-    // timeout, since by the time generateVideo() has returned here (rather
-    // than throwing) the initial ai.models.generateVideos() dispatch already
-    // succeeded -- timedOut and blocked are both post-dispatch outcomes that
-    // may have already cost money on Veo's side regardless of what this
-    // process could observe.
-    billed: true,
-    at: new Date().toISOString(),
-  });
+  try {
+    recordSpend({
+      call: `scene-video:${storyId}:${sceneNumber}`,
+      model: VIDEO_MODEL_ID,
+      estimatedUsd,
+      usageMetadata: result.usageMetadata,
+      // Mirror the story/image convention (director.ts, generate-images.ts):
+      // any dispatched call counts, including a block or a client-side polling
+      // timeout, since by the time generateVideo() has returned here (rather
+      // than throwing) the initial ai.models.generateVideos() dispatch already
+      // succeeded -- timedOut and blocked are both post-dispatch outcomes that
+      // may have already cost money on Veo's side regardless of what this
+      // process could observe.
+      billed: true,
+      at: new Date().toISOString(),
+    });
+  } catch (err) {
+    // Fifth-pass review CR-01: recordSpend can genuinely throw (a ledger
+    // lock timeout, or a stale lock file left by a crash -- spend-ledger.ts's
+    // own withLedgerFileLock comment documents both). The Veo call already
+    // succeeded and already cost real money by this point regardless of
+    // whether this bookkeeping write lands -- discarding a successfully
+    // generated, already-paid-for video over a ledger-file hiccup would be
+    // strictly worse than proceeding with a loudly-logged missing entry, so
+    // this is deliberately NOT treated as a generation failure: the scene
+    // still advances to READY below exactly as it would have. A missing
+    // entry is a real, narrow risk (this specific call's cost would not
+    // count against the ceiling), which is why this is logged loudly rather
+    // than silently swallowed -- it is the one signal an operator has that
+    // the ledger and real spend may have drifted apart.
+    console.error(
+      `generateSceneVideoAction: recordSpend failed for story ${storyId} scene ${sceneNumber} -- ` +
+        "the Veo call succeeded and was billed, but this cost may be missing from the ledger",
+      err,
+    );
+  }
 
   // Dual write for the same dispatched call recordSpend above just wrote to
   // the real ledger -- IMAGE-03's "same is true ... for video" durability
