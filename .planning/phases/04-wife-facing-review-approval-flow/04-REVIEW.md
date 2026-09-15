@@ -1,6 +1,6 @@
 ---
 phase: 04-wife-facing-review-approval-flow
-reviewed: 2026-09-15T00:00:00Z
+reviewed: 2026-09-16T00:00:00Z
 depth: standard
 files_reviewed: 38
 files_reviewed_list:
@@ -44,157 +44,162 @@ files_reviewed_list:
   - src/scripts/story-probe.ts
   - src/types/better-sqlite3.d.ts
 findings:
-  critical: 2
-  warning: 2
-  info: 1
-  total: 5
+  critical: 1
+  warning: 0
+  info: 0
+  total: 1
 status: issues_found
 ---
 
-# Phase 4: Code Review Report (third pass)
+# Phase 4: Code Review Report (Fourth Pass / Convergence Check)
 
-**Reviewed:** 2026-09-15T00:00:00Z
-**Depth:** standard
+**Reviewed:** 2026-09-16T00:00:00Z
+**Depth:** standard (with targeted cross-file tracing per the review brief)
 **Files Reviewed:** 38
 **Status:** issues_found
 
 ## Summary
 
-This is a genuinely fresh, full pass, not a re-confirmation of the prior two passes' fixes. The previously-fixed items (CR-01/WR-01/WR-02/WR-03 from pass 1; CR-01/CR-02/CR-03/WR-04/WR-05/WR-06/WR-07 from pass 2) were spot-checked in context while reading the surrounding code and all still look correct — in particular the CR-03 mutex (`videoDispatchChain` in `src/app/actions/generate-video.ts`) does serialize every call into `dispatchSceneVideo` app-wide, it recovers cleanly from a rejected link in the chain (both the success and failure continuations run the next dispatch, and the chain-advancing `.then` swallows both outcomes so a rejection can never poison future calls), and `batch.ts`'s own sequential `for` loop already awaits each call before starting the next, so the mutex adds no new deadlock risk there — worst case it adds queueing delay when a single-scene retry is dispatched while a batch is mid-flight, which is the intended trade-off, not a defect.
+This is a genuinely fresh pass, not a re-confirmation of the prior three. I re-read every gate
+(`evaluateVideoDispatch`, `evaluateBatchDispatch`, `evaluateApproval`, `evaluateImageRegeneration`),
+the CR-03 mutex in `generate-video.ts`, the batch runner, every Server Action in scope, the schema/
+migration, and the client-side state machine in `page.tsx`/`VideoStatusScreen.tsx`/`SceneVideo.tsx`
+that drives them, specifically hunting for anything the three prior passes' fixes might have left
+open or newly interact badly with.
 
-However, this pass found two new Critical-severity defects that neither prior pass caught, both centered on the same root cause: **nothing in the video-dispatch path checks a scene's *current* `videoStatus` before dispatching it again.** `evaluateVideoDispatch` (the single gate every video call goes through) checks approval, the retry-cap, and image readiness — never whether the scene is already `READY` or already `GENERATING`. That gap is normally invisible because the UI only offers a dispatch path (a button) for scenes that need one — except for the "Generate All Videos" batch action, which the app deliberately allows the wife to re-trigger after any page reload/story reopen (`batchDispatched` is unconditionally reset to `false` in `applyLoadedStory`), specifically to recover a batch an earlier session's crash left stranded. `evaluateBatchDispatch`'s own eligibility filter only excludes scenes that are already `READY`, not ones that are currently `GENERATING` — so re-opening a story (Library, or a page refresh) while a previous batch is still genuinely alive and mid-flight, and clicking "Generate All Videos" again, dispatches a second real, billed Veo call for every scene still in progress, burning one of that scene's limited retry attempts and overwriting its in-progress/just-finished video for no benefit. This directly undermines the project's hard, no-exceptions $15 budget constraint (CLAUDE.md) and contradicts the code's own documented claim that the batch is idempotent.
+The sixteen previously-fixed findings all still look correctly closed on this reading (the CR-03
+mutex genuinely serializes every call into `dispatchSceneVideo` app-wide; the CR-01 batch filter
+genuinely excludes `GENERATING`/`READY` scenes from a *snapshot*; WR-02's attempt-counter placement
+is correctly load-bearing only at the real dispatch boundary; IN-01's dedup set is correctly keyed).
 
-The second Critical issue is a UI-only but user-facing correctness bug: because `videoAttempts` is now incremented *before* the paid Veo call is dispatched (an intentional fix from pass 2, WR-02), a scene's *final* allowed attempt reaches the retry cap the instant it starts generating, not when it finishes. `page.tsx`'s poll loop treats "cap reached" as taking priority over every state except `"ready"` — including `"generating"` — so for several minutes (up to the ~10-minute Veo timeout), the wife is shown a dead-end amber message ("...has reached its limit... you can continue with what's ready, or start a new story") for a scene that is still actively being generated and may well succeed a moment later. The scene self-corrects to "ready" if it succeeds, so no data is corrupted, but the message is actively false while it is shown, on the one screen (D-05) whose entire purpose is trustworthy status reporting to a non-technical user.
-
-Two further Warning-level issues were found: a leftover, unconditionally-rendered "Video generation for this scene isn't available yet." placeholder on every scene tile of the Review Images screen (dead code from Phase 2 that Phase 4's separate `VideoStatusScreen` was supposed to make obsolete but never removed from `SceneCard`), and a budget-ceiling refusal that renders identically to a transient failure with an infinite, cost-free but pointless "Try again" loop.
-
-`.env.local.example` could not be read (denied by the sandbox's directory permission settings on both the `Read` tool and `Bash cat`), so this review could not verify its contents (e.g. absence of a real secret checked in as a placeholder value). This is a coverage gap, not a finding against the file itself — worth a manual look outside this tool.
+However, tracing the interaction between `generateAllVideosAction`'s snapshot-then-background-loop
+design and the client's own `batchDispatched` reset behavior surfaced one real, not-yet-closed
+double-dispatch path — a genuine budget/data-integrity gap, not a re-confirmation of anything
+already fixed. Full detail below. This is the only finding from this pass; I did not find
+Warning- or Info-level issues worth reporting once this was accounted for — the rest of the changed
+surface reads clean.
 
 ## Critical Issues
 
-### CR-01: Video dispatch has no guard against a scene that is already READY or already GENERATING — re-opening a story mid-batch and clicking "Generate All Videos" again pays for and overwrites an in-flight or just-finished video
+### CR-01: Two overlapping "Generate All Videos" batches can double-dispatch (and double-spend) the same not-yet-reached scenes
 
-**File:** `src/core/approval/gates.ts:47-82` (`evaluateVideoDispatch`), `src/core/approval/gates.ts:159-190` (`evaluateBatchDispatch`), `src/app/actions/generate-video.ts:127-332` (`dispatchSceneVideo`), `src/app/page.tsx:160-200` (`applyLoadedStory`)
+**Files:**
+- `src/core/approval/gates.ts:47-82` (`evaluateVideoDispatch`)
+- `src/core/approval/gates.ts:163-195` (`evaluateBatchDispatch`)
+- `src/app/actions/generate-all-videos.ts:40-71` (`generateAllVideosAction`)
+- `src/app/page.tsx:170-206` (`applyLoadedStory`, specifically the `setBatchDispatched(false)` reset and its accompanying comment)
 
 **Issue:**
 
-`evaluateVideoDispatch` — the single gate every call into `dispatchSceneVideo` passes through, for both the batch and single-scene-retry paths — checks four things in order: story exists, images approved, scene exists, `videoAttempts < cap`, image is READY. It never checks `scene.videoStatus`. So it will happily grant a dispatch for a scene that is already `READY` (video already generated and paid for) or already `GENERATING` (a different call for the same scene is presently in flight), as long as that scene's attempt count is still under the cap.
+The CR-03 mutex (`generate-video.ts`'s `videoDispatchChain`) guarantees that no two calls into
+`dispatchSceneVideo` ever *execute concurrently*. The CR-01 fix from the third pass makes
+`evaluateBatchDispatch` exclude any scene whose `videoStatus` is already `"GENERATING"` or
+`"READY"` **at the moment that snapshot is taken**. Neither of these closes the case where two
+independent `generateAllVideosAction` calls are made for the *same story* while the first one's
+`after()` background loop is still working through its own scene list — which is a completely
+realistic, even design-anticipated, sequence of events in this app:
 
-`evaluateBatchDispatch`'s own eligibility filter (the "fast refusal for the wife's benefit only" — line 179) is:
+1. The wife clicks "Generate All Videos" for a 7-scene story. `generateAllVideosAction` computes
+   `sceneNumbers = [1,2,3,4,5,6,7]` (all `WAITING`) and schedules an `after()` callback that calls
+   `runBatchVideoDispatch`, which dispatches scene 1, awaits it (a live Veo call, potentially
+   minutes), then scene 2, etc. — **strictly sequentially, one scene enqueued onto the mutex at a
+   time**, not all seven queued up front.
+2. While scene 2 (say) is still genuinely in flight, the wife reloads the page, or reopens the same
+   story from "My Stories" (`handleOpenLibraryStory` → `applyLoadedStory`). `applyLoadedStory`
+   **unconditionally sets `batchDispatched` back to `false`** for any approved story (see the doc
+   comment at `page.tsx:170-182`, which explicitly argues this is "always safe... mid-batch"), so
+   the "Generate All Videos" button reappears on Screen 4.
+3. She clicks it again. `generateAllVideosAction` runs a second time, fetches a **fresh** snapshot:
+   scene 1/2 are excluded (`READY`/`GENERATING`), but scenes 3–7 are still `WAITING` (batch 1's
+   sequential loop hasn't reached them yet — it's still awaiting scene 2). `evaluateBatchDispatch`
+   correctly-by-its-own-contract returns `sceneNumbers = [3,4,5,6,7]` and a **second** `after()`
+   callback is scheduled.
+4. Batch 2's loop starts immediately and enqueues `generateSceneVideoAction(3)`, `(4)`, ... onto the
+   *same* app-wide mutex — ahead of batch 1's own eventual call for scene 3, since batch 1 is still
+   blocked awaiting scene 2's real network round-trip. Batch 2 runs scenes 3–7 to completion
+   (mutex-serialized, but each one is a real, separate, billed Veo call).
+5. Once batch 1's scene 2 finally resolves, batch 1's loop proceeds to call
+   `generateSceneVideoAction(3)` — now enqueued *after* batch 2 has already finished all of 3–7.
+   `evaluateVideoDispatch` (`gates.ts:47-82`) **does not check `scene.videoStatus` at all** — it
+   only checks approval, scene existence, `videoAttempts >= cap`, and `imageStatus`. Since scene 3
+   is now `READY` (written by batch 2) but still under its attempt cap, `evaluateVideoDispatch`
+   grants dispatch **again**. The scene is regenerated a second time, for no benefit, at real cost.
+   The same happens for scenes 4, 5, 6, 7.
+
+Net effect: every scene batch 1 had not yet reached when batch 2 was triggered gets a real, paid
+Veo call **twice** — doubling that portion of the story's video spend against the "$15 hard cap,
+no exceptions, no bypass via retry" constraint, and consuming two attempts out of the
+`MAX_SCENE_RETRY_ATTEMPTS` cap instead of one per scene.
+
+This is strictly worse than a pure cost duplication in one more way: if the duplicate dispatch's
+`checkCeiling` call (`generate-video.ts:171`) throws because the *first* batch's legitimate spend
+already consumed the remaining headroom, `dispatchSceneVideo` calls
+`updateSceneVideo(storyId, sceneNumber, null, SceneAssetStatus.FAILED)` — **downgrading an already-
+`READY` scene (with a perfectly good video file already on disk) to `FAILED`**. Two further
+consequences follow from that:
+- `getStoryStatusAction`/`VideoStatusScreen` would then show that scene as failed/"budget reached"
+  even though a working clip exists, misleading the wife into thinking generation failed.
+- `exportEpisodeAssets` (`episode-export.ts:195`) gates on `scene.videoStatus === "READY"` to decide
+  whether to include a clip — a scene wrongly downgraded to `FAILED` this way is silently **omitted
+  from the CapCut-ready output folder**, even though its video file is sitting on disk untouched.
+  This is exactly the "silently shipping" failure mode the project's own constraints are written to
+  prevent.
+
+Neither the CR-03 mutex nor the third-pass CR-01 batch-snapshot filter closes this, because:
+- The mutex only prevents two dispatches for the same scene from running *at the same instant*; it
+  does nothing about two dispatches for the same scene running back-to-back, one after the other.
+- `evaluateBatchDispatch`'s filter is a one-time snapshot at the moment a batch is *requested*; it
+  has no way to see work that a **different, already-running** batch invocation will reach later.
+- The one gate that runs immediately before every real dispatch — `evaluateVideoDispatch` — is
+  deliberately scene-status-blind (by the third pass's own explicit design, to keep the stuck-
+  `GENERATING` single-scene retry path alive), so it grants dispatch for an already-`READY` scene
+  exactly as readily as for a never-started one.
+
+Note this does not require two browser tabs or any unusual timing to trigger — the race window is
+scene-generation-duration wide (each Veo call can legitimately take minutes), and reopening a story
+mid-batch via "My Stories" or a page reload is exactly the flow `page.tsx`'s own comment describes
+as an expected, safe user action.
+
+**Fix:**
+
+The narrowest fix that preserves the third pass's explicit intent (never breaking the stuck-
+`GENERATING` retry path) is to make `evaluateVideoDispatch` refuse when the scene is already
+`videoStatus === "READY"` — a scene that has already succeeded should never be re-dispatched by any
+caller, batch or single-scene, and this is the one status value with no legitimate reason to ever
+re-enter dispatch:
+
 ```ts
-s.imageStatus === "READY" &&
-s.imagePath !== null &&
-s.videoStatus !== "READY" &&
-s.videoAttempts < maxVideoAttempts,
-```
-This excludes `READY` scenes but explicitly does **not** exclude `GENERATING` ones.
-
-`page.tsx`'s `applyLoadedStory` resets `batchDispatched` to `false` on every restore (mount-time page load/refresh, and every "open this story from the Library" action), with this reasoning in the comment at line 173:
-
-> "D-04's batch dispatch is idempotent (it skips already-READY/at-cap scenes), so re-showing 'Generate All Videos' is always safe"
-
-That claim is only half true — it skips `READY` and at-cap scenes, but not `GENERATING` ones, which is exactly the state a scene is in for the entire multi-minute duration of its Veo call.
-
-Concrete reproduction, using only normal UI actions the app explicitly supports (VIDEO-03's "browser-resume" feature exists specifically to let her navigate away and come back mid-generation):
-
-1. Wife clicks "Generate All Videos". `generateAllVideosAction` schedules `runBatchVideoDispatch` via `after()` and returns immediately; `batchDispatched` becomes `true` in the browser, hiding the button.
-2. A few seconds later, scene 3 is marked `GENERATING` server-side (this takes minutes per scene — plenty of time for the next steps).
-3. Wife navigates to "My Stories" (Library) and re-opens the same story. `handleOpenLibraryStory` → `applyLoadedStory` runs, which unconditionally sets `batchDispatched: false` again, and seeds `videoScenes` showing scene 3 as `"generating"` (correctly, from `loadStoryAction`'s fresh read). The "Generate All Videos" button reappears (`!dispatched && !allReady`).
-4. Wife (not realizing this is redundant, since nothing in the button's own copy or disabled-state distinguishes "nothing has started" from "some scenes are still working") clicks "Generate All Videos" again.
-5. `evaluateBatchDispatch` re-evaluates: scene 3 is `videoStatus: "GENERATING"`, which is `!== "READY"`, so it is included in the new batch's `sceneNumbers`.
-6. The new batch's dispatch for scene 3 is queued behind the CR-03 mutex. Once the FIRST in-flight dispatch for scene 3 completes (success or failure), the SECOND dispatch's turn arrives. `evaluateVideoDispatch` re-checks attempts/approval/image-readiness only — not `videoStatus` — so if scene 3's attempts are still under the cap, it is granted again: a brand-new, real, billed Veo call is dispatched for a scene that may have *just finished successfully*, overwriting the freshly-written `video.mp4` at the same `sceneVideoPath(storyId, sceneNumber)` and consuming one more of that scene's limited retry attempts for zero benefit.
-
-This is a genuine, non-hypothetical budget/data-integrity defect: it burns real money against the project's explicit, non-negotiable $15 hard cap (CLAUDE.md: "no exceptions, no bypass via retry") without gating it, and it can silently exhaust a scene's retry cap on redundant work, leaving her with fewer real retries available for an actual failure later.
-
-**Fix:** Add a `videoStatus`-aware guard. The minimal, most defensible fix is inside `evaluateVideoDispatch` itself (since every caller — batch and single-scene retry — already goes through it), refusing a scene whose `videoStatus` is already `"READY"` or `"GENERATING"`:
-```ts
-// in evaluateVideoDispatch, after the imageStatus check, before granting:
+// src/core/approval/gates.ts, inside evaluateVideoDispatch, after the cap check
+// and before the imageStatus check:
 if (scene.videoStatus === "READY") {
-  return { allowed: false, message: "This scene's video has already been generated." };
-}
-if (scene.videoStatus === "GENERATING") {
-  return { allowed: false, message: "This scene's video is already being generated." };
+  return {
+    allowed: false,
+    message: "This scene's video has already been generated.",
+  };
 }
 ```
-`retrySceneVideoAction`'s only caller path is a `"failed"`/`"generating"+stuck` button, so this does not remove any legitimate retry path — it only closes the gap `evaluateBatchDispatch`'s filter already tries (and fails) to close. Also update `evaluateBatchDispatch`'s own filter to exclude `"GENERATING"` scenes from the candidate list, so a re-run batch doesn't even attempt to re-queue them:
-```ts
-s.videoStatus !== "READY" && s.videoStatus !== "GENERATING" &&
-```
-And correct the now-inaccurate idempotency comment in `page.tsx`'s `applyLoadedStory`.
+
+With this in place, batch 1's late-arriving call for scene 3 (now `READY` from batch 2) is refused
+gracefully at the single authoritative gate, instead of silently re-dispatching. This does not
+touch the `GENERATING` case at all, so `retrySceneVideoAction`'s ability to re-dispatch a scene
+stuck at `GENERATING` after a dropped `after()` callback (04-RESEARCH.md Pitfall 2) is unaffected.
+
+This closes the specific "already-succeeded scene gets re-billed" case, which is the majority of the
+damage above. It does not, by itself, prevent two overlapping batches from both attempting a scene
+that is simultaneously `WAITING` in both snapshots and not yet reached by either loop — but because
+the mutex still serializes actual execution, only one of those two calls will ever get to a scene
+while it is genuinely still `WAITING`; whichever runs second will find it `READY` (post-fix, refused)
+or (in the rarer instant-tie case) `GENERATING` (still a gap, but a much narrower and cheaper one —
+one duplicate call maximum instead of the current unbounded-until-cap behavior). If a fully airtight
+guarantee is wanted, the durable fix is a story-scoped server-side "batch already running" flag
+(e.g. a boolean or timestamp column, or an in-memory `Set<storyId>` guarded the same way
+`videoDispatchChain` is) that `generateAllVideosAction` checks and sets before scheduling its
+`after()` work, and clears when the batch's loop completes — independent of the client's
+`batchDispatched` state, which cannot be trusted to reflect whether a previous request's background
+work is still alive.
 
 ---
 
-### CR-02: VideoStatusScreen shows a false "reached its limit" dead-end message for a scene that is still actively generating, not just for one that has failed
-
-**File:** `src/app/page.tsx:556-568`, `src/components/scenes/SceneVideo.tsx:66-68`
-
-**Issue:** Because `incrementVideoAttempt` runs immediately before the paid `generateVideo()` call (pass 2's WR-02 fix, `src/app/actions/generate-video.ts:225-231`), a scene's *last* allowed attempt reaches `videoAttempts >= maxAttempts` the instant that attempt begins, not when it resolves. `getStoryStatusAction` reports `capReached: true` for that scene while its `videoStatus` is still `"GENERATING"` (`src/app/actions/get-story-status.ts:82`).
-
-In `page.tsx`'s poll loop:
-```ts
-let videoMessage: string | null =
-  videoState === "failed" ? "This scene's video could not be created." : null;
-
-// D-03: the cap is checked LAST so it takes priority over "failed"
-// -- an exhausted scene shows the calm amber explanation, never
-// the red failure message, even though its underlying videoStatus
-// is also FAILED.
-if (row.capReached && videoState !== "ready") {
-  videoState = "capped";
-  videoMessage = `This scene's video has reached its limit of ${status.maxAttempts} attempts. ...`;
-}
-```
-The comment's stated intent is explicitly to take priority over `"failed"` only. The actual condition (`videoState !== "ready"`) also matches `"generating"`, so for the entire duration of the scene's last Veo call (which can legitimately take several minutes, up to just under the 10-minute `POLL_TIMEOUT_MS` in `veo.ts`), the wife is shown the amber "reached its limit... you can continue with what's ready, or start a new story to try again" message — with `SceneVideo`'s `"capped"` branch (`SceneVideo.tsx:66-68`) rendering *only* that text and no retry affordance, no "still working" indication, nothing. If the call ultimately succeeds, the next poll tick corrects it to `"ready"` (the `ready` branch is checked first and skips the override), so the state is self-healing — but for however long the call is in flight, the primary and only wife-facing status screen (D-05's whole reason for existing) tells her something false: that the scene has permanently failed and nothing more can be done, while a paid, potentially-successful generation is quietly still running behind that message.
-
-This is most severe with `MAX_SCENE_RETRY_ATTEMPTS=1` (a supported configuration per `caps.ts`), where it fires on every scene's very first and only attempt — i.e., the "capped" dead-end message would be shown for the *entire* generation time of every single scene in that configuration, never showing "Generating video..." at all.
-
-**Fix:** Only treat a scene as "capped" once it has actually stopped trying — i.e., require the *status*, not just the attempt count, to reflect exhaustion:
-```ts
-if (row.capReached && videoState === "failed") {
-  videoState = "capped";
-  videoMessage = `...`;
-}
-```
-(This matches the comment's own stated intent — "takes priority over failed" — exactly, and leaves `"generating"` alone so the wife continues to see accurate "still working" copy until the call actually resolves one way or the other.)
-
-## Warnings
-
-### WR-01: SceneCard renders a stale, irrelevant "Video generation for this scene isn't available yet." message under every scene on the Review Images screen
-
-**File:** `src/components/scenes/SceneCard.tsx:44-61, 106-114`; call site `src/app/page.tsx:704-717`
-
-**Issue:** `SceneCard` still carries the full video-slot API from Phase 2 (`videoState`, `videoSrc`, `onGenerateVideo`, `onRetryVideo`, `videoWaitingHint`, etc.) and unconditionally renders a `<SceneVideo>` at the bottom of every card. Phase 4 replaced that slot's actual job with a dedicated `VideoStatusScreen` (Screen 4) — `VideoStatusScreen.tsx`'s own doc comment even explains it deliberately does *not* reuse `SceneCard` for this reason ("there is no image slot on this screen"). But the one remaining call site, `page.tsx:704-717` (the Review Images screen), never passes any of `SceneCard`'s video props. With `videoState` defaulting to `"waiting"` and no `onGenerateVideo`/`videoWaitingHint` supplied, `SceneVideo`'s `"waiting"` branch falls through to:
-```tsx
-return (
-  <p className="text-xs text-zinc-400 dark:text-zinc-500">
-    {waitingHint ?? "Video generation for this scene isn't available yet."}
-  </p>
-);
-```
-So every scene tile on the Review Images screen — a screen entirely about approving *images*, before video generation is even unlocked — shows this leftover, out-of-context sentence about video. It is dead functionality that was never cleaned up when Phase 4 moved video status to its own screen, and it is confusing noise on a screen a non-technical user is meant to read carefully before approving.
-
-**Fix:** Remove the video-slot props and the `<SceneVideo>` render entirely from `SceneCard` (nothing in the current codebase supplies or needs them), or, if `SceneCard` is meant to stay a shared/future-proof component, at minimum stop rendering `<SceneVideo>` unconditionally — only render it when a caller actually opts in (e.g. `{videoState && <SceneVideo ... />}`).
-
-### WR-02: A budget-ceiling refusal is indistinguishable from a transient failure and offers an infinite, pointless "Try again" loop
-
-**File:** `src/app/actions/generate-video.ts:170-192`; `src/app/page.tsx:556-557`; `src/components/scenes/SceneVideo.tsx:90-108`
-
-**Issue:** When `checkCeiling` throws `CeilingExceededError`, `dispatchSceneVideo` marks the scene `FAILED` but deliberately does **not** increment `videoAttempts` (correct per the WR-02/pass-2 rationale: no paid call was dispatched, so no attempt should be consumed). The polled status screen, however, renders every non-capped `FAILED` scene identically — a generic `"This scene's video could not be created."` message with a `"Try again"` button (`page.tsx:556-557`, `SceneVideo.tsx:90-108`) — with no distinction for "the monthly budget is exhausted, retrying will not help." Because the attempt was never consumed, this scene also never reaches `capReached`, so the wife can click "Try again" indefinitely; each click will fail the same way (harmlessly, since `checkCeiling` re-blocks every time) but nothing ever tells her retrying is futile until the ceiling resets.
-
-**Fix:** Thread the specific refusal reason through to the poll response (e.g. add a `budgetExceeded: boolean` field to `SceneVideoStatusRow`, set from a new best-effort marker `dispatchSceneVideo` could persist, or — simpler — have `getStoryStatusAction` cross-check the current ledger headroom) and render a distinct, calmer message ("The generation budget has been reached for this project.") with the retry button removed, mirroring the `"capped"` treatment already used for the per-scene attempt cap.
-
-## Info
-
-### IN-01: `getStoryStatusAction` logs a fresh `console.error` on every 3-second poll tick for a scene whose recorded video is missing on disk
-
-**File:** `src/app/actions/get-story-status.ts:69-74`
-
-**Issue:** The `existsSync` downgrade-to-FAILED check is a sensible defensive read, but it re-logs `` `getStoryStatusAction: scene ${scene.sceneNumber}'s video file is missing on disk` `` on every poll cycle (every `POLL_INTERVAL_MS` = 3000ms) for as long as the Video Status screen stays open and that scene's DB row still says `READY` with a missing file — which, since nothing in this action ever corrects the DB row itself, is indefinitely. Over a session left open, this can produce a large volume of repeated, identical log lines for one already-understood condition.
-
-**Fix:** De-duplicate (log once per scene per session, e.g. via an in-memory `Set` keyed by `${storyId}:${sceneNumber}`), or drop to a single log at the point the DB row itself gets corrected, rather than on every poll read.
-
----
-
-_Reviewed: 2026-09-15T00:00:00Z_
+_Reviewed: 2026-09-16T00:00:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
