@@ -1,7 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { sceneDir, sceneImagePath, sceneVideoPath, storyDir } from "./storage-paths.ts";
+import {
+  sceneDir,
+  sceneImagePath,
+  sceneVideoPath,
+  storyDir,
+  outputDir,
+  outputClipPath,
+  storyJsonPath,
+  storyTextPath,
+  characterReferencePath,
+} from "./storage-paths.ts";
 
 test("storyDir builds a path rooted at storage/stories for a valid slug", () => {
   assert.equal(storyDir("my-story-1"), "storage/stories/my-story-1");
@@ -57,4 +67,69 @@ test("sceneImagePath throws for an invalid scene number", () => {
 
 test("sceneVideoPath throws for a story id containing a path separator", () => {
   assert.throws(() => sceneVideoPath("a/b", 1));
+});
+
+// --- §23 output layout (OUTPUT-01, OUTPUT-03) -----------------------------
+
+test("outputClipPath zero-pads scene 1 to 01_scene.mp4", () => {
+  assert.equal(outputClipPath("my-story", 1), "storage/stories/my-story/output/01_scene.mp4");
+});
+
+test("outputClipPath does not zero-pad scene 12 -- stays 12_scene.mp4", () => {
+  assert.equal(outputClipPath("my-story", 12), "storage/stories/my-story/output/12_scene.mp4");
+});
+
+for (const bad of [0, -1, 1.5, Number("not-a-number")]) {
+  test(`outputClipPath throws for an invalid scene number: ${bad}`, () => {
+    assert.throws(() => outputClipPath("my-story", bad));
+  });
+}
+
+for (const badId of ["../etc", "Story_A"]) {
+  test(`outputDir throws for an invalid story id: ${JSON.stringify(badId)}`, () => {
+    assert.throws(() => outputDir(badId));
+  });
+
+  test(`storyJsonPath throws for an invalid story id: ${JSON.stringify(badId)}`, () => {
+    assert.throws(() => storyJsonPath(badId));
+  });
+
+  test(`storyTextPath throws for an invalid story id: ${JSON.stringify(badId)}`, () => {
+    assert.throws(() => storyTextPath(badId));
+  });
+}
+
+test("outputDir builds a path rooted at the story's own directory", () => {
+  assert.equal(outputDir("my-story"), "storage/stories/my-story/output");
+});
+
+test("storyJsonPath builds story.json at the story's own root", () => {
+  assert.equal(storyJsonPath("my-story"), "storage/stories/my-story/story.json");
+});
+
+test("storyTextPath builds story.txt at the story's own root", () => {
+  assert.equal(storyTextPath("my-story"), "storage/stories/my-story/story.txt");
+});
+
+test("characterReferencePath accepts an extension with no leading dot", () => {
+  assert.equal(characterReferencePath("my-story", "jpg"), "storage/stories/my-story/character-reference.jpg");
+});
+
+test("characterReferencePath accepts an extension with a leading dot identically", () => {
+  assert.equal(characterReferencePath("my-story", ".jpg"), "storage/stories/my-story/character-reference.jpg");
+});
+
+test("characterReferencePath throws for an extension containing a path separator", () => {
+  assert.throws(() => characterReferencePath("my-story", "j/pg"));
+});
+
+test("a lexicographic sort of clip names for scenes 1-12 equals ascending scene order (OUTPUT-03's mechanical proof)", () => {
+  const sceneNumbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+  const ascendingNames = sceneNumbers.map((n) => outputClipPath("sort-story", n));
+
+  const shuffled = [12, 3, 7, 1, 9, 2, 11, 4, 10, 6, 8, 5];
+  const shuffledNames = shuffled.map((n) => outputClipPath("sort-story", n));
+
+  const sorted = [...shuffledNames].sort();
+  assert.deepEqual(sorted, ascendingNames);
 });

@@ -35,6 +35,12 @@ export interface VideoStatusScreenProps {
   // batch uses. Wired to a "failed" row's "Try again" button and, when
   // `stuck` is true, to a "generating" row's own "Try again" affordance.
   onRetryScene: (sceneNumber: number) => void;
+  // OUTPUT-01 (plan 04-04): exports the episode's files then opens the
+  // folder. All three optional so this component doesn't require every
+  // caller (e.g. an earlier test) to supply them.
+  onOpenOutputFolder?: () => void;
+  openingFolder?: boolean;
+  outputMessage?: string | null;
 }
 
 /**
@@ -55,6 +61,9 @@ export default function VideoStatusScreen({
   allReady,
   onGenerateAll,
   onRetryScene,
+  onOpenOutputFolder,
+  openingFolder,
+  outputMessage,
 }: VideoStatusScreenProps) {
   return (
     <div className="flex flex-col gap-8">
@@ -89,7 +98,7 @@ export default function VideoStatusScreen({
         ))}
       </div>
 
-      {!dispatched && (
+      {!dispatched && !allReady && (
         <button
           type="button"
           disabled={starting}
@@ -101,9 +110,24 @@ export default function VideoStatusScreen({
       )}
 
       {allReady && (
-        <p className="text-sm text-black dark:text-zinc-50">
-          Every scene is ready. Your episode&apos;s clips are saved and numbered for CapCut.
-        </p>
+        <>
+          <p className="text-sm text-black dark:text-zinc-50">
+            Every scene is ready. Your episode&apos;s clips are saved and numbered for CapCut.
+          </p>
+          {onOpenOutputFolder && (
+            <button
+              type="button"
+              disabled={openingFolder}
+              onClick={onOpenOutputFolder}
+              className="rounded-full bg-foreground px-5 py-3 font-medium text-background transition-colors hover:bg-[#383838] disabled:opacity-50 dark:hover:bg-[#ccc]"
+            >
+              {openingFolder ? "Opening..." : "Open Output Folder"}
+            </button>
+          )}
+          {outputMessage && (
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">{outputMessage}</p>
+          )}
+        </>
       )}
     </div>
   );

@@ -4,6 +4,23 @@
 //   storage/stories/<story-id>/scenes/01/image.<ext>
 //   storage/stories/<story-id>/scenes/01/video.mp4
 //
+// Phase 4 (plan 04-04, OUTPUT-01/OUTPUT-03) adds the §23 output layout
+// alongside it:
+//
+//   storage/stories/<story-id>/story.json
+//   storage/stories/<story-id>/story.txt
+//   storage/stories/<story-id>/character-reference.<ext>
+//   storage/stories/<story-id>/output/01_scene.mp4
+//   storage/stories/<story-id>/output/02_scene.mp4
+//
+// The two-digit zero-pad on the output clip name is load-bearing, not
+// cosmetic: a plain lexicographic name sort is the only ordering CapCut's
+// import gives her for free, with no extra tooling. An unpadded "10_scene.mp4"
+// sorts before "2_scene.mp4" under that ordering (the character "1" sorts
+// before "2"), which would silently scramble a 10+ scene episode's import
+// order -- so every clip name is padded to two digits (pad2, already used by
+// sceneDir below) to keep name order equal to scene order (OUTPUT-03).
+//
 // Both `storyId` and `sceneNumber` are validated BEFORE being used in a path
 // (T-02-07). `sceneNumber` must be a positive integer -- converted from a
 // number, never interpolated from a model-supplied string -- and `storyId`
@@ -69,4 +86,31 @@ export function sceneImagePath(storyId: string, sceneNumber: number, extension: 
 
 export function sceneVideoPath(storyId: string, sceneNumber: number): string {
   return `${sceneDir(storyId, sceneNumber)}/video.mp4`;
+}
+
+// --- §23 output layout (OUTPUT-01, OUTPUT-03) -----------------------------
+
+export function outputDir(storyId: string): string {
+  return `${storyDir(storyId)}/output`;
+}
+
+export function outputClipPath(storyId: string, sceneNumber: number): string {
+  assertValidSceneNumber(sceneNumber);
+  return `${outputDir(storyId)}/${pad2(sceneNumber)}_scene.mp4`;
+}
+
+export function storyJsonPath(storyId: string): string {
+  return `${storyDir(storyId)}/story.json`;
+}
+
+export function storyTextPath(storyId: string): string {
+  return `${storyDir(storyId)}/story.txt`;
+}
+
+export function characterReferencePath(storyId: string, extension: string): string {
+  const ext = extension.replace(/^\./, "");
+  if (!EXTENSION_PATTERN.test(ext)) {
+    throw new Error(`Invalid file extension "${extension}": must be alphanumeric only.`);
+  }
+  return `${storyDir(storyId)}/character-reference.${ext}`;
 }

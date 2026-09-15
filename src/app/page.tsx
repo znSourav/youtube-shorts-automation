@@ -20,6 +20,7 @@ import { loadStoryAction } from "./actions/load-story.ts";
 import { generateAllVideosAction } from "./actions/generate-all-videos.ts";
 import { getStoryStatusAction } from "./actions/get-story-status.ts";
 import { retrySceneVideoAction } from "./actions/retry-scene-video.ts";
+import { openStoryFolderAction } from "./actions/open-story-folder.ts";
 
 type Screen = "create" | "review-story" | "review-images" | "video-status";
 
@@ -100,6 +101,10 @@ export default function Home() {
   // keyed by scene number, cleared whenever a scene leaves "generating".
   const [retryingScene, setRetryingScene] = useState<number | null>(null);
   const generatingStartedAtRef = useRef<Record<number, number>>({});
+
+  // OUTPUT-01 (plan 04-04): "Open Output Folder" control state.
+  const [openingFolder, setOpeningFolder] = useState(false);
+  const [outputMessage, setOutputMessage] = useState<string | null>(null);
 
   // VIDEO-03 (soft): true only while the mount-time restore attempt is in
   // flight. The create screen renders nothing while this is true, so a
@@ -235,6 +240,8 @@ export default function Home() {
     setBatchError(null);
     setRetryingScene(null);
     generatingStartedAtRef.current = {};
+    setOpeningFolder(false);
+    setOutputMessage(null);
     setScreen("review-story");
     window.localStorage.setItem(LAST_STORY_ID_KEY, result.storyId);
   }
@@ -353,6 +360,23 @@ export default function Home() {
       await retrySceneVideoAction(storyId, sceneNumber);
     } finally {
       setRetryingScene(null);
+    }
+  }
+
+  // OUTPUT-01: exports the episode's files then opens its folder, via the
+  // one action that spawns an operating-system process in this codebase.
+  async function handleOpenOutputFolder() {
+    if (!storyId) return;
+    setOpeningFolder(true);
+    setOutputMessage(null);
+
+    try {
+      const result = await openStoryFolderAction(storyId);
+      setOutputMessage(result.message);
+    } catch {
+      setOutputMessage("Your episode's folder couldn't be opened just now. Please try again.");
+    } finally {
+      setOpeningFolder(false);
     }
   }
 
@@ -584,6 +608,9 @@ export default function Home() {
             allReady={allVideosReady}
             onGenerateAll={handleGenerateAllVideos}
             onRetryScene={handleRetryScene}
+            onOpenOutputFolder={handleOpenOutputFolder}
+            openingFolder={openingFolder}
+            outputMessage={outputMessage}
           />
         )}
       </main>
