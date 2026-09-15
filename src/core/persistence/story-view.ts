@@ -112,9 +112,15 @@ export interface LibraryStoryRow {
  *   2. every scene's videoStatus is "READY" -> "Complete"
  *   3. at least one scene FAILED at the cap, and no scene is GENERATING ->
  *      "Needs Attention"
- *   4. imagesApprovedAt !== null -> "Generating Videos"
- *   5. every scene's imageStatus is "READY" -> "Ready to Approve"
- *   6. otherwise -> "Draft"
+ *   4. imagesApprovedAt !== null and at least one scene's imageStatus is not
+ *      "READY" -> "Needs Attention" (CR-02, 04-REVIEW.md second pass: a
+ *      post-approval image regeneration -- D-02 explicitly allows one -- can
+ *      fail and degrade a previously-READY scene; evaluateApproval already
+ *      refuses approval unless every scene is READY, so this only fires
+ *      after approval, never at the moment of it)
+ *   5. imagesApprovedAt !== null -> "Generating Videos"
+ *   6. every scene's imageStatus is "READY" -> "Ready to Approve"
+ *   7. otherwise -> "Draft"
  *
  * `maxVideoAttempts` is a parameter rather than read inside this module for
  * the same reason gates.ts takes it as a parameter: keeping it injected is
@@ -142,6 +148,19 @@ export function computeLibraryStatus(
   const hasCappedFailure = scenes.some((s) => s.videoStatus === "FAILED" && s.videoAttempts >= maxVideoAttempts);
   const hasGenerating = scenes.some((s) => s.videoStatus === "GENERATING");
   if (hasCappedFailure && !hasGenerating) {
+    return "Needs Attention";
+  }
+
+  // CR-02 (04-REVIEW.md, second pass): a post-approval image regeneration
+  // (D-02 allows one) can fail and leave a previously-READY scene at
+  // imageStatus !== "READY" after approval. evaluateApproval (gates.ts)
+  // already refuses approval unless every scene's imageStatus is READY, so
+  // hasUnreadyImage is always false at the moment of approval -- this
+  // branch only fires once a later regeneration has degraded an
+  // already-approved story, making that state visible instead of
+  // indistinguishable from normal "Generating Videos" progress.
+  const hasUnreadyImage = scenes.some((s) => s.imageStatus !== "READY");
+  if (imagesApprovedAt !== null && hasUnreadyImage) {
     return "Needs Attention";
   }
 

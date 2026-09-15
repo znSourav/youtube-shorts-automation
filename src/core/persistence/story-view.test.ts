@@ -252,6 +252,20 @@ test("an empty scene array gives Draft", () => {
   assert.equal(computeLibraryStatus(null, [], MAX_ATTEMPTS), "Draft");
 });
 
+// CR-02 (04-REVIEW.md, second pass): a post-approval image regeneration can
+// fail and degrade a previously-READY scene. That scene's videoStatus stays
+// WAITING (it was never dispatched to begin with, and evaluateBatchDispatch
+// only dispatches READY images) -- not GENERATING, and not a capped video
+// FAILED -- so this exercises the new branch specifically, not the existing
+// hasCappedFailure/hasGenerating branch above it.
+test("approval set with one scene's image failed post-approval gives Needs Attention", () => {
+  const scenes = [
+    sceneSummary({ imageStatus: "FAILED", videoStatus: "WAITING" }),
+    sceneSummary({ imageStatus: "READY", videoStatus: "WAITING" }),
+  ];
+  assert.equal(computeLibraryStatus(new Date(), scenes, MAX_ATTEMPTS), "Needs Attention");
+});
+
 // --- toLibraryRow -----------------------------------------------------------
 
 function librarySourceFixture(overrides: Partial<LibraryStorySource> = {}): LibraryStorySource {
