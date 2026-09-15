@@ -323,10 +323,29 @@ async function dispatchSceneVideo(
     const videoBytes = readFileSync(result.filePath);
     videoDataUrl = `data:video/mp4;base64,${videoBytes.toString("base64")}`;
   } catch (err) {
+    // Sixth-pass review BLOCKER: the Veo call already succeeded and the
+    // video file genuinely exists at result.filePath -- only reading it
+    // back for THIS response's inline preview failed (a transient local
+    // I/O hiccup: a locked file, an antivirus scan mid-write, a momentary
+    // disk issue). Writing READY with the real path (not FAILED with null)
+    // is what the success branch four lines below already does for the
+    // happy path; mirroring it here means a scene is never marked failed,
+    // never loses its retry-cap headroom, and is never dropped from the
+    // CapCut output folder over a readback failure that has nothing to do
+    // with whether the video itself is good. The next poll/reload
+    // (getStoryStatusAction's own existsSync check, or a fresh
+    // loadStoryAction readFileSync) gets an independent chance to read the
+    // same file again -- likely succeeding, since the failure here was
+    // local and transient, not a property of the file itself. This
+    // response still can't show her the video inline right now, so it
+    // still returns ok: false with a plain explanation, but that return
+    // value is discarded by every real caller (both the batch and the
+    // retry path rely entirely on the next poll tick to read the real
+    // DB-backed status, per this function's own callers' documentation).
     console.error(`generateSceneVideoAction: failed to read generated video at ${result.filePath}`, err);
-    const message = "The video was generated but could not be loaded for playback. Please try again.";
-    await updateSceneVideo(storyId, sceneNumber, null, SceneAssetStatus.FAILED);
-    await recordGeneration(storyId, { ...generationRecordBase, ok: false, message }, sceneNumber);
+    const message = "The video was generated but could not be loaded for playback just now.";
+    await updateSceneVideo(storyId, sceneNumber, result.filePath, SceneAssetStatus.READY);
+    await recordGeneration(storyId, { ...generationRecordBase, ok: true, message: "Video generated." }, sceneNumber);
     return {
       ok: false,
       videoPath: result.filePath,
