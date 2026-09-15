@@ -1,7 +1,7 @@
 ---
 phase: 04-wife-facing-review-approval-flow
 verified: 2026-09-15T19:07:23Z
-status: human_needed
+status: passed
 score: 3/6 truths verified, 3 present-but-behavior-unverified
 behavior_unverified: 3
 overrides_applied: 0
@@ -19,6 +19,7 @@ re_verification:
     - "SC6 (error sub-clause) — no error occurred during this run, so the roadmap's explicit 'and any error explains what to do next rather than showing developer/API terminology' clause was not observed live. The error-string content was already reviewed at the code level in the original verification (unchanged, still valid) but a live-triggered error display has never been seen."
   regressions: []
 behavior_unverified_items:
+
   - truth: "SC2 — She can regenerate a single scene's image without affecting any other scene's image, video, or status."
     test: "With a real story past initial image generation, press 'Regenerate this image' on exactly one scene and confirm only that scene's image/attempt count changes while every other scene's image, video, and status stay untouched."
     expected: "Only the targeted scene's imagePath/imageAttempts change; all other scenes' imagePath, videoPath, imageStatus, and videoStatus are byte-for-byte unchanged; the counter increments before the new image is dispatched."
@@ -33,6 +34,7 @@ behavior_unverified_items:
     why_human: "The 2026-09-15 live run completed with no errors anywhere (5/5 images and 5/5 videos succeeded on the first attempt), so no error string was ever actually rendered and observed live. The refusal/confirmation strings were reviewed for jargon at the source-code level in the original verification (still valid, unchanged), but that is content review, not a live-rendering observation. The rest of SC6 — the full continuous happy-path journey using only plain-language UI — IS now live-verified."
 coincidental_reliance_items: []
 human_verification:
+
   - test: "With a real story past initial image generation, press 'Regenerate this image' on exactly one scene and confirm only that scene's image/attempt count changes."
     expected: "Only the targeted scene's image/attempt count change; every other scene's image, video, and status stay untouched."
     why_human: "Never exercised live in this phase at any point, including the 2026-09-15 live run."

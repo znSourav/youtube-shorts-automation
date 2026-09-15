@@ -607,6 +607,231 @@
       },
       "billed": true,
       "at": "2026-09-13T16:48:14.136Z"
+    },
+    {
+      "call": "story:5-scene",
+      "model": "gemini-3.1-pro-preview",
+      "estimatedUsd": 0.05,
+      "usageMetadata": {
+        "promptTokenCount": 773,
+        "candidatesTokenCount": 1983,
+        "totalTokenCount": 7372,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 773
+          }
+        ],
+        "thoughtsTokenCount": 4616,
+        "serviceTier": "standard"
+      },
+      "billed": true,
+      "at": "2026-09-15T18:53:05.953Z"
+    },
+    {
+      "call": "scene-image:story-1789498386163-pb6tfs:1",
+      "model": "gemini-3.1-flash-image",
+      "estimatedUsd": 0.067,
+      "usageMetadata": {
+        "promptTokenCount": 197,
+        "candidatesTokenCount": 1422,
+        "totalTokenCount": 1619,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 197
+          }
+        ],
+        "candidatesTokensDetails": [
+          {
+            "modality": "IMAGE",
+            "tokenCount": 1120
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "billed": true,
+      "at": "2026-09-15T18:53:29.578Z"
+    },
+    {
+      "call": "scene-image:story-1789498386163-pb6tfs:2",
+      "model": "gemini-3.1-flash-image",
+      "estimatedUsd": 0.067,
+      "usageMetadata": {
+        "promptTokenCount": 193,
+        "candidatesTokenCount": 1384,
+        "totalTokenCount": 1577,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 193
+          }
+        ],
+        "candidatesTokensDetails": [
+          {
+            "modality": "IMAGE",
+            "tokenCount": 1120
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "billed": true,
+      "at": "2026-09-15T18:53:39.869Z"
+    },
+    {
+      "call": "scene-image:story-1789498386163-pb6tfs:3",
+      "model": "gemini-3.1-flash-image",
+      "estimatedUsd": 0.067,
+      "usageMetadata": {
+        "promptTokenCount": 196,
+        "candidatesTokenCount": 1323,
+        "totalTokenCount": 1519,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 196
+          }
+        ],
+        "candidatesTokensDetails": [
+          {
+            "modality": "IMAGE",
+            "tokenCount": 1120
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "billed": true,
+      "at": "2026-09-15T18:53:48.459Z"
+    },
+    {
+      "call": "scene-image:story-1789498386163-pb6tfs:4",
+      "model": "gemini-3.1-flash-image",
+      "estimatedUsd": 0.067,
+      "usageMetadata": {
+        "promptTokenCount": 202,
+        "candidatesTokenCount": 1291,
+        "totalTokenCount": 1493,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 202
+          }
+        ],
+        "candidatesTokensDetails": [
+          {
+            "modality": "IMAGE",
+            "tokenCount": 1120
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "billed": true,
+      "at": "2026-09-15T18:53:56.583Z"
+    },
+    {
+      "call": "scene-image:story-1789498386163-pb6tfs:5",
+      "model": "gemini-3.1-flash-image",
+      "estimatedUsd": 0.067,
+      "usageMetadata": {
+        "promptTokenCount": 201,
+        "candidatesTokenCount": 1330,
+        "totalTokenCount": 1531,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 201
+          }
+        ],
+        "candidatesTokensDetails": [
+          {
+            "modality": "IMAGE",
+            "tokenCount": 1120
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "billed": true,
+      "at": "2026-09-15T18:54:05.968Z"
+    },
+    {
+      "call": "scene-video:story-1789498386163-pb6tfs:1",
+      "model": "veo-3.1-lite-generate-preview",
+      "estimatedUsd": 0.30000000000000004,
+      "usageMetadata": {
+        "generatedVideos": [
+          {
+            "video": {
+              "uri": "https://generativelanguage.googleapis.com/v1beta/files/tmti99yr4t7a:download?alt=media"
+            }
+          }
+        ]
+      },
+      "billed": true,
+      "at": "2026-09-15T18:55:42.898Z"
+    },
+    {
+      "call": "scene-video:story-1789498386163-pb6tfs:2",
+      "model": "veo-3.1-lite-generate-preview",
+      "estimatedUsd": 0.2,
+      "usageMetadata": {
+        "generatedVideos": [
+          {
+            "video": {
+              "uri": "https://generativelanguage.googleapis.com/v1beta/files/uc46al2cuxsi:download?alt=media"
+            }
+          }
+        ]
+      },
+      "billed": true,
+      "at": "2026-09-15T18:56:18.795Z"
+    },
+    {
+      "call": "scene-video:story-1789498386163-pb6tfs:3",
+      "model": "veo-3.1-lite-generate-preview",
+      "estimatedUsd": 0.4,
+      "usageMetadata": {
+        "generatedVideos": [
+          {
+            "video": {
+              "uri": "https://generativelanguage.googleapis.com/v1beta/files/ptcz1xjjfklz:download?alt=media"
+            }
+          }
+        ]
+      },
+      "billed": true,
+      "at": "2026-09-15T18:57:05.402Z"
+    },
+    {
+      "call": "scene-video:story-1789498386163-pb6tfs:4",
+      "model": "veo-3.1-lite-generate-preview",
+      "estimatedUsd": 0.30000000000000004,
+      "usageMetadata": {
+        "generatedVideos": [
+          {
+            "video": {
+              "uri": "https://generativelanguage.googleapis.com/v1beta/files/0onphnvhh8ee:download?alt=media"
+            }
+          }
+        ]
+      },
+      "billed": true,
+      "at": "2026-09-15T18:57:42.304Z"
+    },
+    {
+      "call": "scene-video:story-1789498386163-pb6tfs:5",
+      "model": "veo-3.1-lite-generate-preview",
+      "estimatedUsd": 0.4,
+      "usageMetadata": {
+        "generatedVideos": [
+          {
+            "video": {
+              "uri": "https://generativelanguage.googleapis.com/v1beta/files/t6cxlrsl6c07:download?alt=media"
+            }
+          }
+        ]
+      },
+      "billed": true,
+      "at": "2026-09-15T18:58:29.380Z"
     }
   ]
 }
