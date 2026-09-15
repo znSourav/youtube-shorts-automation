@@ -174,6 +174,16 @@ async function dispatchSceneVideo(
       err instanceof CeilingExceededError
         ? "The generation budget was reached, so this scene's video could not be created."
         : "This scene's video could not be created due to an unexpected error.";
+    // WR-07 (04-REVIEW.md, second pass): every other failure branch in this
+    // file logs before returning -- this was the one silent exception. An
+    // unexpected (non-ceiling) error in the pre-flight budget check would
+    // otherwise be completely invisible in the server console.
+    if (!(err instanceof CeilingExceededError)) {
+      console.error(
+        `generateSceneVideoAction: checkCeiling failed unexpectedly for story ${storyId} scene ${sceneNumber}`,
+        err,
+      );
+    }
     // No provider call was dispatched -- nothing was necessarily billed, so
     // no generation record (mirrors the existing decision not to call
     // recordSpend here). The scene's status is still written.
