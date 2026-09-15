@@ -20,7 +20,15 @@ export type VideoDispatchDecision = GateRefusal | { allowed: true; scene: SceneR
 
 export type ApprovalDecision = GateRefusal | { allowed: true };
 
-export type ImageRegenerationDecision = GateRefusal | { allowed: true; scene: SceneRow; alreadyApproved: boolean };
+// WR-01: refusal carries its own `reason` so callers can tell an exhausted
+// retry cap apart from a not-found refusal without re-deriving it from
+// `story`'s truthiness (which conflated the scene-not-found case with the
+// cap case -- both have a non-null story).
+export type ImageRegenerationRefusal = { allowed: false; message: string; reason: "not-found" | "cap" };
+
+export type ImageRegenerationDecision =
+  | ImageRegenerationRefusal
+  | { allowed: true; scene: SceneRow; alreadyApproved: boolean };
 
 export type BatchDispatchDecision = GateRefusal | { allowed: true; sceneNumbers: number[] };
 
@@ -110,12 +118,12 @@ export function evaluateImageRegeneration(
   maxImageAttempts: number,
 ): ImageRegenerationDecision {
   if (story === null) {
-    return { allowed: false, message: "This story could not be found." };
+    return { allowed: false, message: "This story could not be found.", reason: "not-found" };
   }
 
   const scene = story.scenes.find((s) => s.sceneNumber === sceneNumber);
   if (!scene) {
-    return { allowed: false, message: "That scene could not be found in this story." };
+    return { allowed: false, message: "That scene could not be found in this story.", reason: "not-found" };
   }
 
   if (scene.imageAttempts >= maxImageAttempts) {
@@ -124,6 +132,7 @@ export function evaluateImageRegeneration(
       message:
         `This scene's image has reached its limit of ${maxImageAttempts} attempts. You can keep the current ` +
         "image and move on, or start a new story for a different result.",
+      reason: "cap",
     };
   }
 

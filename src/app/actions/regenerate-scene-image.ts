@@ -78,10 +78,10 @@ export async function regenerateSceneImageAction(
       message: decision.message,
       // The browser needs to tell an exhausted-cap refusal apart from a
       // not-found refusal, so it can render the calm amber inline note
-      // rather than a transient error -- only set when the story and scene
-      // both existed (i.e. this decision came from the cap check, not a
-      // not-found branch).
-      capMessage: story !== null ? decision.message : null,
+      // rather than a transient error -- discriminated on the decision's
+      // own `reason` tag (WR-01), not on `story`'s truthiness, which
+      // conflated the scene-not-found case with the cap case.
+      capMessage: decision.reason === "cap" ? decision.message : null,
       approvalNotice: null,
     };
   }
