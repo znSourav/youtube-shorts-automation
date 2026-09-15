@@ -29,7 +29,16 @@ export interface EpisodeOutputResult {
   clipCount: number;
 }
 
-export async function openStoryFolderAction(storyId: string): Promise<EpisodeOutputResult> {
+/**
+ * finalizeEpisodeAction: the validate-load-export half, shared by
+ * openStoryFolderAction (below) and page.tsx's automatic export-on-complete
+ * effect. Spawns nothing. The message is deliberately null on success --
+ * plan 04-03's VideoStatusScreen already carries the locked completion
+ * sentence ("Every scene is ready. Your episode's clips are saved and
+ * numbered for CapCut."), and a second sentence saying the same thing in
+ * different words would be two sources of truth for one fact.
+ */
+export async function finalizeEpisodeAction(storyId: string): Promise<EpisodeOutputResult> {
   try {
     storyDir(storyId);
   } catch {
@@ -40,7 +49,7 @@ export async function openStoryFolderAction(storyId: string): Promise<EpisodeOut
   try {
     row = await findStoryWithScenes(storyId);
   } catch (err) {
-    console.error(`openStoryFolderAction: failed to read story ${storyId}`, err);
+    console.error(`finalizeEpisodeAction: failed to read story ${storyId}`, err);
     return { ok: false, message: "This story's folder could not be found.", clipCount: 0 };
   }
 
@@ -52,12 +61,29 @@ export async function openStoryFolderAction(storyId: string): Promise<EpisodeOut
   try {
     exported = exportEpisodeAssets(row);
   } catch (err) {
-    console.error(`openStoryFolderAction: failed to export episode assets for story ${storyId}`, err);
+    console.error(`finalizeEpisodeAction: failed to export episode assets for story ${storyId}`, err);
     return {
       ok: false,
       message: "Your episode's files couldn't be saved to the folder just now. Please try again.",
       clipCount: 0,
     };
+  }
+
+  return { ok: true, message: null, clipCount: exported.clipsWritten.length };
+}
+
+/**
+ * openStoryFolderAction: delegates its validate-load-export work to
+ * finalizeEpisodeAction (the export logic exists exactly once) and adds
+ * only the spawn -- this is the one call site in the codebase permitted to
+ * launch an operating-system process (check-boundaries.ts invariant 6). The
+ * export runs before the spawn on purpose, so the folder she is about to
+ * look at is current rather than whatever was last written.
+ */
+export async function openStoryFolderAction(storyId: string): Promise<EpisodeOutputResult> {
+  const result = await finalizeEpisodeAction(storyId);
+  if (!result.ok) {
+    return result;
   }
 
   if (process.platform === "win32") {
@@ -71,5 +97,5 @@ export async function openStoryFolderAction(storyId: string): Promise<EpisodeOut
     console.log(`openStoryFolderAction: folder-open skipped -- not running on win32 (story ${storyId})`);
   }
 
-  return { ok: true, message: "Opening the folder...", clipCount: exported.clipsWritten.length };
+  return { ok: true, message: "Opening the folder...", clipCount: result.clipCount };
 }

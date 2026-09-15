@@ -20,7 +20,7 @@ import { loadStoryAction } from "./actions/load-story.ts";
 import { generateAllVideosAction } from "./actions/generate-all-videos.ts";
 import { getStoryStatusAction } from "./actions/get-story-status.ts";
 import { retrySceneVideoAction } from "./actions/retry-scene-video.ts";
-import { openStoryFolderAction } from "./actions/open-story-folder.ts";
+import { openStoryFolderAction, finalizeEpisodeAction } from "./actions/open-story-folder.ts";
 
 type Screen = "create" | "review-story" | "review-images" | "video-status";
 
@@ -105,6 +105,18 @@ export default function Home() {
   // OUTPUT-01 (plan 04-04): "Open Output Folder" control state.
   const [openingFolder, setOpeningFolder] = useState(false);
   const [outputMessage, setOutputMessage] = useState<string | null>(null);
+  // The id of the story whose episode has already been auto-finalized this
+  // session -- guards against calling finalizeEpisodeAction more than once
+  // for the same completed story as the poll effect keeps firing.
+  const [finalizedStoryId, setFinalizedStoryId] = useState<string | null>(null);
+  // OUTPUT-01: mirrors videoScenesRef's staleness fix -- read inside the
+  // polling effect's async callback, which only closes over a fresh
+  // `finalizedStoryId` when the effect itself re-runs (screen/storyId
+  // change), not on every setFinalizedStoryId call.
+  const finalizedStoryIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    finalizedStoryIdRef.current = finalizedStoryId;
+  }, [finalizedStoryId]);
 
   // VIDEO-03 (soft): true only while the mount-time restore attempt is in
   // flight. The create screen renders nothing while this is true, so a
@@ -242,6 +254,7 @@ export default function Home() {
     generatingStartedAtRef.current = {};
     setOpeningFolder(false);
     setOutputMessage(null);
+    setFinalizedStoryId(null);
     setScreen("review-story");
     window.localStorage.setItem(LAST_STORY_ID_KEY, result.storyId);
   }
@@ -461,6 +474,20 @@ export default function Home() {
         status.scenes.every((row) => row.videoStatus === "READY" || row.videoStatus === "FAILED");
       if (allTerminal) {
         clearInterval(intervalId);
+
+        // OUTPUT-01: this is what makes plan 04-03's locked sentence "Every
+        // scene is ready. Your episode's clips are saved and numbered for
+        // CapCut." true at the instant it appears, not only after she
+        // presses "Open Output Folder". Fires at most once per story per
+        // session, guarded by finalizedStoryIdRef.
+        const anyReady = status.scenes.some((row) => row.videoStatus === "READY");
+        if (anyReady && currentStoryId && finalizedStoryIdRef.current !== currentStoryId) {
+          finalizedStoryIdRef.current = currentStoryId;
+          setFinalizedStoryId(currentStoryId);
+          finalizeEpisodeAction(currentStoryId).catch((err) => {
+            console.error(`finalizeEpisodeAction failed for story ${currentStoryId}`, err);
+          });
+        }
       }
     }
 

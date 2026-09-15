@@ -35,6 +35,14 @@
 //    generateSceneVideoAction) structurally unbypassable: a future Server
 //    Action cannot reach Veo or Gemini Image without going through the one
 //    function that already checks them (04-RESEARCH.md Pitfall 1).
+// 6. Outside src/scripts/, a file may import a specifier containing
+//    "child_process" only if it IS src/app/actions/open-story-folder.ts
+//    (Phase 4, plan 04-04 Task 2). Spawning an operating-system process is
+//    the single highest-consequence thing this application does with a
+//    client-supplied string (a story id, however narrowly validated) -- so
+//    it gets one file, one call site, and one validated argument, and a
+//    second call site anywhere else is a failing gate rather than a review
+//    miss.
 //
 // Run with: node src/scripts/check-boundaries.ts
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -53,6 +61,10 @@ const SELF_PATH = "src/scripts/check-boundaries.ts";
 // truth rather than a repeated string literal.
 const ALLOWED_VIDEO_DISPATCH_PATH = "src/app/actions/generate-video.ts";
 const ALLOWED_IMAGE_DISPATCH_PATH = "src/app/actions/generate-images.ts";
+
+// Invariant 6's allow-list -- the ONLY file outside src/scripts/ permitted
+// to import a specifier containing "child_process" (Phase 4, plan 04-04).
+const ALLOWED_PROCESS_SPAWN_PATH = "src/app/actions/open-story-folder.ts";
 
 // Held as named constants (not inlined into the scan below) so invariant 4
 // can skip this file's own path without also needing string-literal
@@ -246,6 +258,32 @@ function main(): void {
     }
   } else {
     console.log("OK: the image and video providers each have a single paid dispatch point");
+  }
+
+  // Invariant 6 -- outside src/scripts/, a file may import a specifier
+  // containing "child_process" only if it IS the single allowed
+  // process-spawning file. Scans import specifiers only (not file
+  // contents), so a comment mentioning "child_process" cannot trip this
+  // gate -- only an actual import can.
+  const offenders6: string[] = [];
+  for (const file of allFiles) {
+    if (file.startsWith("src/scripts/")) continue;
+    if (file === ALLOWED_PROCESS_SPAWN_PATH) continue;
+    const specifiers = importSpecifiers(readFileSync(file, "utf8"));
+    for (const spec of specifiers) {
+      if (spec.includes("child_process")) {
+        offenders6.push(`${file} -> "${spec}"`);
+      }
+    }
+  }
+  if (offenders6.length > 0) {
+    failed = true;
+    console.log("BOUNDARY CHECK FAILED (invariant 6 -- only the output-folder action may spawn an operating-system process):");
+    for (const offender of offenders6) {
+      console.log(`  ${offender}`);
+    }
+  } else {
+    console.log("OK: only the output-folder action may spawn an operating-system process");
   }
 
   if (failed) {

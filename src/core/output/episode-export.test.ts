@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { exportEpisodeAssets } from "./episode-export.ts";
+import { exportEpisodeAssets, buildStoryJson, buildStoryText } from "./episode-export.ts";
 import type { StoryWithScenes } from "../persistence/story-repository.ts";
 
 const STORY_ID = "story-export-test";
@@ -221,5 +221,130 @@ test("a fixture whose id is \"../etc\" throws before the root directory gains an
       storageSubtreeExists = false;
     }
     assert.equal(storageSubtreeExists, false, "no storage/ subtree should exist after a rejected id");
+  });
+});
+
+// --- Task 2: story.json, story.txt, character reference, stale-clip hygiene
+
+test("buildStoryJson parses as JSON, carries the title, exposes scenes in ascending order, and carries the created date as a string", () => {
+  const fixture = storyFixture({
+    scenes: [3, 1, 2].map((sceneNumber) => ({
+      id: `scene-${sceneNumber}`,
+      sceneNumber,
+      storyPurpose: `purpose ${sceneNumber}`,
+      imagePrompt: `image prompt ${sceneNumber}`,
+      motionPrompt: `motion prompt ${sceneNumber}`,
+      durationSeconds: 4,
+      imagePath: `storage/stories/${STORY_ID}/scenes/0${sceneNumber}/image.jpg`,
+      imageStatus: "READY",
+      videoPath: `storage/stories/${STORY_ID}/scenes/0${sceneNumber}/video.mp4`,
+      videoStatus: "READY",
+      imageAttempts: 0,
+      videoAttempts: 0,
+    })),
+  });
+
+  const json = buildStoryJson(fixture);
+  const parsed = JSON.parse(json);
+
+  assert.equal(parsed.title, "Test Episode");
+  assert.deepEqual(
+    parsed.scenes.map((s: { scene_number: number }) => s.scene_number),
+    [1, 2, 3],
+  );
+  assert.equal(typeof parsed.created_at, "string");
+});
+
+test("buildStoryText contains the title and the full story text", () => {
+  const fixture = storyFixture();
+  const text = buildStoryText(fixture);
+
+  assert.ok(text.includes("Test Episode"));
+  assert.ok(text.includes("a fixture story body"));
+});
+
+test("the export writes story.json, story.txt, and character-reference.jpg, and documentsWritten names all three", () => {
+  withTempRoot((root) => {
+    const fixture = storyFixture();
+    seedTree(root, fixture);
+
+    const result = exportEpisodeAssets(fixture, { rootDir: root });
+
+    assert.ok(result.documentsWritten.includes("story.json"));
+    assert.ok(result.documentsWritten.includes("story.txt"));
+    assert.ok(result.documentsWritten.includes("character-reference.jpg"));
+
+    const storyRoot = join(root, "storage", "stories", STORY_ID);
+    assert.ok(readFileSync(join(storyRoot, "story.json"), "utf8").length > 0);
+    assert.ok(readFileSync(join(storyRoot, "story.txt"), "utf8").length > 0);
+    assert.ok(readFileSync(join(storyRoot, "character-reference.jpg"), "utf8").length > 0);
+  });
+});
+
+test("the character reference is byte-identical to scene 1's image", () => {
+  withTempRoot((root) => {
+    const fixture = storyFixture();
+    seedTree(root, fixture);
+
+    exportEpisodeAssets(fixture, { rootDir: root });
+
+    const storyRoot = join(root, "storage", "stories", STORY_ID);
+    const reference = readFileSync(join(storyRoot, "character-reference.jpg"), "utf8");
+    const scene1Image = readFileSync(join(storyRoot, "scenes", "01", "image.jpg"), "utf8");
+    assert.equal(reference, scene1Image);
+  });
+});
+
+test("a fixture whose every scene image is unready writes no character reference and reports only the two documents", () => {
+  withTempRoot((root) => {
+    const fixture = storyFixture({
+      scenes: [1, 2, 3].map((sceneNumber) => ({
+        id: `scene-${sceneNumber}`,
+        sceneNumber,
+        storyPurpose: `purpose ${sceneNumber}`,
+        imagePrompt: `image prompt ${sceneNumber}`,
+        motionPrompt: `motion prompt ${sceneNumber}`,
+        durationSeconds: 4,
+        imagePath: null,
+        imageStatus: "WAITING",
+        videoPath: null,
+        videoStatus: "WAITING",
+        imageAttempts: 0,
+        videoAttempts: 0,
+      })),
+    });
+
+    const result = exportEpisodeAssets(fixture, { rootDir: root });
+
+    assert.deepEqual(result.documentsWritten.sort(), ["story.json", "story.txt"]);
+  });
+});
+
+test("a scene that stops being ready loses its stale clip on the next export, and every other clip stays byte-identical", () => {
+  withTempRoot((root) => {
+    const readyFixture = storyFixture();
+    seedTree(root, readyFixture);
+
+    exportEpisodeAssets(readyFixture, { rootDir: root });
+
+    const outDir = join(root, "storage", "stories", STORY_ID, "output");
+    assert.deepEqual(readdirSync(outDir).sort(), ["01_scene.mp4", "02_scene.mp4", "03_scene.mp4"]);
+    const bytesBefore = {
+      1: readFileSync(join(outDir, "01_scene.mp4"), "utf8"),
+      3: readFileSync(join(outDir, "03_scene.mp4"), "utf8"),
+    };
+
+    // Re-export with scene 2 now marked FAILED (its video is no longer ready).
+    const degradedFixture = storyFixture({
+      scenes: readyFixture.scenes.map((scene) =>
+        scene.sceneNumber === 2 ? { ...scene, videoStatus: "FAILED", videoPath: null } : scene,
+      ),
+    });
+    exportEpisodeAssets(degradedFixture, { rootDir: root });
+
+    const entriesAfter = readdirSync(outDir).sort();
+    assert.deepEqual(entriesAfter, ["01_scene.mp4", "03_scene.mp4"]);
+    assert.equal(readFileSync(join(outDir, "01_scene.mp4"), "utf8"), bytesBefore[1]);
+    assert.equal(readFileSync(join(outDir, "03_scene.mp4"), "utf8"), bytesBefore[3]);
   });
 });
