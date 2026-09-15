@@ -26,6 +26,16 @@ import { checkCeiling, CeilingExceededError } from "../../lib/spend-ledger.ts";
 // with veo.ts's own price table if that ever changes.
 const MAX_SCENE_VIDEO_COST_USD = 8 * 0.05;
 
+// IN-01 (04-REVIEW.md, third pass): this action is polled every 3s
+// (POLL_INTERVAL_MS) for as long as the wife is on the Video Status screen,
+// so an unguarded console.error for a scene whose video file is missing on
+// disk would otherwise log again on every single tick, indefinitely. A
+// module-level Set logs each distinct (storyId, sceneNumber) pair exactly
+// once. This is a long-lived Node dev-server process, and there is no
+// realistic scenario in this single-user local app where enough distinct
+// missing-video scenes accumulate for an ever-growing Set to matter.
+const loggedMissingVideo = new Set<string>();
+
 export interface SceneVideoStatusRow {
   sceneNumber: number;
   storyPurpose: string;
@@ -88,9 +98,13 @@ export async function getStoryStatusAction(storyId: string): Promise<StoryStatus
       // readFileSync approach does, but only once, on restore -- not here).
       let videoStatus = scene.videoStatus;
       if (videoStatus === "READY" && (!scene.videoPath || !existsSync(scene.videoPath))) {
-        console.error(
-          `getStoryStatusAction: scene ${scene.sceneNumber}'s video file is missing on disk`,
-        );
+        const missingKey = `${storyId}:${scene.sceneNumber}`;
+        if (!loggedMissingVideo.has(missingKey)) {
+          loggedMissingVideo.add(missingKey);
+          console.error(
+            `getStoryStatusAction: scene ${scene.sceneNumber}'s video file is missing on disk`,
+          );
+        }
         videoStatus = "FAILED";
       }
 
