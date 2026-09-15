@@ -36,6 +36,12 @@ export interface EpisodeExportResult {
   // "character-reference.jpg") -- never a path, matching clipsWritten/
   // clipsMissing's own scene-number-only shape (T-03-15's guarantee).
   documentsWritten: string[];
+  // True when this story previously recorded a real image or video path but
+  // its own directory is no longer on disk (moved or renamed outside the
+  // app) -- every other field is empty in that case, and nothing was
+  // written. A story that has never recorded any asset path yet (its first
+  // export) always reports false here and creates its directory normally.
+  folderMissing: boolean;
 }
 
 /**
@@ -159,7 +165,22 @@ export function exportEpisodeAssets(
   const rootDir = options.rootDir ?? process.cwd();
 
   // Propagate storyDir()'s validation throw -- deliberate, see doc comment.
-  storyDir(row.id);
+  const resolvedStoryDir = resolve(rootDir, storyDir(row.id));
+
+  // A story that already recorded a real image or video path but whose own
+  // directory is gone from disk (renamed or moved outside the app, never by
+  // anything this codebase does) must not be silently recreated as an empty
+  // shell -- mkdirSync's own recursive:true below would otherwise paper over
+  // exactly that loss with no signal back to her at all, and a folder she
+  // renames back afterward would collide with the freshly-created one. A
+  // story that has never recorded any asset path yet (its first export) has
+  // nothing to lose here, so it still creates its directory normally.
+  const hadRecordedAsset = row.scenes.some(
+    (scene) => scene.imagePath !== null || scene.videoPath !== null,
+  );
+  if (hadRecordedAsset && !existsSync(resolvedStoryDir)) {
+    return { clipsWritten: [], clipsMissing: [], documentsWritten: [], folderMissing: true };
+  }
 
   const resolvedOutputDir = resolve(rootDir, outputDir(row.id));
   mkdirSync(resolvedOutputDir, { recursive: true });
@@ -240,5 +261,5 @@ export function exportEpisodeAssets(
     console.error(`exportEpisodeAssets: failed to write story.txt for story ${row.id}`, err);
   }
 
-  return { clipsWritten, clipsMissing, documentsWritten };
+  return { clipsWritten, clipsMissing, documentsWritten, folderMissing: false };
 }

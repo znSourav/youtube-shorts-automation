@@ -224,6 +224,57 @@ test("a fixture whose id is \"../etc\" throws before the root directory gains an
   });
 });
 
+test("a story that already recorded a real video path but whose directory is gone reports folderMissing and writes nothing", () => {
+  withTempRoot((root) => {
+    const fixture = storyFixture();
+    // Deliberately no seedTree call -- the story's own directory (and every
+    // scene subdirectory under it) never exists in this temp root, matching
+    // a folder renamed or moved away outside the app.
+
+    const result = exportEpisodeAssets(fixture, { rootDir: root });
+
+    assert.equal(result.folderMissing, true);
+    assert.deepEqual(result.clipsWritten, []);
+    assert.deepEqual(result.clipsMissing, []);
+    assert.deepEqual(result.documentsWritten, []);
+
+    let storageSubtreeExists = true;
+    try {
+      readdirSync(join(root, "storage"));
+    } catch {
+      storageSubtreeExists = false;
+    }
+    assert.equal(storageSubtreeExists, false, "nothing should be created when the folder is missing");
+  });
+});
+
+test("a story with no recorded asset path yet still creates its directory when it doesn't exist (first export, not a lost folder)", () => {
+  withTempRoot((root) => {
+    const fixture = storyFixture({
+      scenes: [1, 2, 3].map((sceneNumber) => ({
+        id: `scene-${sceneNumber}`,
+        sceneNumber,
+        storyPurpose: `purpose ${sceneNumber}`,
+        imagePrompt: `image prompt ${sceneNumber}`,
+        motionPrompt: `motion prompt ${sceneNumber}`,
+        durationSeconds: 4,
+        imagePath: null,
+        imageStatus: "WAITING",
+        videoPath: null,
+        videoStatus: "WAITING",
+        imageAttempts: 0,
+        videoAttempts: 0,
+      })),
+    });
+    // No seedTree call, same as "a story whose scenes are all unready" above
+    // -- this must still succeed, since nothing has ever been recorded to lose.
+
+    const result = exportEpisodeAssets(fixture, { rootDir: root });
+    assert.equal(result.folderMissing, false);
+    assert.deepEqual(result.documentsWritten.sort(), ["story.json", "story.txt"]);
+  });
+});
+
 // --- Task 2: story.json, story.txt, character reference, stale-clip hygiene
 
 test("buildStoryJson parses as JSON, carries the title, exposes scenes in ascending order, and carries the created date as a string", () => {

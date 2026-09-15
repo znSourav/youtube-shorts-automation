@@ -69,6 +69,14 @@ export async function finalizeEpisodeAction(storyId: string): Promise<EpisodeOut
     };
   }
 
+  if (exported.folderMissing) {
+    return {
+      ok: false,
+      message: "This story's folder could not be found. It may have been moved or renamed.",
+      clipCount: 0,
+    };
+  }
+
   return { ok: true, message: null, clipCount: exported.clipsWritten.length };
 }
 
