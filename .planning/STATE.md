@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 current_phase: 04
 current_phase_name: Wife-Facing Review & Approval Flow
-status: executing
-stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-09-15T13:00:40.695Z"
+status: verifying
+stopped_at: Completed 04-04-PLAN.md
+last_updated: "2026-09-15T13:42:18.058Z"
 last_activity: 2026-09-14
 last_activity_desc: Phase 04 execution started
-state_head: 102e06dc70096cef1bcb21c041bc943ad1830ae3
+state_head: 1ca2d1469a3d1373fd34a0f6d3ab7275bf85c8cc
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 16
-  completed_plans: 15
+  completed_plans: 16
   percent: 50
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-09-14)
 
 Phase: 04 (Wife-Facing Review & Approval Flow) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-14 — Phase 04 execution started
 
 Progress: [█████░░░░░] 50%
@@ -77,6 +77,7 @@ Progress: [█████░░░░░] 50%
 | Phase 04 P01 | 19min | 3 tasks | 20 files |
 | Phase 04 P02 | 12min | 3 tasks | 5 files |
 | Phase 04 P03 | ~21h wall-clock (checkpoint-paused; short active work) | 3 tasks | 13 files |
+| Phase 04 P04 | multi-session | 4 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -125,6 +126,7 @@ Recent decisions affecting current work:
 - [Phase 04]: [Phase 4, 04-03] Task 3's live-browser checkpoint verified by the orchestrator via source reading (StoryReview.tsx/VideoStatusScreen.tsx/page.tsx), not a live wife click-through -- no real story has all-ready images and a real click-through risks an accidental real spend against $0.1630 remaining dev-ceiling headroom; 7 of 8 checklist items PASSED
 - [Phase 04]: [Phase 4, 04-03] Item 7 of the Task 3 checklist (reload restores Screen 4, not Screen 3, for an already-approved story) genuinely FAILED on first check -- the restore-on-mount effect in page.tsx unconditionally landed on review-images -- and was fixed (commit 5c0b06d) to branch on result.imagesApproved and seed videoScenes from the loaded story
 - [Phase 04]: [Phase 4, 04-03] batchDispatched is deliberately left false on restore rather than inferred true from partial per-scene progress -- D-04's batch dispatch is idempotent so re-showing the button is always safe, whereas inferring true would strand a scene left at WAITING by a dropped after() callback with no way to restart it
+- [Phase 04]: [Phase 4, 04-04] Task 4 checkpoint item 10 genuinely FAILED (a story's vanished folder was silently recreated with no message) and was fixed, not waived -- exportEpisodeAssets now reports folderMissing when a story recorded a real asset but its directory is gone, instead of transparently recreating an empty shell — Matches this project's established convention of recording real findings honestly and fixing them at the checkpoint rather than presenting a sanitized all-pass narrative (same precedent as 04-03's item 7). Verified by two new unit tests rather than a live rename-the-folder click-through, since no real database story currently has any ready asset that would make that exact scenario reachable without a real paid provider call.
 
 ### Pending Todos
 
@@ -155,6 +157,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-15T13:00:40.397Z
-Stopped at: Completed 04-03-PLAN.md
+Last session: 2026-09-15T13:41:43.398Z
+Stopped at: Completed 04-04-PLAN.md
 Resume file: None
