@@ -6,6 +6,8 @@ import { saveStoryWithScenes, findStoryWithScenes, markImagesApproved, Uniquenes
 import {
   recordGeneration,
   recordGenerations,
+  recordGenerationAtDispatch,
+  attachGenerationRecordsToStory,
   updateSceneImage,
   updateSceneVideo,
   incrementImageAttempt,
@@ -310,6 +312,131 @@ test("incrementImageAttempt against scene 2 leaves only scene 2's imageAttempts 
     const scene3 = story!.scenes.find((s) => s.sceneNumber === 3)!;
     assert.equal(scene1.imageAttempts, 0);
     assert.equal(scene3.imageAttempts, 0);
+  } finally {
+    await client.$disconnect();
+  }
+});
+
+// -- Phase 5 (plan 05-03): recordGenerationAtDispatch / attachGenerationRecordsToStory --
+
+test("recordGenerationAtDispatch with a null story id creates a row with a null storyId and returns its id as a non-empty string", async () => {
+  const url = tmpDatabaseUrl();
+  const client = createPrismaClient(url);
+  try {
+    const record: PendingGenerationRecord = {
+      generationType: GenerationType.STORY,
+      model: "gemini-3.1-pro-preview",
+      estimatedUsd: 0.05,
+      actualUsd: null,
+      billed: true,
+      ok: true,
+      message: "Story generated.",
+    };
+    const id = await recordGenerationAtDispatch(record, null, undefined, client);
+    assert.equal(typeof id, "string");
+    assert.ok(id !== null && id.length > 0);
+
+    const rows = await client.generationRecord.findMany({ where: { id: id as string } });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].storyId, null);
+  } finally {
+    await client.$disconnect();
+  }
+});
+
+test("recordGenerationAtDispatch with a real story id creates a row linked to that story", async () => {
+  const url = tmpDatabaseUrl();
+  const storyId = "story-genrepo-dispatch-linked";
+  await seedStory(storyId, url);
+
+  const client = createPrismaClient(url);
+  try {
+    const record: PendingGenerationRecord = {
+      generationType: GenerationType.UNIQUENESS_CHECK,
+      model: "gemini-3.8-flash",
+      estimatedUsd: 0.01,
+      actualUsd: null,
+      billed: true,
+      ok: true,
+      message: "Uniqueness comparison completed.",
+    };
+    const id = await recordGenerationAtDispatch(record, storyId, undefined, client);
+    assert.ok(id !== null);
+
+    const rows = await client.generationRecord.findMany({ where: { storyId } });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].id, id);
+  } finally {
+    await client.$disconnect();
+  }
+});
+
+test("recordGenerationAtDispatch returns null and logs exactly one console error when the write fails", async () => {
+  const url = tmpDatabaseUrl();
+  const client = createPrismaClient(url);
+  try {
+    const record: PendingGenerationRecord = {
+      generationType: GenerationType.STORY,
+      model: "gemini-3.1-pro-preview",
+      estimatedUsd: 0.05,
+      actualUsd: null,
+      billed: true,
+      ok: true,
+      message: "Story generated.",
+    };
+    let id: string | null = "not-yet-set";
+    const errorCount = await countConsoleErrors(async () => {
+      id = await recordGenerationAtDispatch(record, "story-does-not-exist", 1, client);
+    });
+    assert.equal(errorCount, 1, "expected exactly one log line");
+    assert.equal(id, null);
+  } finally {
+    await client.$disconnect();
+  }
+});
+
+test("attachGenerationRecordsToStory sets storyId on exactly the ids it is given and leaves other rows untouched", async () => {
+  const url = tmpDatabaseUrl();
+  const storyId = "story-genrepo-attach";
+  await seedStory(storyId, url);
+
+  const client = createPrismaClient(url);
+  try {
+    const record: PendingGenerationRecord = {
+      generationType: GenerationType.STORY,
+      model: "gemini-3.1-pro-preview",
+      estimatedUsd: 0.05,
+      actualUsd: null,
+      billed: true,
+      ok: true,
+      message: "Story generated.",
+    };
+    const idToLink = await recordGenerationAtDispatch(record, null, undefined, client);
+    const idToLeaveAlone = await recordGenerationAtDispatch(record, null, undefined, client);
+    assert.ok(idToLink !== null && idToLeaveAlone !== null);
+
+    await attachGenerationRecordsToStory(storyId, [idToLink as string], client);
+
+    const linkedRows = await client.generationRecord.findMany({ where: { id: idToLink as string } });
+    assert.equal(linkedRows[0].storyId, storyId);
+
+    const untouchedRows = await client.generationRecord.findMany({ where: { id: idToLeaveAlone as string } });
+    assert.equal(untouchedRows[0].storyId, null);
+  } finally {
+    await client.$disconnect();
+  }
+});
+
+test("attachGenerationRecordsToStory with an empty id array performs no write and does not throw", async () => {
+  const url = tmpDatabaseUrl();
+  const storyId = "story-genrepo-attach-empty";
+  await seedStory(storyId, url);
+
+  const client = createPrismaClient(url);
+  try {
+    await attachGenerationRecordsToStory(storyId, [], client);
+    const rows = await client.generationRecord.findMany({ where: { storyId } });
+    assert.equal(rows.length, 0);
   } finally {
     await client.$disconnect();
   }

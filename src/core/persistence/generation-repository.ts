@@ -69,16 +69,22 @@ async function resolveSceneId(
  * simply resolves to a null sceneId; the record still attaches to the story.
  * If the story itself does not exist, the write throws a foreign-key error,
  * caught below and logged once (never propagated).
+ *
+ * `storyId` may be `null`. A null id is reserved for a call dispatched
+ * before its story exists, or for one whose story is never created (Phase 5:
+ * see `recordGenerationAtDispatch` below, the enforcement ledger's own write
+ * path) -- a null story id can never resolve a scene, so scene-id resolution
+ * is skipped entirely in that case.
  */
 export async function recordGeneration(
-  storyId: string,
+  storyId: string | null,
   record: PendingGenerationRecord,
   sceneNumber?: number,
   client: PrismaClient = prisma,
 ): Promise<void> {
   try {
     let sceneId: string | null = null;
-    if (sceneNumber !== undefined) {
+    if (storyId !== null && sceneNumber !== undefined) {
       sceneId = await resolveSceneId(storyId, sceneNumber, client);
     }
     await client.generationRecord.create({
@@ -96,9 +102,93 @@ export async function recordGeneration(
     });
   } catch (err) {
     console.error(
-      `generation-repository: recordGeneration failed for story ${storyId}` +
+      `generation-repository: recordGeneration failed for story ${storyId ?? "(none)"}` +
         (sceneNumber !== undefined ? ` scene ${sceneNumber}` : "") +
         ` (type=${record.generationType})`,
+      err,
+    );
+  }
+}
+
+/**
+ * Phase 5's enforcement-ledger write path: writes one generation record at
+ * the moment its paid call is dispatched, with a null story id when the
+ * story does not yet exist (or may never exist) -- linked to a story
+ * afterward via `attachGenerationRecordsToStory` once its id exists. Meant
+ * to run INSIDE the same `serializeDispatch` (src/core/budget/dispatch-chain.ts)
+ * callback as the budget check and the paid call it accounts for, so the
+ * check, the call, and the record are one serialized unit.
+ *
+ * Same best-effort contract as every other write in this module (try/catch,
+ * one console.error naming the type and story, never throws) but returns the
+ * created row's id on success -- or null on failure -- so the caller can
+ * link it to a story later. A swallowed failure here under-counts future
+ * spend by exactly the amount the retired file ledger's own lock-timeout
+ * risk already carried (05-RESEARCH.md Pitfall 4, restated here because this
+ * is the function that inherits it) -- a deliberate, accepted trade: a
+ * database hiccup must never discard an already-paid-for result.
+ */
+export async function recordGenerationAtDispatch(
+  record: PendingGenerationRecord,
+  storyId: string | null,
+  sceneNumber?: number,
+  client: PrismaClient = prisma,
+): Promise<string | null> {
+  try {
+    let sceneId: string | null = null;
+    if (storyId !== null && sceneNumber !== undefined) {
+      sceneId = await resolveSceneId(storyId, sceneNumber, client);
+    }
+    const row = await client.generationRecord.create({
+      data: {
+        storyId,
+        sceneId,
+        generationType: record.generationType,
+        model: record.model,
+        estimatedUsd: record.estimatedUsd,
+        actualUsd: record.actualUsd,
+        billed: record.billed,
+        ok: record.ok,
+        message: record.message,
+      },
+    });
+    return row.id;
+  } catch (err) {
+    console.error(
+      `generation-repository: recordGenerationAtDispatch failed for story ${storyId ?? "(none)"}` +
+        (sceneNumber !== undefined ? ` scene ${sceneNumber}` : "") +
+        ` (type=${record.generationType})`,
+      err,
+    );
+    return null;
+  }
+}
+
+/**
+ * Best-effort `updateMany` linking already-written generation record ids
+ * (from `recordGenerationAtDispatch`) to a story now that it has an id. A
+ * no-op on an empty array -- returns immediately without touching the
+ * database. Same never-throws contract as the rest of this module: the
+ * records already exist and already count against her budget by the time
+ * this runs, so a lost association here costs traceability only, never a
+ * spend figure.
+ */
+export async function attachGenerationRecordsToStory(
+  storyId: string,
+  recordIds: string[],
+  client: PrismaClient = prisma,
+): Promise<void> {
+  if (recordIds.length === 0) {
+    return;
+  }
+  try {
+    await client.generationRecord.updateMany({
+      where: { id: { in: recordIds } },
+      data: { storyId },
+    });
+  } catch (err) {
+    console.error(
+      `generation-repository: attachGenerationRecordsToStory failed for story ${storyId} (${recordIds.length} record ids)`,
       err,
     );
   }
