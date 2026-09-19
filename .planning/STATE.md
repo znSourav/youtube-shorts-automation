@@ -20,10 +20,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-14)
+See: .planning/PROJECT.md (updated 2026-09-20)
 
 **Core value:** One simple idea in → one genuinely original, structurally-unique animated episode's worth of local video assets out, without ever exceeding the $15 experiment budget or silently shipping a story that's a thin reskin of a previous one.
-**Current focus:** Phase 05 — Budget & Retry Safeguards
+**Current focus:** Phase 06 — Reliability, Secrets Hygiene & Output Correctness
 
 ## Current Position
 
@@ -32,7 +32,7 @@ Plan: Not started
 Status: Ready to plan
 Last activity: 2026-09-19 — Phase 05 complete, transitioned to Phase 6
 
-Progress: [███████░░░] 67%
+Progress: [████████████████████] 21/21 plans (100%)
 
 ## Performance Metrics
 
@@ -149,7 +149,7 @@ Recent decisions affecting current work:
 - [Phase 05]: [Phase 05, 05-05] The indicator's headline is the rollover-inclusive cumulative headroom (what checkBudget itself compares against), not this month's own allocation -- a comfortable-looking figure can never coexist with an actual refusal
 - [Phase 05]: [Phase 05, 05-05] BudgetIndicator.tsx and page.tsx both re-derive their own local status type instead of importing core/budget/status.ts (even type-only) -- a type-only import specifier still contains the literal substring check-boundaries.ts invariant 1 forbids on a client file
 - [Phase 05]: [Phase 05, 05-05] BUDGET-05 confirmed to need no new implementation (caps.ts/gates.ts unchanged and structurally independent of core/budget/), and BUDGET-04 confirmed structural (both retry paths delegate to the same gated dispatch a first attempt uses) -- both re-confirmed with fresh automated evidence, not re-derived from research alone
-- [Phase 05]: [Phase 05, 05-05] Task 3's live-browser human-check (indicator visibility/breakdown/labels/keyboard operability, plus the env-reload Assumption A1 question) deliberately NOT run in this pass -- reserved for the orchestrator; BUDGET-03 left unchecked in REQUIREMENTS.md and no phase-completion routing was run until that live verification lands
+- [Phase 05]: [Phase 05, 05-05] Task 3's live-browser human-check completed by the orchestrator with the requester's direct participation: indicator visibility/breakdown/labels confirmed live, keyboard reachability confirmed live (operability via synthetic keypress flagged as a tooling limitation, not an app defect), and the env-reload Assumption A1 question settled as YES (Next's own "Reload env" log line observed firing live, no restart). BUDGET-03 marked complete; full pipeline (code review — 3 fixed/3 deferred to Phase 6/1 no-action, security audit — threats_open: 0, phase-goal re-verification, 26/26 UAT) closed clean.
 
 ### Pending Todos
 
@@ -161,7 +161,7 @@ None from Phase 1 — the AI Studio API key / billing blocker (noted at planning
 
 **Resolved:** [Phase 2, 02-04] D-04's full-scale (5-6 scene) real proof run was unmet after 3 blocked attempts in the 02-04 session. **Closed by quick task 260913-4rr** (2026-09-13): a fresh idea's Bangla-script rendering succeeded on the first attempt, producing a real 5-scene story, 5 scene images, and 1 playable video end to end. See 02-PROOF-RUN.md §3 and 02-04-SUMMARY.md's addendum.
 
-**New concern:** [Quick 260913-4rr] The dev spend ledger (`DEV_CEILING_USD`, shared across Phases 1-4) is now nearly exhausted: **$2.9370 of $3.00, only $0.0630 headroom remaining.** Any further real paid probing in Phase 3/4 will very likely exceed this ceiling and needs to be explicitly discussed with the user (never silently raised) before dispatching further real calls against this same ledger.
+**Resolved:** [Quick 260913-4rr → closed by Phase 5] The dev spend ledger (`DEV_CEILING_USD`) headroom concern from Phases 1-4 is resolved. Phase 5 retired the dev ledger from every wife-facing path entirely — real generation now runs against the production `MONTHLY_BUDGET_USD` system ($15 default, $9.928 headroom as of Phase 5's close). `DEV_CEILING_USD` (raised to $6.25 during Phase 4's live proof run, real spend $5.072) survives only as a separate, explicitly-labelled ceiling for direct-provider CLI probe scripts (Decision A1), no longer a constraint on any real story generation.
 
 ### Quick Tasks Completed
 
@@ -180,6 +180,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-19T13:58:48.407Z
-Stopped at: Phase 05 complete, ready to plan Phase 6
-Resume file: .planning/phases/05-budget-retry-safeguards/05-05-PLAN.md
+Last session: 2026-09-20
+Stopped at: Phase 05 complete (full pipeline: execute, code review, security audit, UAT), ready to plan Phase 6
+Resume file: None
