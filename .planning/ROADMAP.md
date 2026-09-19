@@ -170,7 +170,30 @@ Plans:
   4. Retrying any failed generation passes through the exact same budget check as a first attempt — retries cannot bypass the budget.
   5. Once a scene hits its configured maximum image or video retries, further retries are refused with a clear message rather than looping.
 
-**Plans**: TBD
+**Plans:** 0/5 plans complete
+
+Plans:
+**Wave 1**
+
+- [ ] 05-01-PLAN.md — Tracer: the real per-month budget gate, proven end-to-end on the read-only path (+ two real-money decisions)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 05-02-PLAN.md — Carry the $5.0720 of Phase 1-4 spend forward, counted exactly once
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 05-03-PLAN.md — Re-point the two language-model dispatch sites onto the shared serialized budget gate
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 05-04-PLAN.md — Scene images and videos on the real budget; retire the dev ledger; enumerate the gate's import surface
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 05-05-PLAN.md — The wife-facing spend indicator, plus the phase's closing BUDGET-04/BUDGET-05 evidence
+
+**UI hint**: yes
 
 ### Phase 6: Reliability, Secrets Hygiene & Output Correctness
 
@@ -198,5 +221,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Core Generation Pipeline | 4/4 | Complete    | 2026-09-13 |
 | 3. Persistence & Structural Uniqueness | 4/4 | Complete    | 2026-09-14 |
 | 4. Wife-Facing Review & Approval Flow | 4/4 | Complete    | 2026-09-16 |
-| 5. Budget & Retry Safeguards | 0/TBD | Not started | - |
+| 5. Budget & Retry Safeguards | 0/5 | Planned | - |
 | 6. Reliability, Secrets Hygiene & Output Correctness | 0/TBD | Not started | - |
