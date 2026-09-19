@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Core Generation Pipeline** - A typed idea flows automatically through the Story Director to a full set of local scene images and video clips for one story (completed 2026-09-13)
 - [x] **Phase 3: Persistence & Structural Uniqueness** - Stories, scenes, and generation records survive a restart, and structurally-similar stories are rejected and regenerated before reaching review (completed 2026-09-14)
 - [x] **Phase 4: Wife-Facing Review & Approval Flow** - The non-technical target user can run the full create → review → approve → generate → find-output flow using only plain-language UI (completed 2026-09-16)
-- [ ] **Phase 5: Budget & Retry Safeguards** - Every paid call is guarded by a hard monthly budget check that no retry can bypass
+- [x] **Phase 5: Budget & Retry Safeguards** - Every paid call is guarded by a hard monthly budget check that no retry can bypass (completed 2026-09-19)
 - [ ] **Phase 6: Reliability, Secrets Hygiene & Output Correctness** - The tool fails safely and honestly at every edge instead of corrupting state or leaking secrets
 
 ## Phase Details
@@ -170,7 +170,7 @@ Plans:
   4. Retrying any failed generation passes through the exact same budget check as a first attempt — retries cannot bypass the budget.
   5. Once a scene hits its configured maximum image or video retries, further retries are refused with a clear message rather than looping.
 
-**Plans:** 5/5 plans executed
+**Plans:** 5/5 plans complete
 
 Plans:
 **Wave 1**
@@ -221,5 +221,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Core Generation Pipeline | 4/4 | Complete    | 2026-09-13 |
 | 3. Persistence & Structural Uniqueness | 4/4 | Complete    | 2026-09-14 |
 | 4. Wife-Facing Review & Approval Flow | 4/4 | Complete    | 2026-09-16 |
-| 5. Budget & Retry Safeguards | 5/5 | In Progress|  |
+| 5. Budget & Retry Safeguards | 5/5 | Complete    | 2026-09-19 |
 | 6. Reliability, Secrets Hygiene & Output Correctness | 0/TBD | Not started | - |

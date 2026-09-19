@@ -26,7 +26,7 @@
     {
       "number": "5",
       "name": "Budget & Retry Safeguards",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "6",
@@ -36,8 +36,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step (verify)",
-    "reason": "Phase 5 of 6 · 67% · ready to verify"
+    "label": "Advance to the next step (plan phase 6)",
+    "reason": "Phase 6 of 6 — needs a plan"
   },
-  "updated_at": "2026-09-19T14:26:31.450Z"
+  "updated_at": "2026-09-19T14:46:56.604Z"
 }
