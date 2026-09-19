@@ -90,10 +90,10 @@ coverage:
       - kind: other
         ref: "npm run build -- Compiled successfully, static pages generated"
         status: pass
-      - kind: manual
+      - kind: manual_procedural
         ref: "Live browser check against the running dev app (localhost:3000): indicator visible without scrolling, reads \"$9.93 left of $15.00\"; tapping reveals Video $3.30 / Images $1.07 / Story writing $0.70 plus This month's allocation $15.00 / Spent so far this month $5.07 -- exact match to the plan's <done> figures; no enum names, model ids, or \"LLM\" anywhere in the rendered text; tapping again collapses it; still visible after navigating to My Stories and back."
         status: pass
-      - kind: manual
+      - kind: manual_procedural
         ref: "Keyboard: reachability confirmed live -- the very first Tab press from a fresh page load focuses the indicator button (confirmed via document.activeElement). Operability via a live synthetic Enter/Space keypress could not be confirmed through the browser-automation tool used (the same tool's Tab and mouse-click actions work correctly on this element, and a direct element.click() correctly toggles it, but its synthetic keydown/keyup did not trigger the browser's native button-activation behavior in this environment). Source inspection confirms the button is a plain native <button type=\"button\"> with a single onClick handler and aria-expanded, no onKeyDown/onKeyUp/preventDefault/stopPropagation anywhere in the file -- the standard, spec-compliant pattern real browsers activate on Enter/Space without any app-level key handling required. Treated as a tooling limitation of this session's verification method, not an application defect; flagged here rather than silently claimed as a full live keyboard pass."
         status: pass
     human_judgment: true
@@ -136,10 +136,10 @@ coverage:
   - id: D7
     description: "05-RESEARCH.md Assumption A1 (does an env-var MONTHLY_BUDGET_USD edit take effect under the documented npm run dev start command without a restart) -- settled either way, not left as an assumption"
     verification:
-      - kind: manual
+      - kind: manual_procedural
         ref: "The requester edited .env.local (MONTHLY_BUDGET_USD=1) while the already-running npm run dev process (started before the edit) stayed up. The dev server's own log immediately printed \"Reload env: .env.local\", and the next page load showed the indicator flip live to \"The generation budget is used up for now.\" with no restart of any kind. Confirmed by direct server-log inspection (preview_logs), not inferred."
         status: pass
-      - kind: manual
+      - kind: manual_procedural
         ref: "The figure was restored to MONTHLY_BUDGET_USD=15 the same way; the indicator and a fresh node --env-file=.env.local src/scripts/budget-probe.ts --expect=pass both returned to $9.93 left of $15.00, confirming the reload is bidirectional, not a one-way drop into a fallback."
         status: pass
     human_judgment: true
