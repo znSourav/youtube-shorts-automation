@@ -2,11 +2,11 @@
 
 import type { StoryDirectorInput } from "../../core/story/director.ts";
 import { runUniqueStoryDirector } from "../../core/uniqueness/check.ts";
-import { CeilingExceededError } from "../../lib/spend-ledger.ts";
+import { BudgetExceededError } from "../../core/budget/ledger.ts";
 import type { StoryDirectorOutput } from "../../core/story/schema.ts";
 import { generateStoryId } from "../../core/story/story-id.ts";
 import { saveStoryWithScenes, UniquenessStatus } from "../../core/persistence/story-repository.ts";
-import { recordGenerations } from "../../core/persistence/generation-repository.ts";
+import { attachGenerationRecordsToStory } from "../../core/persistence/generation-repository.ts";
 import { MAX_CHARACTER_DESCRIPTION_LENGTH, MAX_IDEA_LENGTH } from "../../core/story/input-limits.ts";
 
 // D-04's plain-language exhaustion warning. Deliberately: no story title, no
@@ -74,6 +74,15 @@ export async function createStoryAction(input: StoryDirectorInput): Promise<Crea
     const result = await runUniqueStoryDirector(input);
 
     if (!result.ok) {
+      // Phase 5 (05-03): deliberately no record flush on this early-return
+      // path. Every call dispatched while reaching this outcome (Story
+      // Director attempts, any uniqueness comparisons) already has its
+      // GenerationRecord written at the dispatch boundary and already
+      // counts against her budget -- that is the specific gap this design
+      // closes. Adding a flush here would double-count. Do not "fix" this
+      // back to a flush -- there is nothing left to write, only (never
+      // attempted below) something to link, and there is no story id here
+      // to link it to.
       if (result.reason === "blocked" && result.blockReason === "MAX_TOKENS") {
         return {
           ok: false,
@@ -113,24 +122,34 @@ export async function createStoryAction(input: StoryDirectorInput): Promise<Crea
       await saveStoryWithScenes(storyId, result.data, uniquenessStatus, result.attempt);
     } catch (saveErr) {
       console.error("createStoryAction: persistence failure", saveErr);
+      // Phase 5 (05-03): same deliberate no-flush note as the blocked/
+      // parse/validation early return above -- every call dispatched while
+      // reaching this outcome already has its GenerationRecord written and
+      // already counts against her budget. There is no storyId to link it
+      // to here (the save itself failed), so this genuinely stays an
+      // unlinked-but-honestly-counted record, not a lost one.
       return {
         ok: false,
         error: "The story was written but could not be saved. Please try again.",
       };
     }
 
-    // Best-effort durability flush of the story + uniqueness-comparison
-    // spend accumulated during runUniqueStoryDirector (IMAGE-03's dual
-    // write). Placed AFTER the save so the storyId foreign key resolves.
-    // recordGenerations never throws -- a failure here can only cost the
-    // durability record, never the already-persisted story (03-RESEARCH.md
-    // Architectural Responsibility Map), so it never changes this action's
-    // return value.
-    await recordGenerations(storyId, result.spend);
+    // Phase 5 (05-03): replaces the old best-effort durability FLUSH. The
+    // story + uniqueness-comparison spend records were already written at
+    // the dispatch boundary the instant each call was dispatched (inside
+    // runStoryDirector's/compareViaLlm's own serializeDispatch unit) and
+    // already count against her budget -- this call only LINKS those
+    // already-existing rows to the story now that its id exists. Placed
+    // AFTER the save so the storyId exists to link against.
+    // attachGenerationRecordsToStory never throws -- a failure here can
+    // only cost traceability, never a spend figure, since the rows already
+    // exist and already count, so it never changes this action's return
+    // value.
+    await attachGenerationRecordsToStory(storyId, result.recordIds);
 
     return { ok: true, data: result.data, storyId, uniquenessWarning };
   } catch (err) {
-    if (err instanceof CeilingExceededError) {
+    if (err instanceof BudgetExceededError) {
       return {
         ok: false,
         error: "The monthly generation budget has been reached, so no new story can be created right now.",
