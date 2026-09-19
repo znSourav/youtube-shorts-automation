@@ -108,8 +108,15 @@ model Scene {
 
 model GenerationRecord {
   id             String         @id @default(cuid())
-  storyId        String
-  story          Story          @relation(fields: [storyId], references: [id])
+  // Phase 5 (05-02, D-01/Decision B=B1): relaxed from a required foreign key
+  // to nullable, mirroring sceneId's existing nullable pattern below. The
+  // ONLY reason: 26 Phase 1-2 development calls carried forward under D-01
+  // genuinely belong to no story (they predate this project's persistence
+  // layer entirely). Every live write path (recordGeneration/recordGenerations)
+  // still supplies a real story id -- this relaxation is confined to the
+  // one-time historical-import script, never to a production dispatch path.
+  storyId        String?
+  story          Story?         @relation(fields: [storyId], references: [id])
   sceneId        String?
   scene          Scene?         @relation(fields: [sceneId], references: [id])
   generationType GenerationType
