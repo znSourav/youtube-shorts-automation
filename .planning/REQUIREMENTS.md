@@ -56,7 +56,7 @@ Requirements for the 24-hour MVP. Each maps to a roadmap phase.
 - [x] **BUDGET-02**: The monthly budget limit is configurable (e.g. via `MONTHLY_BUDGET_USD`) and enforced without a code change
 - [ ] **BUDGET-03**: Wife can see running month-to-date spend broken down by generation type (video/image/LLM) against the configured limit
 - [x] **BUDGET-04**: A retry of any failed generation passes through the same budget check as a first attempt — retries cannot bypass the budget
-- [ ] **BUDGET-05**: Each scene has a configurable maximum number of image and video retries; once reached, further retries are refused with a clear message rather than looping
+- [x] **BUDGET-05**: Each scene has a configurable maximum number of image and video retries; once reached, further retries are refused with a clear message rather than looping
 
 ### Reliability
 
@@ -141,7 +141,7 @@ Explicitly excluded from this project, not just this milestone. Documented to pr
 | BUDGET-02 | Phase 5 | Complete |
 | BUDGET-03 | Phase 5 | Pending |
 | BUDGET-04 | Phase 5 | Complete |
-| BUDGET-05 | Phase 5 | Pending |
+| BUDGET-05 | Phase 5 | Complete |
 | RELIABILITY-01 | Phase 6 | Pending |
 | SECURITY-01 | Phase 6 | Pending |
 | PERSIST-01 | Phase 3 | Complete |

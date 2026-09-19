@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 05
 current_phase_name: Budget & Retry Safeguards
 status: executing
-stopped_at: Completed 05-04-PLAN.md
-last_updated: "2026-09-19T13:43:29.115Z"
+stopped_at: "05-05: Tasks 1-2 complete + committed, Task 3 automated verification complete -- awaiting orchestrator's live human-check (indicator UI + env-reload question) before phase close"
+last_updated: "2026-09-19T13:58:48.791Z"
 last_activity: 2026-09-19
 last_activity_desc: Phase 05 execution started
-state_head: c27e5f12f5519d45e11d423db8ae84cf9dab9588
+state_head: c370714357dfb3d62ea5c33bb44efe6503027210
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 21
-  completed_plans: 20
+  completed_plans: 21
   percent: 67
 ---
 
@@ -83,6 +83,7 @@ Progress: [███████░░░] 67%
 | Phase 05 P02 | 35min | 3 tasks | 6 files |
 | Phase 05 P03 | 25min | 3 tasks | 9 files |
 | Phase 05 P04 | 22min | 3 tasks | 6 files |
+| Phase 05 P05 | 25min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -144,6 +145,10 @@ Recent decisions affecting current work:
 - [Phase 05]: [Phase 05, 05-04] Scene images and scene videos re-pointed onto the real monthly budget inside the shared serializeDispatch queue; the retired dev ledger is off every wife-facing path
 - [Phase 05]: [Phase 05, 05-04] check-boundaries.ts invariant 7 enumerates the real budget module's whole import surface (including create-story.ts, a real touch site the plan's own six-item list omitted) plus a companion barring the retired ledger outside src/scripts//src/lib/
 - [Phase 05]: [Phase 05, 05-04] persistence-probe.ts's --simulate-assets mode now deletes its own synthetic GenerationRecord rows before returning (try/finally), since that table is now the real budget's authoritative ledger
+- [Phase 05]: [Phase 05, 05-05] The indicator's headline is the rollover-inclusive cumulative headroom (what checkBudget itself compares against), not this month's own allocation -- a comfortable-looking figure can never coexist with an actual refusal
+- [Phase 05]: [Phase 05, 05-05] BudgetIndicator.tsx and page.tsx both re-derive their own local status type instead of importing core/budget/status.ts (even type-only) -- a type-only import specifier still contains the literal substring check-boundaries.ts invariant 1 forbids on a client file
+- [Phase 05]: [Phase 05, 05-05] BUDGET-05 confirmed to need no new implementation (caps.ts/gates.ts unchanged and structurally independent of core/budget/), and BUDGET-04 confirmed structural (both retry paths delegate to the same gated dispatch a first attempt uses) -- both re-confirmed with fresh automated evidence, not re-derived from research alone
+- [Phase 05]: [Phase 05, 05-05] Task 3's live-browser human-check (indicator visibility/breakdown/labels/keyboard operability, plus the env-reload Assumption A1 question) deliberately NOT run in this pass -- reserved for the orchestrator; BUDGET-03 left unchecked in REQUIREMENTS.md and no phase-completion routing was run until that live verification lands
 
 ### Pending Todos
 
@@ -174,6 +179,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-19T13:43:28.772Z
-Stopped at: Completed 05-04-PLAN.md
-Resume file: None
+Last session: 2026-09-19T13:58:48.407Z
+Stopped at: 05-05: Tasks 1-2 complete + committed, Task 3 automated verification complete -- awaiting orchestrator's live human-check (indicator UI + env-reload question) before phase close
+Resume file: .planning/phases/05-budget-retry-safeguards/05-05-PLAN.md
