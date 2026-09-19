@@ -23,6 +23,8 @@ import { retrySceneVideoAction } from "./actions/retry-scene-video.ts";
 import { openStoryFolderAction, finalizeEpisodeAction } from "./actions/open-story-folder.ts";
 import { listStoriesAction, type LibraryStoryRow } from "./actions/list-stories.ts";
 import MyStoriesList from "@/components/story/MyStoriesList";
+import { getBudgetStatusAction } from "./actions/get-budget-status.ts";
+import BudgetIndicator from "@/components/story/BudgetIndicator";
 
 type Screen = "create" | "review-story" | "review-images" | "video-status" | "library";
 
@@ -49,6 +51,29 @@ interface VideoSceneEntry {
 // story (a failed creation, or a fresh one, must not resurrect a PREVIOUS
 // story's restore on the next mount).
 const LAST_STORY_ID_KEY = "yt-shorts-studio:last-story-id";
+
+// D-03: the shape getBudgetStatusAction resolves to, derived rather than
+// imported from src/core/budget/status.ts directly -- a "use client" file
+// may never import the real budget module (check-boundaries.ts invariant 1,
+// T-05-02), only a Server Action.
+type BudgetStatus = Awaited<ReturnType<typeof getBudgetStatusAction>>;
+
+// The zeroed, ok-false shape BudgetIndicator renders as "nothing" (T-05-19)
+// until the mount-time fetch below resolves for the first time.
+const EMPTY_BUDGET_STATUS: BudgetStatus = {
+  ok: false,
+  monthKey: "",
+  cumulativeAllocatedUsd: 0,
+  cumulativeSpentUsd: 0,
+  remainingUsd: 0,
+  monthlyAllocationUsd: 0,
+  monthToDateSpentUsd: 0,
+  breakdown: [
+    { type: "VIDEO", spentUsd: 0 },
+    { type: "IMAGE", spentUsd: 0 },
+    { type: "LLM", spentUsd: 0 },
+  ],
+};
 
 export default function Home() {
   const [screen, setScreen] = useState<Screen>("create");
@@ -131,6 +156,14 @@ export default function Home() {
   // returning wife never sees a flash of the create form before her last
   // story reappears.
   const [restoring, setRestoring] = useState(true);
+
+  // D-03: the always-visible spend indicator's current figures. Fetched
+  // once on mount below, then refreshed (via refreshBudgetStatus) after
+  // every handler that can have spent money resolves, and on every
+  // video-status poll tick. Best-effort throughout -- a failed fetch leaves
+  // whatever figures are already here rather than surfacing an error or
+  // blocking a generation (T-05-19).
+  const [budgetStatus, setBudgetStatus] = useState<BudgetStatus>(EMPTY_BUDGET_STATUS);
 
   // The one restore mapping shared by the mount-time restore effect and the
   // Library's "open this story" path (handleOpenLibraryStory below) -- so
@@ -234,6 +267,38 @@ export default function Home() {
     };
   }, []);
 
+  // D-03: fetches the spend indicator's figures once on mount, independent
+  // of the story-restore effect above -- the indicator must be visible on
+  // the create screen even when there is no story to restore at all.
+  useEffect(() => {
+    let cancelled = false;
+    getBudgetStatusAction()
+      .then((result) => {
+        if (!cancelled) setBudgetStatus(result);
+      })
+      .catch(() => {
+        // best-effort -- the indicator simply stays at whatever it already
+        // showed (here, the initial empty/hidden shape).
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // D-03: re-fetches the spend indicator after any handler that can have
+  // spent money resolves. Never throws -- getBudgetStatusAction() itself
+  // already has its own try/catch, but the call across the Server Action
+  // boundary can still reject, so this stays defensive. Callers fire this
+  // without awaiting it (`void refreshBudgetStatus()`), so a slow or failed
+  // refresh can never delay or block the handler it follows.
+  async function refreshBudgetStatus() {
+    try {
+      setBudgetStatus(await getBudgetStatusAction());
+    } catch {
+      // best-effort -- keep whatever figures are already on screen.
+    }
+  }
+
   async function handleCreateStory(values: CreateStoryFormValues) {
     setCreateLoading(true);
     setCreateError(null);
@@ -246,6 +311,10 @@ export default function Home() {
     const result = await createStoryAction(values);
 
     setCreateLoading(false);
+    // Every story-creation attempt dispatches at least one paid LLM call --
+    // even a refusal or a blocked/exhausted attempt can have spent money --
+    // so this refreshes regardless of result.ok.
+    void refreshBudgetStatus();
     if (!result.ok) {
       setCreateError(result.error);
       return;
@@ -365,6 +434,7 @@ export default function Home() {
       setImagesError("Something went wrong while generating the scene images. Please try again.");
     } finally {
       setImagesLoading(false);
+      void refreshBudgetStatus();
     }
   }
 
@@ -423,6 +493,7 @@ export default function Home() {
       }
     } finally {
       setRegeneratingScene(null);
+      void refreshBudgetStatus();
     }
   }
 
@@ -442,6 +513,7 @@ export default function Home() {
       setBatchError("Something went wrong while starting video generation. Please try again.");
     } finally {
       setBatchStarting(false);
+      void refreshBudgetStatus();
     }
   }
 
@@ -463,6 +535,7 @@ export default function Home() {
       await retrySceneVideoAction(storyId, sceneNumber);
     } finally {
       setRetryingScene(null);
+      void refreshBudgetStatus();
     }
   }
 
@@ -510,6 +583,11 @@ export default function Home() {
 
     async function pollOnce() {
       const currentStoryId = storyId as string;
+      // D-03: piggybacks the spend-indicator refresh on this same 3s poll
+      // tick while Screen 4 is showing, rather than adding a second timer --
+      // fired unconditionally, before the early-return below, so it keeps
+      // refreshing even on a tick whose story-status read comes back !ok.
+      void refreshBudgetStatus();
       const status = await getStoryStatusAction(currentStoryId);
       if (cancelled || !status.ok) return;
 
@@ -655,6 +733,11 @@ export default function Home() {
   return (
     <div className="flex flex-col flex-1 items-center bg-zinc-50 font-sans dark:bg-black">
       <main className="flex flex-1 w-full max-w-2xl flex-col gap-8 px-6 py-16">
+        {/* D-03: rendered once, above the screen switch, so it is visible on
+            every screen -- what "always visible" means and what avoids
+            deciding which screens deserve it. */}
+        <BudgetIndicator status={budgetStatus} />
+
         {!restoring && screen === "create" && (
           <div className="flex flex-col gap-6">
             <button
