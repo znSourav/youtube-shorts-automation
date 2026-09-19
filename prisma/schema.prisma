@@ -123,3 +123,20 @@ model GenerationRecord {
   // Summary fields only -- never a raw provider response object, prompt, or
   // usage-metadata blob (T-03-06).
 }
+
+// Phase 5 (BUDGET-01/02): one row per calendar month the app has actually
+// been touched against, created idempotently (ensureCurrentMonthAllocation's
+// upsert, keyed on the @unique month) the first time that month is checked,
+// using whatever MONTHLY_BUDGET_USD is configured in process.env at that
+// moment. D-02's rollover requirement falls out of SUM(allocatedUsd) across
+// every row being compared against SUM(GenerationRecord.estimatedUsd) across
+// every row -- a running cumulative total, the same "the ceiling only ever
+// grows" shape DEV_CEILING_USD already used across Phases 1-4 (raised by
+// hand $3.00 -> $3.25 -> $6.25), just decomposed into one row per month
+// instead of one hand-edited source constant.
+model BudgetPeriod {
+  id           String   @id @default(cuid())
+  month        String   @unique // "YYYY-MM", UTC
+  allocatedUsd Float
+  createdAt    DateTime @default(now())
+}

@@ -12,7 +12,7 @@ import { existsSync } from "node:fs";
 import { storyDir } from "../../core/storage-paths.ts";
 import { findStoryWithScenes } from "../../core/persistence/story-repository.ts";
 import { maxSceneRetryAttempts } from "../../core/retry/caps.ts";
-import { checkCeiling, CeilingExceededError } from "../../lib/spend-ledger.ts";
+import { checkBudget, BudgetExceededError } from "../../core/budget/ledger.ts";
 
 // WR-02 (04-REVIEW.md, third pass): the worst-case per-scene cost this app
 // ever dispatches -- 8 seconds (the longest supported scene, per
@@ -85,6 +85,27 @@ export async function getStoryStatusAction(storyId: string): Promise<StoryStatus
     return { ok: false, imagesApproved: false, scenes: [], maxAttempts };
   }
 
+  // WR-02: computed ONCE per invocation, not once per scene -- checkBudget
+  // is now an async SQLite query (src/core/budget/ledger.ts), so the
+  // per-scene probe this action used to run inside its synchronous .map()
+  // is hoisted out here instead. Observably identical to the prior
+  // per-scene shape: every scene still reads the exact same headroom
+  // signal, just computed once and reused, which replaces N repeated
+  // queries with one on an action polled every three seconds. checkBudget
+  // throws BudgetExceededError purely to report "no headroom" -- it is not
+  // a real dispatch, so nothing is recorded and this cannot itself move the
+  // project any closer to the budget.
+  let budgetExhausted = false;
+  try {
+    await checkBudget(MAX_SCENE_VIDEO_COST_USD);
+  } catch (err) {
+    if (err instanceof BudgetExceededError) {
+      budgetExhausted = true;
+    } else {
+      throw err;
+    }
+  }
+
   const scenes: SceneVideoStatusRow[] = row.scenes
     .slice()
     .sort((a, b) => a.sceneNumber - b.sceneNumber)
@@ -111,23 +132,11 @@ export async function getStoryStatusAction(storyId: string): Promise<StoryStatus
       const capReached = scene.videoAttempts >= maxAttempts;
 
       // WR-02: a FAILED, not-already-capped scene whose failure coincides
-      // with the ledger having no room left for even one more worst-case
-      // scene is treated as a budget dead end, not a transient failure.
-      // checkCeiling throws CeilingExceededError purely to report "no
-      // headroom" -- it is not a real dispatch, so nothing is recorded and
-      // this cannot itself move the project any closer to the ceiling.
-      let budgetExceeded = false;
-      if (videoStatus === "FAILED" && !capReached) {
-        try {
-          checkCeiling(MAX_SCENE_VIDEO_COST_USD);
-        } catch (err) {
-          if (err instanceof CeilingExceededError) {
-            budgetExceeded = true;
-          } else {
-            throw err;
-          }
-        }
-      }
+      // with the real budget currently having no room left for even one
+      // more worst-case scene is treated as a budget dead end, not a
+      // transient failure. budgetExhausted is computed once above, not
+      // per-scene.
+      const budgetExceeded = videoStatus === "FAILED" && !capReached && budgetExhausted;
 
       return {
         sceneNumber: scene.sceneNumber,

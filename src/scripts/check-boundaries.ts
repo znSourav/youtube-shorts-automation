@@ -136,7 +136,15 @@ function main(): void {
         // this entry a client component reaching straight into
         // src/core/persistence/ instead of through a Server Action would
         // ship database-access code into the client bundle undetected.
-        spec.includes("core/persistence")
+        spec.includes("core/persistence") ||
+        // Phase 5 (T-05-02): src/core/budget/ledger.ts is a second sanctioned
+        // database-touching core module (it imports lib/db directly, the
+        // same one-hop-away gap the core/persistence entry above closes) --
+        // without this entry a client component reaching straight into
+        // src/core/budget/ instead of through a Server Action would ship
+        // real-budget-enforcement/database-access code into the client
+        // bundle undetected.
+        spec.includes("core/budget")
       ) {
         offenders1.push(`${file} -> "${spec}"`);
       }
