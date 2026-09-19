@@ -1,8 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 import {
   checkUniqueness,
@@ -13,21 +10,26 @@ import {
   buildComparisonSchema,
   DEFAULT_MAX_REGENERATION_ATTEMPTS,
 } from "./check.ts";
-import { CeilingExceededError } from "../../lib/spend-ledger.ts";
+import { BudgetExceededError } from "../budget/ledger.ts";
+import { currentMonthKey } from "../budget/month.ts";
+import { GenerationType } from "../persistence/generation-repository.ts";
+import { createPrismaClient } from "../../lib/db.ts";
+import { tmpDatabaseUrl } from "../../lib/test-db.ts";
 import type { StoryDirectorInput, StoryDirectorResult } from "../story/director.ts";
 import type { StoryDirectorOutput } from "../story/schema.ts";
 import type { AcceptedFingerprint } from "../persistence/story-repository.ts";
-import type { PendingGenerationRecord } from "../persistence/generation-repository.ts";
 import type { StructuralFingerprint } from "./fingerprint.ts";
-import type { CompareStructuralSimilarityParams, ClassifyComparisonResult } from "../../providers/llm/gemini.ts";
+import {
+  LLM_PRICE_PER_CALL,
+  COMPARISON_MODEL,
+  type CompareStructuralSimilarityParams,
+  type ClassifyComparisonResult,
+} from "../../providers/llm/gemini.ts";
 
-// Every ledger-touching test below points at a throwaway mkdtempSync path --
-// never at the real storage/_smoketest/spend-ledger.json (spend-ledger.test.ts's
-// own convention).
-function tmpLedgerPath(): string {
-  const dir = mkdtempSync(join(tmpdir(), "uniqueness-check-test-"));
-  return join(dir, "spend-ledger.json");
-}
+// Every database-touching test below drives a throwaway database built by
+// tmpDatabaseUrl() (src/lib/test-db.ts) -- never the real prisma/dev.db.
+// Phase 5 (05-03) replaces the old temp-ledger-file helper with this
+// convention, matching generation-repository.test.ts's own pattern.
 
 function fakeComparisonResult(overrides: Partial<ClassifyComparisonResult> = {}): ClassifyComparisonResult {
   return {
@@ -43,8 +45,8 @@ function fakeComparisonResult(overrides: Partial<ClassifyComparisonResult> = {})
 }
 
 // Every test here injects a fake director/historyReader/escalate -- no
-// network call, no real ledger write, no dependency on a real Prisma
-// connection (RESEARCH.md's "mirrors gemini.test.ts's fixture-object
+// network call, no real database write, no dependency on the real
+// prisma/dev.db (RESEARCH.md's "mirrors gemini.test.ts's fixture-object
 // convention" note).
 
 const BASE_INPUT: StoryDirectorInput = {
@@ -126,7 +128,35 @@ function successResult(data: StoryDirectorOutput): StoryDirectorResult {
     modelUsed: "fake-model",
     fallbackUsed: false,
     estimatedUsd: 0,
+    // Fixed, non-null id -- runUniqueStoryDirector pushes this onto
+    // recordIds for every dispatched attempt (05-03); most tests below don't
+    // assert on it directly, but it must be a real string for those that do.
+    generationRecordId: "fake-story-record-id",
   };
+}
+
+/** Seeds the throwaway `client`'s current month with a tiny allocation that
+ * is already fully consumed -- deterministic "no headroom" regardless of
+ * the real per-call estimate, since any positive estimate pushes the
+ * projected total past the allocation. Mutates process.env.MONTHLY_BUDGET_USD
+ * so checkBudget's own ensureCurrentMonthAllocation credits the SAME tiny
+ * figure rather than overwriting it back to the $15 default -- callers must
+ * restore the original value in their own `finally`. */
+async function seedExhaustedBudget(client: ReturnType<typeof createPrismaClient>): Promise<void> {
+  const month = currentMonthKey();
+  await client.budgetPeriod.create({ data: { month, allocatedUsd: 0.01 } });
+  await client.generationRecord.create({
+    data: {
+      storyId: null,
+      generationType: GenerationType.STORY,
+      model: "seed-model",
+      estimatedUsd: 0.01,
+      actualUsd: null,
+      billed: true,
+      ok: true,
+      message: "seed -- consumes the whole small allocation",
+    },
+  });
 }
 
 // -- checkUniqueness (pure orchestration over an injected escalate hook) --
@@ -273,14 +303,14 @@ test("runUniqueStoryDirector honours MAX_UNIQUENESS_REGENERATION_ATTEMPTS=2 read
   }
 });
 
-test("a ceiling error on the second attempt yields the first candidate as exhausted rather than propagating", async () => {
+test("a budget error on the second attempt yields the first candidate as exhausted rather than propagating", async () => {
   let calls = 0;
   const director = async (): Promise<StoryDirectorResult> => {
     calls += 1;
     if (calls === 1) {
       return successResult(fixtureOutput({ title: "First" }));
     }
-    throw new CeilingExceededError("refused by fake ceiling");
+    throw new BudgetExceededError("refused by fake budget gate");
   };
   const historyReader = async () => [DEFAULT_PAST];
 
@@ -295,15 +325,15 @@ test("a ceiling error on the second attempt yields the first candidate as exhaus
   assert.equal(calls, 2);
 });
 
-test("a ceiling error on the very first attempt propagates rather than being swallowed", async () => {
+test("a budget error on the very first attempt propagates rather than being swallowed", async () => {
   const director = async (): Promise<StoryDirectorResult> => {
-    throw new CeilingExceededError("refused by fake ceiling");
+    throw new BudgetExceededError("refused by fake budget gate");
   };
   const historyReader = async () => [];
 
   await assert.rejects(
     () => runUniqueStoryDirector(BASE_INPUT, { director, historyReader }),
-    CeilingExceededError,
+    BudgetExceededError,
   );
 });
 
@@ -336,40 +366,129 @@ const CLEARLY_DIFFERENT_PAST: AcceptedFingerprint = {
 };
 
 test("a middle-band pair escalates, and a fake comparator returning all-true yields a collision flagged as LLM-decided", async () => {
-  const ledgerPath = tmpLedgerPath();
-  const escalate = (candidate: StructuralFingerprint, past: AcceptedFingerprint) =>
-    compareViaLlm(candidate, past, {
-      ledgerPath,
-      comparator: async () => fakeComparisonResult({ protagonistMatch: true, obstacleMatch: true, endingMatch: true }),
-    });
+  const url = tmpDatabaseUrl();
+  const client = createPrismaClient(url);
+  try {
+    const escalate = (candidate: StructuralFingerprint, past: AcceptedFingerprint) =>
+      compareViaLlm(candidate, past, {
+        client,
+        comparator: async () => fakeComparisonResult({ protagonistMatch: true, obstacleMatch: true, endingMatch: true }),
+      });
 
-  const verdict = await checkUniqueness(MIDDLE_BAND_CANDIDATE, [MIDDLE_BAND_PAST], { escalate });
+    const verdict = await checkUniqueness(MIDDLE_BAND_CANDIDATE, [MIDDLE_BAND_PAST], { escalate });
 
-  assert.equal(verdict.collided, true);
-  if (verdict.collided) {
-    assert.equal(verdict.viaLlm, true);
-    assert.equal(verdict.withStoryId, "middle-band-past");
+    assert.equal(verdict.collided, true);
+    if (verdict.collided) {
+      assert.equal(verdict.viaLlm, true);
+      assert.equal(verdict.withStoryId, "middle-band-past");
+    }
+  } finally {
+    await client.$disconnect();
   }
 });
 
 test("the same middle-band pair with a fake comparator returning two-of-three-true yields a pass (D-02 applies on the LLM path)", async () => {
-  const ledgerPath = tmpLedgerPath();
-  const escalate = (candidate: StructuralFingerprint, past: AcceptedFingerprint) =>
-    compareViaLlm(candidate, past, {
-      ledgerPath,
-      comparator: async () => fakeComparisonResult({ protagonistMatch: true, obstacleMatch: false, endingMatch: true }),
-    });
+  const url = tmpDatabaseUrl();
+  const client = createPrismaClient(url);
+  try {
+    const escalate = (candidate: StructuralFingerprint, past: AcceptedFingerprint) =>
+      compareViaLlm(candidate, past, {
+        client,
+        comparator: async () => fakeComparisonResult({ protagonistMatch: true, obstacleMatch: false, endingMatch: true }),
+      });
 
-  const verdict = await checkUniqueness(MIDDLE_BAND_CANDIDATE, [MIDDLE_BAND_PAST], { escalate });
+    const verdict = await checkUniqueness(MIDDLE_BAND_CANDIDATE, [MIDDLE_BAND_PAST], { escalate });
 
-  assert.equal(verdict.collided, false);
+    assert.equal(verdict.collided, false);
+  } finally {
+    await client.$disconnect();
+  }
 });
 
 test("the same middle-band pair with a fake comparator returning a blocked result yields a pass and does not throw", async () => {
-  const ledgerPath = tmpLedgerPath();
-  const escalate = (candidate: StructuralFingerprint, past: AcceptedFingerprint) =>
-    compareViaLlm(candidate, past, {
-      ledgerPath,
+  const url = tmpDatabaseUrl();
+  const client = createPrismaClient(url);
+  try {
+    const escalate = (candidate: StructuralFingerprint, past: AcceptedFingerprint) =>
+      compareViaLlm(candidate, past, {
+        client,
+        comparator: async () =>
+          fakeComparisonResult({
+            blocked: true,
+            block: { stage: "prompt", reason: "SAFETY" },
+            protagonistMatch: undefined,
+            obstacleMatch: undefined,
+            endingMatch: undefined,
+          }),
+      });
+
+    const verdict = await checkUniqueness(MIDDLE_BAND_CANDIDATE, [MIDDLE_BAND_PAST], { escalate });
+
+    assert.equal(verdict.collided, false);
+  } finally {
+    await client.$disconnect();
+  }
+});
+
+test("the comparator is invoked exactly once for one borderline past story and zero times for a history whose every entry falls below the borderline band", async () => {
+  const url = tmpDatabaseUrl();
+  const client = createPrismaClient(url);
+  try {
+    let comparatorCalls = 0;
+    const escalate = (candidate: StructuralFingerprint, past: AcceptedFingerprint) =>
+      compareViaLlm(candidate, past, {
+        client,
+        comparator: async () => {
+          comparatorCalls += 1;
+          return fakeComparisonResult();
+        },
+      });
+
+    await checkUniqueness(MIDDLE_BAND_CANDIDATE, [CLEARLY_DIFFERENT_PAST], { escalate });
+    assert.equal(comparatorCalls, 0, "comparator must not be invoked when no past story reaches the borderline band");
+
+    await checkUniqueness(MIDDLE_BAND_CANDIDATE, [MIDDLE_BAND_PAST], { escalate });
+    assert.equal(comparatorCalls, 1, "comparator must be invoked exactly once for one borderline past story");
+  } finally {
+    await client.$disconnect();
+  }
+});
+
+test("a budget refusal on the comparison yields a pass and never invokes the comparator", async () => {
+  const url = tmpDatabaseUrl();
+  const client = createPrismaClient(url);
+  const originalBudget = process.env.MONTHLY_BUDGET_USD;
+  process.env.MONTHLY_BUDGET_USD = "0.01";
+  try {
+    await seedExhaustedBudget(client);
+
+    let comparatorCalls = 0;
+    const result = await compareViaLlm(MIDDLE_BAND_CANDIDATE, MIDDLE_BAND_PAST, {
+      client,
+      comparator: async (_params: CompareStructuralSimilarityParams) => {
+        comparatorCalls += 1;
+        return fakeComparisonResult();
+      },
+    });
+
+    assert.equal(result, false);
+    assert.equal(comparatorCalls, 0);
+  } finally {
+    if (originalBudget === undefined) {
+      delete process.env.MONTHLY_BUDGET_USD;
+    } else {
+      process.env.MONTHLY_BUDGET_USD = originalBudget;
+    }
+    await client.$disconnect();
+  }
+});
+
+test("checkBudget runs before dispatch and the spend record is written after, including for a blocked comparison", async () => {
+  const url = tmpDatabaseUrl();
+  const client = createPrismaClient(url);
+  try {
+    await compareViaLlm(MIDDLE_BAND_CANDIDATE, MIDDLE_BAND_PAST, {
+      client,
       comparator: async () =>
         fakeComparisonResult({
           blocked: true,
@@ -380,81 +499,16 @@ test("the same middle-band pair with a fake comparator returning a blocked resul
         }),
     });
 
-  const verdict = await checkUniqueness(MIDDLE_BAND_CANDIDATE, [MIDDLE_BAND_PAST], { escalate });
-
-  assert.equal(verdict.collided, false);
-});
-
-test("the comparator is invoked exactly once for one borderline past story and zero times for a history whose every entry falls below the borderline band", async () => {
-  const ledgerPath = tmpLedgerPath();
-  let comparatorCalls = 0;
-  const escalate = (candidate: StructuralFingerprint, past: AcceptedFingerprint) =>
-    compareViaLlm(candidate, past, {
-      ledgerPath,
-      comparator: async () => {
-        comparatorCalls += 1;
-        return fakeComparisonResult();
-      },
+    const rows = await client.generationRecord.findMany({
+      where: { generationType: GenerationType.UNIQUENESS_CHECK },
     });
-
-  await checkUniqueness(MIDDLE_BAND_CANDIDATE, [CLEARLY_DIFFERENT_PAST], { escalate });
-  assert.equal(comparatorCalls, 0, "comparator must not be invoked when no past story reaches the borderline band");
-
-  await checkUniqueness(MIDDLE_BAND_CANDIDATE, [MIDDLE_BAND_PAST], { escalate });
-  assert.equal(comparatorCalls, 1, "comparator must be invoked exactly once for one borderline past story");
-});
-
-test("a ceiling refusal on the comparison yields a pass and never invokes the comparator", async () => {
-  const ledgerPath = tmpLedgerPath();
-  // Pre-seed the ledger already at the ceiling, so checkCeiling refuses
-  // before the comparator would ever be called.
-  const seeded = {
-    ceilingUsd: 3.0,
-    entries: [
-      {
-        call: "seed",
-        model: "seed-model",
-        estimatedUsd: 3.0,
-        usageMetadata: null,
-        billed: true,
-        at: new Date().toISOString(),
-      },
-    ],
-  };
-  const { writeFileSync } = await import("node:fs");
-  writeFileSync(ledgerPath, JSON.stringify(seeded));
-
-  let comparatorCalls = 0;
-  const result = await compareViaLlm(MIDDLE_BAND_CANDIDATE, MIDDLE_BAND_PAST, {
-    ledgerPath,
-    comparator: async (_params: CompareStructuralSimilarityParams) => {
-      comparatorCalls += 1;
-      return fakeComparisonResult();
-    },
-  });
-
-  assert.equal(result, false);
-  assert.equal(comparatorCalls, 0);
-});
-
-test("checkCeiling runs before dispatch and recordSpend runs after, including for a blocked comparison", async () => {
-  const ledgerPath = tmpLedgerPath();
-  await compareViaLlm(MIDDLE_BAND_CANDIDATE, MIDDLE_BAND_PAST, {
-    ledgerPath,
-    comparator: async () =>
-      fakeComparisonResult({
-        blocked: true,
-        block: { stage: "prompt", reason: "SAFETY" },
-        protagonistMatch: undefined,
-        obstacleMatch: undefined,
-        endingMatch: undefined,
-      }),
-  });
-
-  const ledger = JSON.parse(readFileSync(ledgerPath, "utf8"));
-  assert.equal(ledger.entries.length, 1);
-  assert.equal(ledger.entries[0].billed, false);
-  assert.ok(ledger.entries[0].call.startsWith("uniqueness-comparison:"));
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].billed, false);
+    assert.equal(rows[0].model, "fake-comparison-model");
+    assert.equal(rows[0].estimatedUsd, LLM_PRICE_PER_CALL[COMPARISON_MODEL]);
+  } finally {
+    await client.$disconnect();
+  }
 });
 
 test("buildComparisonSchema declares exactly three boolean properties, all required, with no $ref, oneOf, or allOf", () => {
@@ -500,18 +554,22 @@ test("buildComparisonPrompt places both fingerprints after the delimiter and tru
   assert.ok(prompt.includes("x".repeat(300)));
 });
 
-// -- Plan 03-03: spend accumulation (IMAGE-03's story/uniqueness-comparison
-// durability requirement) --
+// -- Plan 05-03: recordIds accumulation (replaces plan 03-03's PendingGenerationRecord[] `spend`) --
 
-test("an always-colliding three-attempt run produces three story-typed spend entries, one per dispatched attempt", async () => {
-  const director = async (input: StoryDirectorInput): Promise<StoryDirectorResult> => ({
-    ok: true,
-    data: fixtureOutput({ title: `Attempt ${input.avoidPattern ? "n" : "1"}` }),
-    usageMetadata: null,
-    modelUsed: "fake-model",
-    fallbackUsed: false,
-    estimatedUsd: 0.05,
-  });
+test("an always-colliding three-attempt run produces one recordId per dispatched attempt", async () => {
+  let calls = 0;
+  const director = async (input: StoryDirectorInput): Promise<StoryDirectorResult> => {
+    calls += 1;
+    return {
+      ok: true,
+      data: fixtureOutput({ title: `Attempt ${input.avoidPattern ? "n" : "1"}` }),
+      usageMetadata: null,
+      modelUsed: "fake-model",
+      fallbackUsed: false,
+      estimatedUsd: 0.05,
+      generationRecordId: `fake-story-record-${calls}`,
+    };
+  };
   const historyReader = async () => [DEFAULT_PAST];
 
   const result = await runUniqueStoryDirector(BASE_INPUT, { director, historyReader });
@@ -519,16 +577,12 @@ test("an always-colliding three-attempt run produces three story-typed spend ent
   assert.equal(result.ok, true);
   if (result.ok) {
     assert.equal(result.status, "exhausted");
-    const storyEntries = result.spend.filter((entry) => entry.generationType === "STORY");
-    assert.equal(storyEntries.length, DEFAULT_MAX_REGENERATION_ATTEMPTS);
-    for (const entry of storyEntries) {
-      assert.equal(entry.ok, true);
-      assert.ok(Number.isFinite(entry.estimatedUsd) && entry.estimatedUsd > 0);
-    }
+    assert.equal(result.recordIds.length, DEFAULT_MAX_REGENERATION_ATTEMPTS);
+    assert.equal(new Set(result.recordIds).size, result.recordIds.length, "one distinct id per dispatched attempt");
   }
 });
 
-test("an empty history's single accepted attempt produces exactly one story-typed spend entry and zero uniqueness entries", async () => {
+test("an empty history's single accepted attempt produces exactly one recordId and no comparison recordIds", async () => {
   const director = async (): Promise<StoryDirectorResult> => successResult(fixtureOutput());
   const historyReader = async () => [];
 
@@ -536,67 +590,85 @@ test("an empty history's single accepted attempt produces exactly one story-type
 
   assert.equal(result.ok, true);
   if (result.ok) {
-    assert.equal(result.spend.length, 1);
-    assert.equal(result.spend[0].generationType, "STORY");
+    assert.equal(result.recordIds.length, 1);
+    assert.equal(result.recordIds[0], "fake-story-record-id");
   }
 });
 
-test("compareViaLlm pushes one uniqueness-typed spend entry when a comparison is dispatched", async () => {
-  const ledgerPath = tmpLedgerPath();
-  const spend: PendingGenerationRecord[] = [];
+test("compareViaLlm pushes one recordId when a comparison is dispatched, recorded as UNIQUENESS_CHECK/ok:true", async () => {
+  const url = tmpDatabaseUrl();
+  const client = createPrismaClient(url);
+  try {
+    const recordIds: string[] = [];
 
-  const collided = await compareViaLlm(MIDDLE_BAND_CANDIDATE, MIDDLE_BAND_PAST, {
-    ledgerPath,
-    spend,
-    comparator: async () => fakeComparisonResult({ protagonistMatch: true, obstacleMatch: true, endingMatch: true }),
-  });
+    const collided = await compareViaLlm(MIDDLE_BAND_CANDIDATE, MIDDLE_BAND_PAST, {
+      client,
+      recordIds,
+      comparator: async () => fakeComparisonResult({ protagonistMatch: true, obstacleMatch: true, endingMatch: true }),
+    });
 
-  assert.equal(collided, true);
-  assert.equal(spend.length, 1);
-  assert.equal(spend[0].generationType, "UNIQUENESS_CHECK");
-  assert.equal(spend[0].ok, true);
-  assert.ok(Number.isFinite(spend[0].estimatedUsd) && spend[0].estimatedUsd > 0);
+    assert.equal(collided, true);
+    assert.equal(recordIds.length, 1);
+
+    const row = await client.generationRecord.findUnique({ where: { id: recordIds[0] } });
+    assert.equal(row?.generationType, "UNIQUENESS_CHECK");
+    assert.equal(row?.ok, true);
+    assert.ok(row !== null && Number.isFinite(row.estimatedUsd) && row.estimatedUsd > 0);
+  } finally {
+    await client.$disconnect();
+  }
 });
 
-test("compareViaLlm still pushes a uniqueness-typed spend entry (ok: false) for a blocked comparison", async () => {
-  const ledgerPath = tmpLedgerPath();
-  const spend: PendingGenerationRecord[] = [];
+test("compareViaLlm still pushes a recordId (ok: false) for a blocked comparison", async () => {
+  const url = tmpDatabaseUrl();
+  const client = createPrismaClient(url);
+  try {
+    const recordIds: string[] = [];
 
-  await compareViaLlm(MIDDLE_BAND_CANDIDATE, MIDDLE_BAND_PAST, {
-    ledgerPath,
-    spend,
-    comparator: async () =>
-      fakeComparisonResult({
-        blocked: true,
-        block: { stage: "prompt", reason: "SAFETY" },
-        protagonistMatch: undefined,
-        obstacleMatch: undefined,
-        endingMatch: undefined,
-      }),
-  });
+    await compareViaLlm(MIDDLE_BAND_CANDIDATE, MIDDLE_BAND_PAST, {
+      client,
+      recordIds,
+      comparator: async () =>
+        fakeComparisonResult({
+          blocked: true,
+          block: { stage: "prompt", reason: "SAFETY" },
+          protagonistMatch: undefined,
+          obstacleMatch: undefined,
+          endingMatch: undefined,
+        }),
+    });
 
-  assert.equal(spend.length, 1);
-  assert.equal(spend[0].ok, false);
+    assert.equal(recordIds.length, 1);
+    const row = await client.generationRecord.findUnique({ where: { id: recordIds[0] } });
+    assert.equal(row?.ok, false);
+  } finally {
+    await client.$disconnect();
+  }
 });
 
-test("a ceiling-refused comparison pushes nothing to spend -- nothing was dispatched", async () => {
-  const ledgerPath = tmpLedgerPath();
-  const seeded = {
-    ceilingUsd: 3.0,
-    entries: [
-      { call: "seed", model: "seed-model", estimatedUsd: 3.0, usageMetadata: null, billed: true, at: new Date().toISOString() },
-    ],
-  };
-  const { writeFileSync } = await import("node:fs");
-  writeFileSync(ledgerPath, JSON.stringify(seeded));
+test("a budget-refused comparison pushes nothing to recordIds -- nothing was dispatched", async () => {
+  const url = tmpDatabaseUrl();
+  const client = createPrismaClient(url);
+  const originalBudget = process.env.MONTHLY_BUDGET_USD;
+  process.env.MONTHLY_BUDGET_USD = "0.01";
+  try {
+    await seedExhaustedBudget(client);
 
-  const spend: PendingGenerationRecord[] = [];
-  const result = await compareViaLlm(MIDDLE_BAND_CANDIDATE, MIDDLE_BAND_PAST, {
-    ledgerPath,
-    spend,
-    comparator: async () => fakeComparisonResult(),
-  });
+    const recordIds: string[] = [];
+    const result = await compareViaLlm(MIDDLE_BAND_CANDIDATE, MIDDLE_BAND_PAST, {
+      client,
+      recordIds,
+      comparator: async () => fakeComparisonResult(),
+    });
 
-  assert.equal(result, false);
-  assert.equal(spend.length, 0);
+    assert.equal(result, false);
+    assert.equal(recordIds.length, 0);
+  } finally {
+    if (originalBudget === undefined) {
+      delete process.env.MONTHLY_BUDGET_USD;
+    } else {
+      process.env.MONTHLY_BUDGET_USD = originalBudget;
+    }
+    await client.$disconnect();
+  }
 });

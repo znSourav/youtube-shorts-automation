@@ -1,4 +1,6 @@
-import { checkCeiling, recordSpend } from "../../lib/spend-ledger.ts";
+import { checkBudget } from "../../core/budget/ledger.ts";
+import { serializeDispatch } from "../budget/dispatch-chain.ts";
+import { recordGenerationAtDispatch, GenerationType } from "../persistence/generation-repository.ts";
 import { generateStory, LLM_PRICE_PER_CALL } from "../../providers/llm/gemini.ts";
 import { STYLE_PRESETS } from "./styles.ts";
 import { StoryDirectorOutputSchema, type StoryDirectorOutput } from "./schema.ts";
@@ -24,11 +26,16 @@ export interface StoryDirectorFailure {
   detail: string;
   blockReason?: string;
   issues?: string[];
-  // Mirrors the exact `billed` value passed to recordSpend for this
-  // dispatched attempt (see runStoryDirector below), so a durable
-  // GenerationRecord dual-write (check.ts) can agree with the real spend
-  // ledger on this same failure case instead of assuming `true`.
+  // Mirrors the exact `billed` value written to the enforcement ledger for
+  // this dispatched attempt (see runStoryDirector below).
   billed: boolean;
+  // Phase 5 (05-03): the id of the GenerationRecord row written at the
+  // dispatch boundary for this attempt, or null if that write itself
+  // failed (recordGenerationAtDispatch's own best-effort contract). Present
+  // on every variant -- including every failure reason -- because the
+  // record is written immediately after generateStory returns, before any
+  // parsing or validation runs.
+  generationRecordId: string | null;
 }
 
 export interface StoryDirectorSuccess {
@@ -38,6 +45,8 @@ export interface StoryDirectorSuccess {
   modelUsed: string;
   fallbackUsed: boolean;
   estimatedUsd: number;
+  // See StoryDirectorFailure.generationRecordId above.
+  generationRecordId: string | null;
 }
 
 export type StoryDirectorResult = StoryDirectorSuccess | StoryDirectorFailure;
@@ -207,78 +216,96 @@ export function buildStoryPrompt(input: StoryDirectorInput): string {
 }
 
 /**
- * Single gated dispatch point for the Story Director: checkCeiling before
- * dispatch, recordSpend after (including on a blocked response, conservative
- * accounting per spend-ledger.ts's own convention), then
- * StoryDirectorOutputSchema.safeParse. Every caller goes through this
- * function, so the ceiling cannot be skipped by adding a second call site.
+ * Single gated dispatch point for the Story Director. The gate is now the
+ * real monthly budget (src/core/budget/ledger.ts's `checkBudget`), and the
+ * check, the `generateStory` call, and the durable spend record all run
+ * inside one `serializeDispatch` (src/core/budget/dispatch-chain.ts)
+ * callback -- a single serialized unit, so a second caller can never read a
+ * cumulative total that is missing this call's own record. The record is
+ * written immediately after `generateStory` returns (null story id -- the
+ * story row does not exist yet and may never exist), before
+ * `StoryDirectorOutputSchema.safeParse` runs, so it is written exactly once
+ * regardless of whether parsing or scene-plan validation later fails. Every
+ * caller goes through this function, so the gate cannot be skipped by adding
+ * a second call site.
  */
 export async function runStoryDirector(input: StoryDirectorInput): Promise<StoryDirectorResult> {
   // Conservative: always estimate against the higher of the two priced
   // models, regardless of which one ends up actually dispatching (fallback
   // is cheaper, so this never under-estimates).
   const estimatedUsd = Math.max(...Object.values(LLM_PRICE_PER_CALL));
-  checkCeiling(estimatedUsd);
 
-  const prompt = buildStoryPrompt(input);
-  const schema = buildStorySchema(input.sceneCount);
+  return serializeDispatch(async () => {
+    await checkBudget(estimatedUsd);
 
-  const result = await generateStory({ prompt, responseSchema: schema });
+    const prompt = buildStoryPrompt(input);
+    const schema = buildStorySchema(input.sceneCount);
 
-  recordSpend({
-    call: `story:${input.sceneCount}-scene`,
-    model: result.modelUsed,
-    estimatedUsd,
-    usageMetadata: result.usageMetadata,
-    billed: !result.blocked,
-    at: new Date().toISOString(),
+    const result = await generateStory({ prompt, responseSchema: schema });
+
+    const generationRecordId = await recordGenerationAtDispatch(
+      {
+        generationType: GenerationType.STORY,
+        model: result.modelUsed,
+        estimatedUsd,
+        actualUsd: null,
+        billed: !result.blocked,
+        ok: !result.blocked,
+        message: result.blocked ? "The story could not be generated." : "Story generated.",
+      },
+      null,
+    );
+
+    if (result.blocked) {
+      return {
+        ok: false,
+        reason: "blocked",
+        detail: result.block ? `${result.block.stage}: ${result.block.reason}` : "unknown block reason",
+        blockReason: result.block?.reason,
+        // Mirrors the `billed: !result.blocked` written above -- for a
+        // blocked response that's `false`.
+        billed: false,
+        generationRecordId,
+      };
+    }
+
+    const parsed = StoryDirectorOutputSchema.safeParse(result.raw);
+    if (!parsed.success) {
+      return {
+        ok: false,
+        reason: "parse_failed",
+        detail: "Story Director response did not match the expected shape.",
+        issues: parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`),
+        // Not blocked -- the record above wrote billed: true for this call.
+        billed: true,
+        generationRecordId,
+      };
+    }
+
+    // The response schema's minItems/maxItems constrain scene COUNT only; this
+    // checks the cross-item numbering invariant it cannot express (SCENE-01).
+    // Nothing downstream of runStoryDirector ever sees an unvalidated scenes array.
+    const sceneValidation = validateScenePlan(parsed.data.scenes, input.sceneCount);
+    if (!sceneValidation.valid) {
+      return {
+        ok: false,
+        reason: "validation_failed",
+        detail: "Scene plan failed validation.",
+        issues: sceneValidation.errors,
+        // Not blocked -- the record above wrote billed: true for this call.
+        billed: true,
+        generationRecordId,
+      };
+    }
+
+    return {
+      ok: true,
+      data: parsed.data,
+      usageMetadata: result.usageMetadata,
+      modelUsed: result.modelUsed,
+      fallbackUsed: result.fallbackUsed,
+      estimatedUsd,
+      generationRecordId,
+    };
   });
-
-  if (result.blocked) {
-    return {
-      ok: false,
-      reason: "blocked",
-      detail: result.block ? `${result.block.stage}: ${result.block.reason}` : "unknown block reason",
-      blockReason: result.block?.reason,
-      // Mirrors the `billed: !result.blocked` passed to recordSpend just
-      // above -- for a blocked response that's `false`.
-      billed: false,
-    };
-  }
-
-  const parsed = StoryDirectorOutputSchema.safeParse(result.raw);
-  if (!parsed.success) {
-    return {
-      ok: false,
-      reason: "parse_failed",
-      detail: "Story Director response did not match the expected shape.",
-      issues: parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`),
-      // Not blocked -- recordSpend above wrote billed: true for this call.
-      billed: true,
-    };
-  }
-
-  // The response schema's minItems/maxItems constrain scene COUNT only; this
-  // checks the cross-item numbering invariant it cannot express (SCENE-01).
-  // Nothing downstream of runStoryDirector ever sees an unvalidated scenes array.
-  const sceneValidation = validateScenePlan(parsed.data.scenes, input.sceneCount);
-  if (!sceneValidation.valid) {
-    return {
-      ok: false,
-      reason: "validation_failed",
-      detail: "Scene plan failed validation.",
-      issues: sceneValidation.errors,
-      // Not blocked -- recordSpend above wrote billed: true for this call.
-      billed: true,
-    };
-  }
-
-  return {
-    ok: true,
-    data: parsed.data,
-    usageMetadata: result.usageMetadata,
-    modelUsed: result.modelUsed,
-    fallbackUsed: result.fallbackUsed,
-    estimatedUsd,
-  };
 }

@@ -2,12 +2,15 @@
 // run the zero-cost deterministic pre-filter, escalate a borderline case to
 // a single targeted LLM comparison (plan 03-02 Task 2), and drive a bounded
 // regeneration loop when a candidate collides. Shaped like
-// src/core/story/director.ts's runStoryDirector -- checkCeiling/recordSpend
-// live inside the escalation hook itself (Task 2), not here, so this module
-// stays a pure orchestrator with every collaborator injectable via a
-// defaulted `deps` parameter (the same testability convention
-// spend-ledger.ts uses for its `path` parameter).
-import { CeilingExceededError, checkCeiling, recordSpend } from "../../lib/spend-ledger.ts";
+// src/core/story/director.ts's runStoryDirector -- checkBudget/
+// recordGenerationAtDispatch, serialized via serializeDispatch, live inside
+// the escalation hook itself (Task 2), not here, so this module stays a pure
+// orchestrator with every collaborator injectable via a defaulted `deps`
+// parameter (the same testability convention spend-ledger.ts's `path`
+// parameter established, carried forward as an injectable `client`).
+import type { PrismaClient } from "../../generated/prisma/client.ts";
+import { BudgetExceededError, checkBudget } from "../../core/budget/ledger.ts";
+import { serializeDispatch } from "../budget/dispatch-chain.ts";
 import {
   runStoryDirector,
   type StoryDirectorInput,
@@ -15,10 +18,7 @@ import {
 } from "../story/director.ts";
 import type { StoryDirectorOutput } from "../story/schema.ts";
 import { listAcceptedFingerprints, type AcceptedFingerprint } from "../persistence/story-repository.ts";
-import {
-  GenerationType,
-  type PendingGenerationRecord,
-} from "../persistence/generation-repository.ts";
+import { GenerationType, recordGenerationAtDispatch } from "../persistence/generation-repository.ts";
 import { fingerprintFromStoryOutput, type StructuralFingerprint } from "./fingerprint.ts";
 import { preFilterVerdict, scoreFingerprints } from "./similarity.ts";
 import {
@@ -75,8 +75,8 @@ export interface UniquenessDeps {
   historyReader?: () => Promise<AcceptedFingerprint[]>;
   // Named seam: checkUniqueness only ever calls this hook, never
   // compareViaLlm directly. runUniqueStoryDirector defaults it to the real
-  // ceiling-gated LLM tie-breaker; check.test.ts injects a fake here to
-  // exercise the loop with zero network calls and zero ledger writes.
+  // budget-gated LLM tie-breaker; check.test.ts injects a fake here to
+  // exercise the loop with zero network calls and zero database writes.
   escalate?: (candidate: StructuralFingerprint, past: AcceptedFingerprint) => Promise<boolean>;
 }
 
@@ -186,32 +186,35 @@ export function buildComparisonPrompt(candidate: StructuralFingerprint, past: St
 }
 
 export interface CompareViaLlmOptions {
-  // Injectable so check.test.ts can exercise this function's ceiling/
+  // Injectable so check.test.ts can exercise this function's budget-check/
   // record/D-02-AND/blocked-handling logic with a fake comparator and a
-  // temp ledger path -- zero network calls, zero real ledger writes.
+  // throwaway database -- zero network calls, zero real writes.
   comparator?: (params: CompareStructuralSimilarityParams) => Promise<ClassifyComparisonResult>;
-  ledgerPath?: string;
-  // Plan 03-03 (IMAGE-03's "same is true for ... uniqueness-comparison
-  // call" durability requirement): when supplied, one PendingGenerationRecord
-  // is pushed onto this array for every DISPATCHED comparison -- i.e. every
-  // call that got past checkCeiling. A ceiling refusal pushes nothing, since
-  // nothing was dispatched (mirrors the real ledger's own recordSpend, which
-  // likewise never runs on a refused call). Collected as a side effect
-  // rather than returned so compareViaLlm's boolean return type -- and every
-  // existing caller of it -- stays unchanged.
-  spend?: PendingGenerationRecord[];
+  // Replaces the old injectable ledger path (Phase 5): lets check.test.ts
+  // drive a throwaway SQLite database instead of the real prisma/dev.db,
+  // same purpose spend-ledger.ts's `path` parameter served.
+  client?: PrismaClient;
+  // Plan 05-03 (replaces the old `spend: PendingGenerationRecord[]`
+  // collector): the id of every DISPATCHED comparison's GenerationRecord
+  // row -- i.e. every call that got past checkBudget -- is pushed onto this
+  // array. A budget refusal pushes nothing, since nothing was dispatched.
+  // The record itself already exists and already counts against her budget
+  // by the time its id lands here; this array carries only what is needed
+  // to link it to a story once one exists.
+  recordIds?: string[];
 }
 
 /**
- * The real ceiling-gated LLM tie-breaker, wired as the default value of
- * UniquenessDeps.escalate. Same check-dispatch-record order runStoryDirector
- * uses, always recording even a blocked comparison (conservative accounting,
- * spend-ledger.ts's own convention). D-02 applies identically on this path:
- * a collision only when ALL THREE returned booleans are true. A blocked,
- * truncated, unparseable, or budget-refused comparison resolves to false
- * (pass) rather than throwing -- a refused or failed tie-breaker must never
- * manufacture a collision, since the pre-filter has already said this case
- * is uncertain rather than obvious, and turning a $0.01 refusal into a
+ * The real budget-gated LLM tie-breaker, wired as the default value of
+ * UniquenessDeps.escalate. The budget check, the comparator call, and the
+ * durable spend record all run inside one `serializeDispatch` callback --
+ * always recording even a blocked comparison (conservative accounting, the
+ * same convention runStoryDirector follows). D-02 applies identically on
+ * this path: a collision only when ALL THREE returned booleans are true. A
+ * blocked, truncated, unparseable, or budget-refused comparison resolves to
+ * false (pass) rather than throwing -- a refused or failed tie-breaker must
+ * never manufacture a collision, since the pre-filter has already said this
+ * case is uncertain rather than obvious, and turning a $0.01 refusal into a
  * rejection would spend $0.05 on a regeneration the evidence never
  * justified.
  */
@@ -224,52 +227,50 @@ export async function compareViaLlm(
   const estimatedUsd = LLM_PRICE_PER_CALL[COMPARISON_MODEL];
 
   try {
-    checkCeiling(estimatedUsd, options.ledgerPath);
+    return await serializeDispatch(async () => {
+      await checkBudget(estimatedUsd, options.client);
+
+      const prompt = buildComparisonPrompt(candidate, toStructuralFingerprint(past));
+      const schema = buildComparisonSchema();
+
+      const result = await comparator({ prompt, responseSchema: schema });
+
+      const recordId = await recordGenerationAtDispatch(
+        {
+          generationType: GenerationType.UNIQUENESS_CHECK,
+          model: result.modelUsed,
+          estimatedUsd,
+          actualUsd: null,
+          billed: !result.blocked,
+          ok: !result.blocked,
+          message: result.blocked
+            ? "The uniqueness comparison could not be completed."
+            : "Uniqueness comparison completed.",
+        },
+        null,
+        undefined,
+        options.client,
+      );
+      if (recordId !== null) {
+        options.recordIds?.push(recordId);
+      }
+
+      if (result.blocked) {
+        return false;
+      }
+
+      return Boolean(result.protagonistMatch && result.obstacleMatch && result.endingMatch);
+    });
   } catch (err) {
-    if (err instanceof CeilingExceededError) {
+    if (err instanceof BudgetExceededError) {
       console.error(
-        "uniqueness comparison refused by the spend ceiling -- treating as a pass, not a collision:",
+        "uniqueness comparison refused by the monthly budget -- treating as a pass, not a collision:",
         err.message,
       );
       return false;
     }
     throw err;
   }
-
-  const prompt = buildComparisonPrompt(candidate, toStructuralFingerprint(past));
-  const schema = buildComparisonSchema();
-
-  const result = await comparator({ prompt, responseSchema: schema });
-
-  recordSpend(
-    {
-      call: `uniqueness-comparison:${past.id}`,
-      model: result.modelUsed,
-      estimatedUsd,
-      usageMetadata: result.usageMetadata,
-      billed: !result.blocked,
-      at: new Date().toISOString(),
-    },
-    options.ledgerPath,
-  );
-
-  options.spend?.push({
-    generationType: GenerationType.UNIQUENESS_CHECK,
-    model: result.modelUsed,
-    estimatedUsd,
-    actualUsd: null,
-    billed: !result.blocked,
-    ok: !result.blocked,
-    message: result.blocked
-      ? "The uniqueness comparison could not be completed."
-      : "Uniqueness comparison completed.",
-  });
-
-  if (result.blocked) {
-    return false;
-  }
-
-  return Boolean(result.protagonistMatch && result.obstacleMatch && result.endingMatch);
 }
 
 export interface UniqueStoryAccepted {
@@ -277,13 +278,15 @@ export interface UniqueStoryAccepted {
   status: "accepted";
   data: StoryDirectorOutput;
   attempt: number;
-  // Plan 03-03: one entry per dispatched Story Director attempt made while
-  // reaching this outcome, plus one per dispatched uniqueness comparison --
-  // the honest accounting of every paid call made in service of the story
-  // about to be persisted, including collided attempts whose text is
-  // deliberately never persisted (D-03). Flushed by create-story.ts via
-  // recordGenerations once the story row exists.
-  spend: PendingGenerationRecord[];
+  // Plan 05-03 (replaces the old `spend: PendingGenerationRecord[]`): one
+  // GenerationRecord id per dispatched Story Director attempt made while
+  // reaching this outcome, plus one per dispatched uniqueness comparison.
+  // Each record already exists and already counts against her budget --
+  // runStoryDirector/compareViaLlm wrote it at the moment it was dispatched,
+  // inside their own serializeDispatch unit. This array carries only the ids
+  // needed to link them to the story once it has one (create-story.ts's
+  // attachGenerationRecordsToStory).
+  recordIds: string[];
 }
 
 export interface UniqueStoryExhausted {
@@ -291,7 +294,7 @@ export interface UniqueStoryExhausted {
   status: "exhausted";
   data: StoryDirectorOutput;
   attempt: number;
-  spend: PendingGenerationRecord[];
+  recordIds: string[];
 }
 
 export interface UniqueStoryFailure {
@@ -301,7 +304,7 @@ export interface UniqueStoryFailure {
   blockReason?: string;
   issues?: string[];
   attempt: number;
-  spend: PendingGenerationRecord[];
+  recordIds: string[];
 }
 
 export type UniqueStoryResult = UniqueStoryAccepted | UniqueStoryExhausted | UniqueStoryFailure;
@@ -317,9 +320,9 @@ export type UniqueStoryResult = UniqueStoryAccepted | UniqueStoryExhausted | Uni
  *
  * Every collaborator defaults to its real implementation so production
  * callers need pass no deps at all, while check.test.ts can inject a fake
- * director/historyReader/escalate with zero network calls and zero ledger
- * writes -- the same defaulted-collaborator convention spend-ledger.ts uses
- * for its `path` parameter.
+ * director/historyReader/escalate with zero network calls and zero real
+ * database writes -- the same defaulted-collaborator convention
+ * spend-ledger.ts used for its `path` parameter, carried forward.
  */
 export async function runUniqueStoryDirector(
   input: StoryDirectorInput,
@@ -327,17 +330,21 @@ export async function runUniqueStoryDirector(
 ): Promise<UniqueStoryResult> {
   const director = deps.director ?? runStoryDirector;
   const historyReader = deps.historyReader ?? listAcceptedFingerprints;
-  // Plan 03-03: accumulates one entry per dispatched Story Director attempt
-  // (pushed just below) and one per dispatched uniqueness comparison (pushed
-  // by compareViaLlm itself, via the `spend` option wired into the default
-  // escalate hook here). A caller-supplied deps.escalate bypasses
-  // compareViaLlm entirely, so nothing is pushed for it -- tests that inject
-  // their own escalate don't need to know about spend at all.
-  const spend: PendingGenerationRecord[] = [];
-  // Defaults to the real ceiling-gated LLM tie-breaker (compareViaLlm) --
+  // Plan 05-03: accumulates the GenerationRecord id of every dispatched
+  // Story Director attempt (pushed just below, from
+  // directorResult.generationRecordId) and every dispatched uniqueness
+  // comparison (pushed by compareViaLlm itself, via the `recordIds` option
+  // wired into the default escalate hook here). A caller-supplied
+  // deps.escalate bypasses compareViaLlm entirely, so nothing is pushed for
+  // it -- tests that inject their own escalate don't need to know about
+  // recordIds at all. Records that failed to write (a null
+  // generationRecordId/return) are simply not pushed -- there is no id to
+  // link.
+  const recordIds: string[] = [];
+  // Defaults to the real budget-gated LLM tie-breaker (compareViaLlm) --
   // checkUniqueness's own signature and every caller here are unaffected by
   // which implementation fills this hook.
-  const escalate = deps.escalate ?? ((candidate, past) => compareViaLlm(candidate, past, { spend }));
+  const escalate = deps.escalate ?? ((candidate, past) => compareViaLlm(candidate, past, { recordIds }));
 
   const cap = maxRegenerationAttempts();
   let lastCandidate: StoryDirectorOutput | null = null;
@@ -348,59 +355,31 @@ export async function runUniqueStoryDirector(
     try {
       directorResult = await director({ ...input, avoidPattern });
     } catch (err) {
-      if (err instanceof CeilingExceededError && lastCandidate) {
+      if (err instanceof BudgetExceededError && lastCandidate) {
         // A previous attempt already produced a candidate -- the wife having
         // a slightly-similar story beats her having nothing. attempt - 1 is
         // the number of attempts that actually completed.
-        return { ok: true, status: "exhausted", data: lastCandidate, attempt: attempt - 1, spend };
+        return { ok: true, status: "exhausted", data: lastCandidate, attempt: attempt - 1, recordIds };
       }
       // Either not a budget refusal, or the very first attempt was refused
       // with no candidate yet produced -- rethrow so createStoryAction's
       // existing budget message reaches her unchanged. Nothing was
-      // dispatched this attempt, so nothing is pushed to spend either.
+      // dispatched this attempt, so nothing is pushed to recordIds either.
       throw err;
     }
 
     // Every non-thrown directorResult -- ok or not -- represents a
-    // DISPATCHED Story Director call: runStoryDirector's own recordSpend
-    // already wrote this exact call to the real ledger regardless of
+    // DISPATCHED Story Director call: runStoryDirector already wrote this
+    // exact call's GenerationRecord at the dispatch boundary, regardless of
     // outcome (blocked included, its own conservative-accounting
-    // convention). This durable record is the dual write for that same
-    // call (IMAGE-03's "same is true ... for story" requirement).
-    spend.push(
-      directorResult.ok
-        ? {
-            generationType: GenerationType.STORY,
-            model: directorResult.modelUsed,
-            estimatedUsd: directorResult.estimatedUsd,
-            actualUsd: null,
-            billed: true,
-            ok: true,
-            message: "Story generated.",
-          }
-        : {
-            generationType: GenerationType.STORY,
-            // StoryDirectorFailure (director.ts) carries no modelUsed --
-            // extending that shape is out of this plan's scope. estimatedUsd
-            // mirrors runStoryDirector's own conservative estimate, which is
-            // always the max of the two priced models regardless of outcome.
-            model: "unknown (story director attempt failed before model attribution)",
-            estimatedUsd: Math.max(...Object.values(LLM_PRICE_PER_CALL)),
-            actualUsd: null,
-            // Mirrors the real ledger write inside runStoryDirector
-            // (director.ts), which is `false` specifically for a "blocked"
-            // failure and `true` for "parse_failed"/"validation_failed" --
-            // keeps this durability record and the real spend-ledger entry
-            // agreeing on the same failure case (WR-01).
-            billed: directorResult.billed,
-            ok: false,
-            message: "The story could not be generated.",
-          },
-    );
+    // convention). Nothing to push when the write itself failed (a null id).
+    if (directorResult.generationRecordId !== null) {
+      recordIds.push(directorResult.generationRecordId);
+    }
 
     if (!directorResult.ok) {
       if (lastCandidate) {
-        return { ok: true, status: "exhausted", data: lastCandidate, attempt: attempt - 1, spend };
+        return { ok: true, status: "exhausted", data: lastCandidate, attempt: attempt - 1, recordIds };
       }
       return {
         ok: false,
@@ -409,7 +388,7 @@ export async function runUniqueStoryDirector(
         blockReason: directorResult.blockReason,
         issues: directorResult.issues,
         attempt,
-        spend,
+        recordIds,
       };
     }
 
@@ -419,7 +398,7 @@ export async function runUniqueStoryDirector(
     const verdict = await checkUniqueness(fingerprint, past, { escalate });
 
     if (!verdict.collided) {
-      return { ok: true, status: "accepted", data: directorResult.data, attempt, spend };
+      return { ok: true, status: "accepted", data: directorResult.data, attempt, recordIds };
     }
 
     avoidPattern = verdict.withFingerprint;
@@ -428,5 +407,11 @@ export async function runUniqueStoryDirector(
   // Cap reached with every attempt colliding -- lastCandidate is always set
   // here because the loop ran at least once (cap >= 1 per
   // maxRegenerationAttempts's own guard).
-  return { ok: true, status: "exhausted", data: lastCandidate as StoryDirectorOutput, attempt: cap, spend };
+  return {
+    ok: true,
+    status: "exhausted",
+    data: lastCandidate as StoryDirectorOutput,
+    attempt: cap,
+    recordIds,
+  };
 }
