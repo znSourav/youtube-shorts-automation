@@ -1,6 +1,20 @@
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
+// Phase 5 (plan 05-04, Decision A = A1, 05-01-SUMMARY.md): this module is
+// now a DEVELOPER-ONLY spend ceiling for direct-provider CLI probe scripts
+// (smoke-test.ts, and any future direct-provider testing) -- deliberately
+// kept separate from the wife-facing real monthly budget
+// (src/core/budget/ledger.ts) so a future failure-injection session (Phase
+// 6) can never silently consume her real allowance. This module is no
+// longer on any wife-facing path: every real dispatch point (the Story
+// Director, the uniqueness comparison, the scene-image action, and the
+// scene-video action) is gated by the real budget instead, as of plans
+// 05-03/05-04. check-boundaries.ts invariant 7's companion structurally
+// enforces that this module is imported only from src/scripts/, src/lib/
+// itself, or the one enumerated exception (a completed, one-time
+// historical-spend migration that reads only this module's TYPE shape).
+//
 // D-05: dev/testing ceiling for Phases 1-4 combined, carved out of the real
 // $15 total the requester set (not additional to it), tracked in one file
 // across all four phases rather than reset per phase.

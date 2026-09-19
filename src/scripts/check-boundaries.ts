@@ -4,13 +4,14 @@
 //
 // 1. No "use client" file (wherever it lives in src/, not just under
 //    src/components/) imports a provider module, the spend ledger, the
-//    Prisma client package, the generated Prisma output, the database
-//    module, or the persistence layer directly -- this is what keeps
-//    GEMINI_API_KEY and SQLite access out of the client bundle (T-02-01,
-//    T-03-02). Each of these checks the file's own DIRECT import
-//    specifiers only, not transitive imports one hop away -- see the
-//    "core/persistence" entry below for why that specific substring is
-//    listed explicitly rather than relied upon transitively.
+//    real budget module, the Prisma client package, the generated Prisma
+//    output, the database module, or the persistence layer directly --
+//    this is what keeps GEMINI_API_KEY, the real-budget refusal decision,
+//    and SQLite access out of the client bundle (T-02-01, T-03-02, T-05-02).
+//    Each of these checks the file's own DIRECT import specifiers only, not
+//    transitive imports one hop away -- see the "core/persistence" entry
+//    below for why that specific substring is listed explicitly rather than
+//    relied upon transitively.
 // 2. Every file under src/app/actions/ reaches the LLM provider only by
 //    importing from src/core/, never directly -- keeps runStoryDirector's
 //    ceiling gate as the LLM's single dispatch point (T-02-04). Image and
@@ -43,6 +44,18 @@
 //    it gets one file, one call site, and one validated argument, and a
 //    second call site anywhere else is a failing gate rather than a review
 //    miss.
+// 7. Outside src/scripts/ (developer probe tools) and outside
+//    src/core/budget/ itself (the module's own internals), a file may
+//    import the real budget module (src/core/budget/) only if it is one of
+//    the enumerated gated touch sites (Phase 5, plan 05-04). Invariant 5
+//    enumerates the image/video PROVIDER import surface, not the BUDGET
+//    MODULE's own import surface -- 05-RESEARCH.md found that gap is
+//    exactly how two of the six real touch sites (the image and video
+//    dispatch actions) were missed when the surface was enumerated by hand
+//    for plans 05-01/05-03. This invariant's companion half additionally
+//    forbids importing the now-retired development ledger
+//    (src/lib/spend-ledger.ts) from anywhere outside src/scripts/ or
+//    src/lib/ itself, so it cannot creep back onto a wife-facing path.
 //
 // Run with: node src/scripts/check-boundaries.ts
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -65,6 +78,43 @@ const ALLOWED_IMAGE_DISPATCH_PATH = "src/app/actions/generate-images.ts";
 // Invariant 6's allow-list -- the ONLY file outside src/scripts/ permitted
 // to import a specifier containing "child_process" (Phase 4, plan 04-04).
 const ALLOWED_PROCESS_SPAWN_PATH = "src/app/actions/open-story-folder.ts";
+
+// Invariant 7's allow-list -- the ONLY files outside src/scripts/ and
+// outside src/core/budget/ itself permitted to import the real budget
+// module (src/core/budget/), held as one named constant array (mirroring
+// invariant 5's/6's convention) so the enumerated real touch sites are a
+// single source of truth. Six of these are the plan's own enumerated list
+// (the story director, the uniqueness check, the scene-image action, the
+// scene-video action, the story-status action, and the not-yet-created
+// budget-status action plan 05-05 adds, included now so that plan needs no
+// edit here); create-story.ts is a seventh real touch site this plan found
+// while building this invariant -- it already imports BudgetExceededError
+// directly (plan 05-03) to catch a refusal from the story director /
+// uniqueness check it calls, and the plan's own hand-enumerated six-item
+// list omitted it. Leaving it out would have made this invariant fail
+// against the real codebase on the very commit that introduces it -- the
+// exact "a real touch site missed by hand-enumeration" failure mode this
+// invariant exists to close, this time in this plan's own list rather than
+// invariant 5's.
+const ALLOWED_BUDGET_MODULE_IMPORT_PATHS = [
+  "src/core/story/director.ts",
+  "src/core/uniqueness/check.ts",
+  "src/app/actions/generate-images.ts",
+  "src/app/actions/generate-video.ts",
+  "src/app/actions/get-story-status.ts",
+  "src/app/actions/create-story.ts",
+  "src/app/actions/get-budget-status.ts",
+];
+
+// Invariant 7's companion allow-list -- the ONLY file outside src/scripts/
+// and outside src/lib/ itself permitted to import the retired development
+// ledger (src/lib/spend-ledger.ts). historical-import.ts (plan 05-02) type-
+// imports its LedgerEntry shape to reconcile the dev ledger's 40 historical
+// entries against GenerationRecord -- a completed, one-time migration
+// already run for real (05-02-SUMMARY.md). It reads the ledger's TYPE SHAPE
+// only (a type-only import, never a runtime value) and is never called from
+// any wife-facing dispatch path.
+const ALLOWED_RETIRED_LEDGER_IMPORT_PATH = "src/core/budget/historical-import.ts";
 
 // Held as named constants (not inlined into the scan below) so invariant 4
 // can skip this file's own path without also needing string-literal
@@ -153,13 +203,15 @@ function main(): void {
   if (offenders1.length > 0) {
     failed = true;
     console.log(
-      "BOUNDARY CHECK FAILED (invariant 1 -- client bundle must never import a provider, the spend ledger, or the database layer):",
+      "BOUNDARY CHECK FAILED (invariant 1 -- client bundle must never import a provider, the spend ledger, the real budget module, or the database layer):",
     );
     for (const offender of offenders1) {
       console.log(`  ${offender}`);
     }
   } else {
-    console.log("OK: no \"use client\" file imports a provider, the spend ledger, or the database layer");
+    console.log(
+      "OK: no \"use client\" file imports a provider, the spend ledger, the real budget module, or the database layer",
+    );
   }
 
   // Invariant 2
@@ -292,6 +344,69 @@ function main(): void {
     }
   } else {
     console.log("OK: only the output-folder action may spawn an operating-system process");
+  }
+
+  // Invariant 7 -- outside src/scripts/ and outside src/core/budget/ itself,
+  // a file may import the real budget module only if it is one of the
+  // enumerated gated touch sites above (ALLOWED_BUDGET_MODULE_IMPORT_PATHS).
+  // This is what makes that enumerated list structurally enforced rather
+  // than merely documented: a future call site importing core/budget/
+  // without being added here fails the build instead of silently skipping
+  // the check that lives inside checkBudget.
+  const offenders7a: string[] = [];
+  for (const file of allFiles) {
+    if (file.startsWith("src/scripts/")) continue;
+    if (file.startsWith("src/core/budget/")) continue;
+    if (ALLOWED_BUDGET_MODULE_IMPORT_PATHS.includes(file)) continue;
+    const specifiers = importSpecifiers(readFileSync(file, "utf8"));
+    for (const spec of specifiers) {
+      if (spec.includes("core/budget")) {
+        offenders7a.push(`${file} -> "${spec}"`);
+      }
+    }
+  }
+
+  // Invariant 7's companion -- outside src/scripts/ and outside src/lib/
+  // itself, no file may import the retired development ledger
+  // (src/lib/spend-ledger.ts), except the one enumerated
+  // ALLOWED_RETIRED_LEDGER_IMPORT_PATH. Under Decision A1 (05-01-SUMMARY.md)
+  // this is what keeps the retired ledger from creeping back onto a
+  // wife-facing path; under A2 it would be trivially satisfied (the module
+  // gone) but is kept anyway so a future reintroduction still fails the
+  // gate.
+  const offenders7b: string[] = [];
+  for (const file of allFiles) {
+    if (file.startsWith("src/scripts/")) continue;
+    if (file.startsWith("src/lib/")) continue;
+    if (file === ALLOWED_RETIRED_LEDGER_IMPORT_PATH) continue;
+    const specifiers = importSpecifiers(readFileSync(file, "utf8"));
+    for (const spec of specifiers) {
+      if (spec.includes("spend-ledger")) {
+        offenders7b.push(`${file} -> "${spec}"`);
+      }
+    }
+  }
+
+  if (offenders7a.length > 0) {
+    failed = true;
+    console.log("BOUNDARY CHECK FAILED (invariant 7 -- the real budget module's import surface must be enumerated):");
+    for (const offender of offenders7a) {
+      console.log(`  ${offender}`);
+    }
+  } else {
+    console.log("OK: the real budget module has an enumerated import surface");
+  }
+
+  if (offenders7b.length > 0) {
+    failed = true;
+    console.log(
+      "BOUNDARY CHECK FAILED (invariant 7 companion -- the retired development ledger must not be imported outside src/scripts/ or src/lib/):",
+    );
+    for (const offender of offenders7b) {
+      console.log(`  ${offender}`);
+    }
+  } else {
+    console.log("OK: the retired development ledger is not imported outside src/scripts/ or src/lib/");
   }
 
   if (failed) {

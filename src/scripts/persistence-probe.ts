@@ -51,6 +51,7 @@ import { VIDEO_PRICE_PER_SECOND } from "../providers/video/veo.ts";
 import type { StoryDirectorOutput } from "../core/story/schema.ts";
 import { createStoryAction } from "../app/actions/create-story.ts";
 import { loadLedger, totalSpentUsd, CeilingExceededError } from "../lib/spend-ledger.ts";
+import { cumulativeSpentUsd } from "../core/budget/ledger.ts";
 
 // Lowercase and hyphens only, so it satisfies storage-paths.ts's
 // STORY_ID_PATTERN. Fixed rather than random so --write and --read (run in
@@ -160,6 +161,18 @@ async function runWrite(): Promise<void> {
   console.log(`PERSISTENCE PROBE: wrote id=${PROBE_STORY_ID} scenes=${output.scenes.length}`);
 }
 
+/**
+ * Phase 5 (05-04): GenerationRecord is now the real budget's own
+ * authoritative ledger (checkBudget sums it directly) -- this mode writes
+ * synthetic, zero-provider-cost generation records carrying real-looking
+ * dollar amounts for the fixture story, so it MUST delete them again before
+ * it returns, or they would permanently inflate her real recorded spend
+ * until some later, unrelated invocation happened to clear them. Wrapped in
+ * try/finally so the cleanup runs on every exit path (including the
+ * defensive "story not found" early return), not just the success path --
+ * main()'s own before/after spend guard is what proves this cleanup
+ * actually worked, not the plan's own comment.
+ */
 async function runSimulateAssets(): Promise<void> {
   const output = buildFixtureOutput();
 
@@ -168,71 +181,79 @@ async function runSimulateAssets(): Promise<void> {
   // repeated invocations.
   await prisma.generationRecord.deleteMany({ where: { storyId: PROBE_STORY_ID } });
 
-  for (const scene of output.scenes) {
-    const imagePath = sceneImagePath(PROBE_STORY_ID, scene.scene_number, "jpg");
-    await updateSceneImage(PROBE_STORY_ID, scene.scene_number, imagePath, SceneAssetStatus.READY);
-    await recordGeneration(
-      PROBE_STORY_ID,
-      {
-        generationType: GenerationType.IMAGE,
-        model: "gemini-3.1-flash-image",
-        estimatedUsd: IMAGE_PRICE_PER_CALL["gemini-3.1-flash-image"],
-        actualUsd: null,
-        billed: true,
-        ok: true,
-        message: "Image generated.",
-      },
-      scene.scene_number,
+  try {
+    for (const scene of output.scenes) {
+      const imagePath = sceneImagePath(PROBE_STORY_ID, scene.scene_number, "jpg");
+      await updateSceneImage(PROBE_STORY_ID, scene.scene_number, imagePath, SceneAssetStatus.READY);
+      await recordGeneration(
+        PROBE_STORY_ID,
+        {
+          generationType: GenerationType.IMAGE,
+          model: "gemini-3.1-flash-image",
+          estimatedUsd: IMAGE_PRICE_PER_CALL["gemini-3.1-flash-image"],
+          actualUsd: null,
+          billed: true,
+          ok: true,
+          message: "Image generated.",
+        },
+        scene.scene_number,
+      );
+
+      const videoPath = sceneVideoPath(PROBE_STORY_ID, scene.scene_number);
+      const durationSeconds = scene.duration ?? 8;
+      await updateSceneVideo(PROBE_STORY_ID, scene.scene_number, videoPath, SceneAssetStatus.READY);
+      await recordGeneration(
+        PROBE_STORY_ID,
+        {
+          generationType: GenerationType.VIDEO,
+          model: "veo-3.1-lite-generate-preview",
+          estimatedUsd: durationSeconds * VIDEO_PRICE_PER_SECOND["720p"],
+          actualUsd: null,
+          billed: true,
+          ok: true,
+          message: "Video generated.",
+        },
+        scene.scene_number,
+      );
+    }
+
+    const story = await findStoryWithScenes(PROBE_STORY_ID);
+    if (!story) {
+      console.log("PERSISTENCE PROBE: assets mismatch (story not found -- run --write first)");
+      process.exitCode = 1;
+      return;
+    }
+
+    const scenesWithImage = story.scenes.filter((s) => s.imageStatus === "READY" && Boolean(s.imagePath)).length;
+    const scenesWithVideo = story.scenes.filter((s) => s.videoStatus === "READY" && Boolean(s.videoPath)).length;
+    const records = await prisma.generationRecord.findMany({ where: { storyId: PROBE_STORY_ID } });
+    const recordsWithCost = records.filter((r) => r.estimatedUsd !== null && r.estimatedUsd > 0).length;
+
+    console.log(
+      `PERSISTENCE PROBE: assets scenes-with-image=${scenesWithImage} scenes-with-video=${scenesWithVideo} ` +
+        `records=${records.length} records-with-cost=${recordsWithCost}`,
     );
 
-    const videoPath = sceneVideoPath(PROBE_STORY_ID, scene.scene_number);
-    const durationSeconds = scene.duration ?? 8;
-    await updateSceneVideo(PROBE_STORY_ID, scene.scene_number, videoPath, SceneAssetStatus.READY);
-    await recordGeneration(
-      PROBE_STORY_ID,
-      {
-        generationType: GenerationType.VIDEO,
-        model: "veo-3.1-lite-generate-preview",
-        estimatedUsd: durationSeconds * VIDEO_PRICE_PER_SECOND["720p"],
-        actualUsd: null,
-        billed: true,
-        ok: true,
-        message: "Video generated.",
-      },
-      scene.scene_number,
-    );
-  }
+    const expectedScenes = output.scenes.length;
+    const expectedRecords = output.scenes.length * 2; // one image + one video record per scene
 
-  const story = await findStoryWithScenes(PROBE_STORY_ID);
-  if (!story) {
-    console.log("PERSISTENCE PROBE: assets mismatch (story not found -- run --write first)");
-    process.exitCode = 1;
-    return;
-  }
-
-  const scenesWithImage = story.scenes.filter((s) => s.imageStatus === "READY" && Boolean(s.imagePath)).length;
-  const scenesWithVideo = story.scenes.filter((s) => s.videoStatus === "READY" && Boolean(s.videoPath)).length;
-  const records = await prisma.generationRecord.findMany({ where: { storyId: PROBE_STORY_ID } });
-  const recordsWithCost = records.filter((r) => r.estimatedUsd !== null && r.estimatedUsd > 0).length;
-
-  console.log(
-    `PERSISTENCE PROBE: assets scenes-with-image=${scenesWithImage} scenes-with-video=${scenesWithVideo} ` +
-      `records=${records.length} records-with-cost=${recordsWithCost}`,
-  );
-
-  const expectedScenes = output.scenes.length;
-  const expectedRecords = output.scenes.length * 2; // one image + one video record per scene
-
-  if (
-    scenesWithImage === expectedScenes &&
-    scenesWithVideo === expectedScenes &&
-    records.length === expectedRecords &&
-    recordsWithCost === expectedRecords
-  ) {
-    console.log("PERSISTENCE PROBE: assets ok");
-  } else {
-    console.log("PERSISTENCE PROBE: assets mismatch");
-    process.exitCode = 1;
+    if (
+      scenesWithImage === expectedScenes &&
+      scenesWithVideo === expectedScenes &&
+      records.length === expectedRecords &&
+      recordsWithCost === expectedRecords
+    ) {
+      console.log("PERSISTENCE PROBE: assets ok");
+    } else {
+      console.log("PERSISTENCE PROBE: assets mismatch");
+      process.exitCode = 1;
+    }
+  } finally {
+    // Restore the real cumulative spend total to exactly what it was before
+    // this mode ran -- the synthetic amounts have already been read back
+    // and asserted on above; they must not linger in the authoritative
+    // table a moment longer than that.
+    await prisma.generationRecord.deleteMany({ where: { storyId: PROBE_STORY_ID } });
   }
 }
 
@@ -317,8 +338,26 @@ async function runReal(): Promise<void> {
   }
 }
 
+// Tight tolerance -- the real amounts this table carries are dollars-and-
+// cents figures (never sub-cent noise from floating point), so any
+// difference above a hundredth of a cent is a real, reportable change, not
+// rounding error.
+const SPEND_GUARD_TOLERANCE_USD = 0.00005;
+
+/**
+ * Phase 5 (05-04): captures the real cumulative spend total before ANY mode
+ * runs and fails loudly if it differs afterward. `--real` is deliberately
+ * excluded -- it dispatches a genuine, budget-gated LLM call (through
+ * createStoryAction) and is SUPPOSED to move the total; the guard exists to
+ * catch SYNTHETIC fixture money (--write/--simulate-assets) leaking into
+ * her real recorded spend, never to block a real, properly-accounted
+ * dispatch from completing.
+ */
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
+  const guarded = !args.includes("--real");
+  const spentBefore = guarded ? await cumulativeSpentUsd() : null;
+
   if (args.includes("--write")) {
     await runWrite();
   } else if (args.includes("--read")) {
@@ -330,6 +369,18 @@ async function main(): Promise<void> {
   } else {
     console.error("Usage: persistence-probe.ts --write | --read | --simulate-assets | --real");
     process.exitCode = 1;
+    return;
+  }
+
+  if (guarded && spentBefore !== null) {
+    const spentAfter = await cumulativeSpentUsd();
+    if (Math.abs(spentAfter - spentBefore) > SPEND_GUARD_TOLERANCE_USD) {
+      console.error(
+        `PERSISTENCE PROBE: SPEND TOTAL CHANGED -- before=$${spentBefore.toFixed(4)} after=$${spentAfter.toFixed(4)}. ` +
+          "This mode must never move her real cumulative spend.",
+      );
+      process.exitCode = 1;
+    }
   }
 }
 

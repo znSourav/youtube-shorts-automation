@@ -26,10 +26,20 @@ import { statSync } from "node:fs";
 import { runStoryDirector } from "../core/story/director.ts";
 import { generateSceneImagesAction } from "../app/actions/generate-images.ts";
 import { generateSceneVideoAction } from "../app/actions/generate-video.ts";
-import { loadLedger, totalSpentUsd } from "../lib/spend-ledger.ts";
-import { CeilingExceededError } from "../lib/spend-ledger.ts";
+import { BudgetExceededError, cumulativeAllocatedUsd, cumulativeSpentUsd } from "../core/budget/ledger.ts";
 import { VIDEO_PRICE_PER_SECOND } from "../providers/video/veo.ts";
 import { generateStoryId } from "../core/story/story-id.ts";
+
+// Phase 5 (plan 05-04): reports the real monthly budget's own figures --
+// this probe used to read the throwaway dev ledger, which is no longer on
+// any path this probe exercises (runStoryDirector/generateSceneImagesAction/
+// generateSceneVideoAction are all re-pointed onto core/budget/ledger.ts as
+// of plans 05-03/05-04). A developer running this script now sees the
+// budget it is actually spending from.
+async function printBudgetTotal(): Promise<void> {
+  const [allocated, spent] = await Promise.all([cumulativeAllocatedUsd(), cumulativeSpentUsd()]);
+  console.log(`Budget total: $${spent.toFixed(4)} of $${allocated.toFixed(2)}`);
+}
 
 // D-05: genuinely different from the CR-03 follow-up's "girl in a magical
 // garden" content already tested in Phase 1.
@@ -97,8 +107,7 @@ async function runVideoProbe(storyId: string, sceneNumber: number): Promise<void
     console.log(`VIDEO MESSAGE: ${result.message}`);
   }
 
-  const ledger = loadLedger();
-  console.log(`Ledger total: $${totalSpentUsd(ledger).toFixed(4)} of $${ledger.ceilingUsd.toFixed(2)}`);
+  await printBudgetTotal();
 }
 
 async function main(): Promise<void> {
@@ -111,7 +120,7 @@ async function main(): Promise<void> {
     try {
       await runVideoProbe(storyIdArg, video);
     } catch (err) {
-      if (err instanceof CeilingExceededError) {
+      if (err instanceof BudgetExceededError) {
         console.log(`STORY PROBE: blocked reason=${err.message}`);
         process.exitCode = 1;
         return;
@@ -202,8 +211,8 @@ async function main(): Promise<void> {
           );
         } else {
           const estimatedVideoUsd = (targetScene.duration ?? 8) * VIDEO_PRICE_PER_SECOND["720p"];
-          const ledgerNow = loadLedger();
-          const remaining = ledgerNow.ceilingUsd - totalSpentUsd(ledgerNow);
+          const [allocatedNow, spentNow] = await Promise.all([cumulativeAllocatedUsd(), cumulativeSpentUsd()]);
+          const remaining = allocatedNow - spentNow;
           if (remaining < estimatedVideoUsd) {
             console.log(
               `VIDEO: skipped scene=${targetScene.scene_number} reason="insufficient budget headroom ` +
@@ -233,10 +242,9 @@ async function main(): Promise<void> {
       }
     }
 
-    const ledger = loadLedger();
-    console.log(`Ledger total: $${totalSpentUsd(ledger).toFixed(4)} of $${ledger.ceilingUsd.toFixed(2)}`);
+    await printBudgetTotal();
   } catch (err) {
-    if (err instanceof CeilingExceededError) {
+    if (err instanceof BudgetExceededError) {
       console.log(`STORY PROBE: blocked reason=${err.message}`);
       process.exitCode = 1;
       return;
