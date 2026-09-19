@@ -141,12 +141,25 @@ function walk(dir: string, files: string[] = []): string[] {
   return files;
 }
 
+// Covers static `import ... from "x"` / side-effect `import "x"`, dynamic
+// `import("x")`, and `export ... from "x"` re-exports -- a specifier reaching
+// this scanner through any of the three forms carries the same forbidden
+// module just as much as a static import does (WR-03, 05-REVIEW.md): a
+// re-export or a lazily-`await import()`-ed module still ships whatever it
+// touches into the same bundle this gate exists to keep clean.
+const IMPORT_SPECIFIER_PATTERNS = [
+  /import\s+(?:[^'";]*?from\s+)?["']([^"']+)["']/g,
+  /import\s*\(\s*["']([^"']+)["']\s*\)/g,
+  /export\s+(?:[^'";]*?from\s+)?["']([^"']+)["']/g,
+];
+
 function importSpecifiers(content: string): string[] {
   const specifiers: string[] = [];
-  const importRegex = /import\s+(?:[^'";]*?from\s+)?["']([^"']+)["']/g;
-  let match: RegExpExecArray | null;
-  while ((match = importRegex.exec(content)) !== null) {
-    specifiers.push(match[1]);
+  for (const pattern of IMPORT_SPECIFIER_PATTERNS) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(content)) !== null) {
+      specifiers.push(match[1]);
+    }
   }
   return specifiers;
 }

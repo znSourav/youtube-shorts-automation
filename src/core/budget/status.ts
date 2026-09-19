@@ -57,6 +57,12 @@ const BREAKDOWN_TYPES: BudgetTypeBucket[] = ["VIDEO", "IMAGE", "LLM"];
  * The zeroed, ok-false shape shared by the Server Action's failure path and
  * the browser's initial render, so the two can never drift into two
  * different definitions of "no data yet".
+ *
+ * src/app/page.tsx hand-maintains its own copy of this shape as
+ * EMPTY_BUDGET_STATUS, because a "use client" file may never import this
+ * module (check-boundaries.ts invariant 1/7). If this shape changes --
+ * especially BREAKDOWN_TYPES's order/content -- update that copy too
+ * (WR-05, 05-REVIEW.md).
  */
 export function emptyBudgetStatus(): BudgetStatus {
   return {

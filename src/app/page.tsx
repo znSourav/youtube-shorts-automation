@@ -60,6 +60,11 @@ type BudgetStatus = Awaited<ReturnType<typeof getBudgetStatusAction>>;
 
 // The zeroed, ok-false shape BudgetIndicator renders as "nothing" (T-05-19)
 // until the mount-time fetch below resolves for the first time.
+//
+// Hand-maintained copy of src/core/budget/status.ts's emptyBudgetStatus() --
+// this file can never import that module (invariant 1/7), so if that
+// function's shape changes, especially the breakdown array's order/content,
+// update this copy too (WR-05, 05-REVIEW.md).
 const EMPTY_BUDGET_STATUS: BudgetStatus = {
   ok: false,
   monthKey: "",

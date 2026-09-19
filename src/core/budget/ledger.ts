@@ -28,7 +28,12 @@ import type { PrismaClient } from "../../generated/prisma/client.ts";
 import { prisma } from "../../lib/db.ts";
 import { currentMonthKey, monthlyBudgetUsd } from "./month.ts";
 
-export class BudgetExceededError extends Error {}
+export class BudgetExceededError extends Error {
+  constructor(message?: string) {
+    super(message);
+    this.name = "BudgetExceededError";
+  }
+}
 
 /**
  * Idempotently credits the current UTC calendar month with whatever
