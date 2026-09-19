@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 05
 current_phase_name: Budget & Retry Safeguards
 status: executing
-stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-09-19T13:26:38.195Z"
+stopped_at: Completed 05-04-PLAN.md
+last_updated: "2026-09-19T13:43:29.115Z"
 last_activity: 2026-09-19
 last_activity_desc: Phase 05 execution started
-state_head: 7b09117b2242e1c2c97a99204c2390d732fc2bd2
+state_head: c27e5f12f5519d45e11d423db8ae84cf9dab9588
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 21
-  completed_plans: 19
+  completed_plans: 20
   percent: 67
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-14)
 ## Current Position
 
 Phase: 05 (Budget & Retry Safeguards) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-09-19 — Phase 05 execution started
 
@@ -82,6 +82,7 @@ Progress: [███████░░░] 67%
 | Phase 05 P01 | 20min | 3 tasks | 10 files |
 | Phase 05 P02 | 35min | 3 tasks | 6 files |
 | Phase 05 P03 | 25min | 3 tasks | 9 files |
+| Phase 05 P04 | 22min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -140,6 +141,9 @@ Recent decisions affecting current work:
 - [Phase 05]: [Phase 05, 05-03] Story Director and uniqueness-comparison LLM calls re-pointed onto the real budget gate, sharing one serializeDispatch queue that keeps the budget check, the paid call, and the spend record as a single serialized unit
 - [Phase 05]: [Phase 05, 05-03] recordGenerationAtDispatch writes each spend record the instant a call is dispatched (null storyId), with attachGenerationRecordsToStory linking it to the story afterward -- closes the real gap where a blocked/parse-failed/validation-failed/unsaveable Story Director call was dispatched and billed but never recorded
 - [Phase 05]: [Phase 05, 05-03] director.ts/check.ts import core/budget/ledger.ts via the redundant-but-equivalent "../../core/budget/ledger.ts" path so the plan's own REPOINT verify script's literal substring check passes -- zero functional difference from the idiomatic "../budget/ledger.ts" form
+- [Phase 05]: [Phase 05, 05-04] Scene images and scene videos re-pointed onto the real monthly budget inside the shared serializeDispatch queue; the retired dev ledger is off every wife-facing path
+- [Phase 05]: [Phase 05, 05-04] check-boundaries.ts invariant 7 enumerates the real budget module's whole import surface (including create-story.ts, a real touch site the plan's own six-item list omitted) plus a companion barring the retired ledger outside src/scripts//src/lib/
+- [Phase 05]: [Phase 05, 05-04] persistence-probe.ts's --simulate-assets mode now deletes its own synthetic GenerationRecord rows before returning (try/finally), since that table is now the real budget's authoritative ledger
 
 ### Pending Todos
 
@@ -170,6 +174,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-19T13:26:37.837Z
-Stopped at: Completed 05-03-PLAN.md
+Last session: 2026-09-19T13:43:28.772Z
+Stopped at: Completed 05-04-PLAN.md
 Resume file: None

@@ -170,7 +170,7 @@ Plans:
   4. Retrying any failed generation passes through the exact same budget check as a first attempt — retries cannot bypass the budget.
   5. Once a scene hits its configured maximum image or video retries, further retries are refused with a clear message rather than looping.
 
-**Plans:** 3/5 plans executed
+**Plans:** 4/5 plans executed
 
 Plans:
 **Wave 1**
@@ -187,7 +187,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 05-04-PLAN.md — Scene images and videos on the real budget; retire the dev ledger; enumerate the gate's import surface
+- [x] 05-04-PLAN.md — Scene images and videos on the real budget; retire the dev ledger; enumerate the gate's import surface
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -221,5 +221,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Core Generation Pipeline | 4/4 | Complete    | 2026-09-13 |
 | 3. Persistence & Structural Uniqueness | 4/4 | Complete    | 2026-09-14 |
 | 4. Wife-Facing Review & Approval Flow | 4/4 | Complete    | 2026-09-16 |
-| 5. Budget & Retry Safeguards | 3/5 | In Progress|  |
+| 5. Budget & Retry Safeguards | 4/5 | In Progress|  |
 | 6. Reliability, Secrets Hygiene & Output Correctness | 0/TBD | Not started | - |
