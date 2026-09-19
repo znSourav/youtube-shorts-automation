@@ -3,7 +3,8 @@
 import { readFileSync } from "node:fs";
 import { extname } from "node:path";
 
-import { CeilingExceededError, checkCeiling, recordSpend } from "../../lib/spend-ledger.ts";
+import { BudgetExceededError, checkBudget } from "../../core/budget/ledger.ts";
+import { serializeDispatch } from "../../core/budget/dispatch-chain.ts";
 import { generateVideo, VIDEO_PRICE_PER_SECOND } from "../../providers/video/veo.ts";
 import { storyDir, sceneVideoPath } from "../../core/storage-paths.ts";
 import type { Scene } from "../../core/story/schema.ts";
@@ -29,11 +30,6 @@ const DEFAULT_DURATION_SECONDS = 8;
 // Not exported by veo.ts -- mirrored here for the ledger's `model` field,
 // matching smoke-test.ts's own VIDEO_MODEL_ID convention.
 const VIDEO_MODEL_ID = "veo-3.1-lite-generate-preview";
-
-// CR-03 (04-REVIEW.md, second pass): app-wide serialization mutex for every
-// call into dispatchSceneVideo -- see the generateSceneVideoAction wrapper
-// below for the full rationale.
-let videoDispatchChain: Promise<unknown> = Promise.resolve();
 
 // Second-layer guard (CR-03 / T-02-12): buildStoryPrompt's own instruction is
 // the primary control; this catches a pose-change motion_prompt that slipped
@@ -108,21 +104,28 @@ function safeMotionPrompt(scene: Scene): string {
 
 /**
  * Single gated dispatch point for a scene's video, with three gates in a
- * fixed order -- approval, then per-scene retry cap, then the spend ceiling
- * -- before any provider work happens. It resolves the scene's image path
- * itself (from the database, via evaluateVideoDispatch/findStoryWithScenes)
+ * fixed order -- approval, then per-scene retry cap, then the real monthly
+ * budget -- before any provider work happens. It resolves the scene's image
+ * path itself (from the database, via evaluateVideoDispatch/findStoryWithScenes)
  * so no caller can supply one (RESEARCH.md Pattern 3) -- closing WINDOWS
  * ledger item 7, since a restored story's browser state never needs to hold
- * a filesystem path for this to work. checkCeiling runs immediately before
- * every dispatch -- including any future retry, since callers always go
- * through this function -- generateVideo (Phase 1, unchanged), then
- * recordSpend immediately after. Every outcome maps to one plain-language
- * sentence; the provider's own blockReason/operation name never crosses
- * into the return value's `message` (T-02-06) -- only into the server
- * console via generateVideo's own logRawResponse call.
+ * a filesystem path for this to work. `checkBudget` (src/core/budget/ledger.ts)
+ * runs immediately before every dispatch -- including any future retry,
+ * since callers always go through this function -- generateVideo (Phase 1,
+ * unchanged), then the durable spend record immediately after. Every outcome
+ * maps to one plain-language sentence; the provider's own blockReason/
+ * operation name never crosses into the return value's `message` (T-02-06)
+ * -- only into the server console via generateVideo's own logRawResponse
+ * call.
  *
  * Not exported -- every caller goes through generateSceneVideoAction below,
- * which serializes calls into this function app-wide (CR-03).
+ * which serializes calls into this function app-wide via the shared
+ * `serializeDispatch` queue (src/core/budget/dispatch-chain.ts, CR-03's
+ * original video-only mutex, generalized by plan 05-03). This function must
+ * NEVER call `serializeDispatch` itself -- it already runs inside one
+ * caller's callback; a nested call would enqueue itself behind the very
+ * callback it is running inside of and hang forever (the queue is not
+ * reentrant).
  */
 async function dispatchSceneVideo(
   storyId: string,
@@ -168,25 +171,25 @@ async function dispatchSceneVideo(
   const estimatedUsd = durationSeconds * VIDEO_PRICE_PER_SECOND["720p"];
 
   try {
-    checkCeiling(estimatedUsd);
+    await checkBudget(estimatedUsd);
   } catch (err) {
     const message =
-      err instanceof CeilingExceededError
+      err instanceof BudgetExceededError
         ? "The generation budget was reached, so this scene's video could not be created."
         : "This scene's video could not be created due to an unexpected error.";
     // WR-07 (04-REVIEW.md, second pass): every other failure branch in this
     // file logs before returning -- this was the one silent exception. An
-    // unexpected (non-ceiling) error in the pre-flight budget check would
+    // unexpected (non-budget) error in the pre-flight budget check would
     // otherwise be completely invisible in the server console.
-    if (!(err instanceof CeilingExceededError)) {
+    if (!(err instanceof BudgetExceededError)) {
       console.error(
-        `generateSceneVideoAction: checkCeiling failed unexpectedly for story ${storyId} scene ${sceneNumber}`,
+        `generateSceneVideoAction: checkBudget failed unexpectedly for story ${storyId} scene ${sceneNumber}`,
         err,
       );
     }
     // No provider call was dispatched -- nothing was necessarily billed, so
-    // no generation record (mirrors the existing decision not to call
-    // recordSpend here). The scene's status is still written.
+    // no generation record (mirrors the existing decision not to record
+    // here). The scene's status is still written.
     await updateSceneVideo(storyId, sceneNumber, null, SceneAssetStatus.FAILED);
     return { ok: false, videoPath: null, videoDataUrl: null, message, durationSeconds };
   }
@@ -224,7 +227,7 @@ async function dispatchSceneVideo(
 
   // D-03 (WR-02 fix): the increment now sits immediately before the actual
   // Veo dispatch, not before the pre-dispatch image read above. A scene
-  // refused by the ceiling check above, or one whose local image read fails
+  // refused by the budget check above, or one whose local image read fails
   // before this point, has not cost anything and must not consume one of
   // its limited attempts -- only a scene that reaches this real dispatch
   // boundary must consume one, even if the process dies mid-call.
@@ -256,46 +259,35 @@ async function dispatchSceneVideo(
     };
   }
 
-  try {
-    recordSpend({
-      call: `scene-video:${storyId}:${sceneNumber}`,
-      model: VIDEO_MODEL_ID,
-      estimatedUsd,
-      usageMetadata: result.usageMetadata,
-      // Mirror the story/image convention (director.ts, generate-images.ts):
-      // any dispatched call counts, including a block or a client-side polling
-      // timeout, since by the time generateVideo() has returned here (rather
-      // than throwing) the initial ai.models.generateVideos() dispatch already
-      // succeeded -- timedOut and blocked are both post-dispatch outcomes that
-      // may have already cost money on Veo's side regardless of what this
-      // process could observe.
-      billed: true,
-      at: new Date().toISOString(),
-    });
-  } catch (err) {
-    // Fifth-pass review CR-01: recordSpend can genuinely throw (a ledger
-    // lock timeout, or a stale lock file left by a crash -- spend-ledger.ts's
-    // own withLedgerFileLock comment documents both). The Veo call already
-    // succeeded and already cost real money by this point regardless of
-    // whether this bookkeeping write lands -- discarding a successfully
-    // generated, already-paid-for video over a ledger-file hiccup would be
-    // strictly worse than proceeding with a loudly-logged missing entry, so
-    // this is deliberately NOT treated as a generation failure: the scene
-    // still advances to READY below exactly as it would have. A missing
-    // entry is a real, narrow risk (this specific call's cost would not
-    // count against the ceiling), which is why this is logged loudly rather
-    // than silently swallowed -- it is the one signal an operator has that
-    // the ledger and real spend may have drifted apart.
-    console.error(
-      `generateSceneVideoAction: recordSpend failed for story ${storyId} scene ${sceneNumber} -- ` +
-        "the Veo call succeeded and was billed, but this cost may be missing from the ledger",
-      err,
-    );
-  }
-
-  // Dual write for the same dispatched call recordSpend above just wrote to
-  // the real ledger -- IMAGE-03's "same is true ... for video" durability
-  // requirement. Never a replacement for the ledger (unmodified above).
+  // This IS the record now -- generate-video.ts used to dual-write the same
+  // dispatched call to both the throwaway dev ledger (via a manual
+  // try/catch around recordSpend, since spend-ledger.ts's own
+  // withLedgerFileLock comment documents it can genuinely throw on a lock
+  // timeout or a stale lock file left by a crash) and this table. The
+  // dev-ledger write is gone (Phase 5); this is the one and only durable
+  // record of this dispatched call.
+  //
+  // Fifth-pass review CR-01's concern transfers exactly: recordGeneration
+  // (src/core/persistence/generation-repository.ts) is best-effort by
+  // contract -- it never throws, it logs and returns. A failed write here
+  // must never discard the video: the Veo call already succeeded and
+  // already cost real money by this point regardless of whether this
+  // bookkeeping write lands, so discarding a successfully generated,
+  // already-paid-for video over a database hiccup would be strictly worse
+  // than proceeding with a loudly-logged missing entry -- the scene still
+  // advances to READY below exactly as it would have. A missing entry is a
+  // real, narrow risk (this specific call's cost would not count against
+  // the budget), which is why recordGeneration itself logs loudly rather
+  // than silently swallowing the failure -- it is the one signal an
+  // operator has that the recorded and real spend may have drifted apart.
+  //
+  // Mirrors the story/image convention (director.ts, generate-images.ts):
+  // any dispatched call counts, including a block or a client-side polling
+  // timeout, since by the time generateVideo() has returned here (rather
+  // than throwing) the initial ai.models.generateVideos() dispatch already
+  // succeeded -- timedOut and blocked are both post-dispatch outcomes that
+  // may have already cost money on Veo's side regardless of what this
+  // process could observe.
   const generationRecordBase = {
     generationType: GenerationType.VIDEO,
     model: VIDEO_MODEL_ID,
@@ -371,26 +363,33 @@ async function dispatchSceneVideo(
   };
 }
 
-// CR-03 (04-REVIEW.md, second pass): serializes every call to
-// dispatchSceneVideo so at most one is ever mid-flight at a time app-wide.
-// batch.ts's own doc comment claims "exactly one paid call in flight at
-// once", but that only held WITHIN one runBatchVideoDispatch call -- an
-// independently-dispatched retrySceneVideoAction call had no coordination
-// with a still-running batch, so two concurrent calls could each pass
-// checkCeiling before either had called recordSpend (a Veo call takes
-// minutes; recordSpend only runs after it resolves). This restores the
-// invariant across every caller, not just within one batch.
+// CR-03 (04-REVIEW.md, second pass) originally gave dispatchSceneVideo its
+// own video-only serialization mutex so at most one call is ever mid-flight
+// at a time app-wide: batch.ts's own doc comment claims "exactly one paid
+// call in flight at once", but that only held WITHIN one
+// runBatchVideoDispatch call -- an independently-dispatched
+// retrySceneVideoAction call had no coordination with a still-running
+// batch, so two concurrent calls could each pass the budget check before
+// either had recorded its spend (a Veo call takes minutes; the spend record
+// only writes after it resolves).
+//
+// Plan 05-03 generalized that video-only mutex into `serializeDispatch`
+// (src/core/budget/dispatch-chain.ts) -- the same shared queue now covers
+// every paid dispatch type in the application (story, uniqueness
+// comparison, scene image, scene video), not just video, so the race this
+// closes is the app-wide one 01-REVIEW-FIX.md's WR-02 note described: two
+// callers passing the budget check against the same cumulative total before
+// either had recorded anything, not just two video callers.
+//
+// The serialized unit sits exactly where it always did -- around the whole
+// dispatchSceneVideo call, covering its budget check, its Veo dispatch, and
+// its spend record together as one unit -- via a single `serializeDispatch`
+// call here. dispatchSceneVideo itself must NEVER call `serializeDispatch`
+// again: the queue is not reentrant, and a nested call would enqueue itself
+// behind the very callback it is running inside of and hang forever.
 export async function generateSceneVideoAction(
   storyId: string,
   sceneNumber: number,
 ): Promise<GenerateSceneVideoResult> {
-  const run = videoDispatchChain.then(
-    () => dispatchSceneVideo(storyId, sceneNumber),
-    () => dispatchSceneVideo(storyId, sceneNumber),
-  );
-  videoDispatchChain = run.then(
-    () => undefined,
-    () => undefined,
-  );
-  return run;
+  return serializeDispatch(() => dispatchSceneVideo(storyId, sceneNumber));
 }
