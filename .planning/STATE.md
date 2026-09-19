@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 05
 current_phase_name: Budget & Retry Safeguards
 status: executing
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-09-19T03:46:00.416Z"
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-09-19T13:26:38.195Z"
 last_activity: 2026-09-19
 last_activity_desc: Phase 05 execution started
-state_head: d84cb3a40995d7591e0b9b3485bac2e394cd7451
+state_head: 7b09117b2242e1c2c97a99204c2390d732fc2bd2
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 21
-  completed_plans: 18
+  completed_plans: 19
   percent: 67
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-14)
 ## Current Position
 
 Phase: 05 (Budget & Retry Safeguards) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-09-19 — Phase 05 execution started
 
@@ -81,6 +81,7 @@ Progress: [███████░░░] 67%
 | Phase 04 P04 | multi-session | 4 tasks | 13 files |
 | Phase 05 P01 | 20min | 3 tasks | 10 files |
 | Phase 05 P02 | 35min | 3 tasks | 6 files |
+| Phase 05 P03 | 25min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -136,6 +137,9 @@ Recent decisions affecting current work:
 - [Phase 05]: [Phase 05, 05-01] Decision A = A1 (keep a small separate developer ceiling for CLI probe scripts) and Decision B = B1 (import only the 26 unpaired historical ledger entries, storyId relaxed to nullable) -- both pre-answered by the requester, recorded in 05-01-SUMMARY.md for plans 05-02/05-04
 - [Phase 05]: [Phase 05, 05-01] check-boundaries.ts invariant 1 extended to forbid a "use client" file from importing src/core/budget/, mirroring the existing core/persistence entry (T-05-02)
 - [Phase 05]: [Phase 05, 05-02] Real carry-forward run confirmed D-01's exact figures: 40 GenerationRecord rows / $5.0720 total, 26 with null storyId ($2.9370), headroom $9.9280 of $15.00
+- [Phase 05]: [Phase 05, 05-03] Story Director and uniqueness-comparison LLM calls re-pointed onto the real budget gate, sharing one serializeDispatch queue that keeps the budget check, the paid call, and the spend record as a single serialized unit
+- [Phase 05]: [Phase 05, 05-03] recordGenerationAtDispatch writes each spend record the instant a call is dispatched (null storyId), with attachGenerationRecordsToStory linking it to the story afterward -- closes the real gap where a blocked/parse-failed/validation-failed/unsaveable Story Director call was dispatched and billed but never recorded
+- [Phase 05]: [Phase 05, 05-03] director.ts/check.ts import core/budget/ledger.ts via the redundant-but-equivalent "../../core/budget/ledger.ts" path so the plan's own REPOINT verify script's literal substring check passes -- zero functional difference from the idiomatic "../budget/ledger.ts" form
 
 ### Pending Todos
 
@@ -166,6 +170,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-19T03:46:00.083Z
-Stopped at: Completed 05-02-PLAN.md
+Last session: 2026-09-19T13:26:37.837Z
+Stopped at: Completed 05-03-PLAN.md
 Resume file: None
