@@ -1,18 +1,18 @@
 ---
 gsd_state_version: 1.0
 current_phase: 05
-current_phase_name: budget-retry-safeguards
+current_phase_name: Budget & Retry Safeguards
 status: executing
-stopped_at: Phase 5 context gathered
-last_updated: "2026-09-19T03:19:03.921Z"
-last_activity: 2026-09-16
-last_activity_desc: Phase 04 complete, transitioned to Phase 5
-state_head: b8accdfcf8b021f1e01f1322fb8663a865c412d0
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-09-19T03:35:33.335Z"
+last_activity: 2026-09-19
+last_activity_desc: Phase 05 execution started
+state_head: e3cdc1fb8ff5e4c2765da4cb069e075cc2e00754
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 21
-  completed_plans: 16
+  completed_plans: 17
   percent: 67
 ---
 
@@ -23,16 +23,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-14)
 
 **Core value:** One simple idea in → one genuinely original, structurally-unique animated episode's worth of local video assets out, without ever exceeding the $15 experiment budget or silently shipping a story that's a thin reskin of a previous one.
-**Current focus:** Phase 04 — Wife-Facing Review & Approval Flow
+**Current focus:** Phase 05 — Budget & Retry Safeguards
 
 ## Current Position
 
-Phase: 05 (budget-retry-safeguards) — READY TO EXECUTE
-Plan: Not started
+Phase: 05 (Budget & Retry Safeguards) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-09-16 — Phase 04 complete, transitioned to Phase 5
+Last activity: 2026-09-19 — Phase 05 execution started
 
-Progress: [█████░░░░░] 50%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
@@ -79,6 +79,7 @@ Progress: [█████░░░░░] 50%
 | Phase 04 P02 | 12min | 3 tasks | 5 files |
 | Phase 04 P03 | ~21h wall-clock (checkpoint-paused; short active work) | 3 tasks | 13 files |
 | Phase 04 P04 | multi-session | 4 tasks | 13 files |
+| Phase 05 P01 | 20min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -130,6 +131,9 @@ Recent decisions affecting current work:
 - [Phase 04]: [Phase 4, 04-04] Task 4 checkpoint item 10 genuinely FAILED (a story's vanished folder was silently recreated with no message) and was fixed, not waived -- exportEpisodeAssets now reports folderMissing when a story recorded a real asset but its directory is gone, instead of transparently recreating an empty shell — Matches this project's established convention of recording real findings honestly and fixing them at the checkpoint rather than presenting a sanitized all-pass narrative (same precedent as 04-03's item 7). Verified by two new unit tests rather than a live rename-the-folder click-through, since no real database story currently has any ready asset that would make that exact scenario reachable without a real paid provider call.
 - [Phase 04]: [Phase 4, code review pass 5] Fixed generate-video.ts's unprotected recordSpend call (could silently lose a real, billed cost from the ledger if the file lock throws) -- the identical pattern exists in generate-images.ts and director.ts (Phase 1/2 files, out of Phase 4's scope) and is deliberately NOT fixed here — Recorded as a known, tracked limitation for Phase 6 (Reliability, Secrets Hygiene & Output Correctness) rather than either silently scope-creeping into unrelated phases' files or silently leaving the gap undiscussed.
 - [Phase 04]: [Phase 4, code review pass 6] The stuck-generation detector's 12-minute countdown lives only in a client-side useRef, with no server-side timestamp anchor -- a page reload silently resets it to zero even for a scene that has been stuck far longer, deferring the "Try again" recovery affordance's appearance. Deliberately NOT fixed in this pass. — A real fix requires a schema migration (a server-recorded "generating since" timestamp on Scene, consumed by getStoryStatusAction instead of the client guessing elapsed time) -- a materially bigger, riskier change than any other fix in this six-pass review cycle, for a Warning-severity UX delay with no budget or data-integrity consequence (worst case she waits up to 24 minutes instead of 12 before the recovery button appears). Tracked for a future phase (Phase 6, Reliability, Secrets Hygiene & Output Correctness, or wherever D-05's stuck-recovery mechanism next gets hardened) rather than expanding this review cycle's scope further.
+- [Phase 05]: [Phase 05, 05-01] ensureCurrentMonthAllocation's upsert overwrites allocatedUsd on every call (not an empty update clause), so a mid-month MONTHLY_BUDGET_USD change is not silently ignored -- deliberate correction to 05-RESEARCH.md's worked snippet
+- [Phase 05]: [Phase 05, 05-01] Decision A = A1 (keep a small separate developer ceiling for CLI probe scripts) and Decision B = B1 (import only the 26 unpaired historical ledger entries, storyId relaxed to nullable) -- both pre-answered by the requester, recorded in 05-01-SUMMARY.md for plans 05-02/05-04
+- [Phase 05]: [Phase 05, 05-01] check-boundaries.ts invariant 1 extended to forbid a "use client" file from importing src/core/budget/, mirroring the existing core/persistence entry (T-05-02)
 
 ### Pending Todos
 
@@ -160,6 +164,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-19T02:23:56.428Z
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-budget-retry-safeguards/05-CONTEXT.md
+Last session: 2026-09-19T03:35:32.963Z
+Stopped at: Completed 05-01-PLAN.md
+Resume file: None

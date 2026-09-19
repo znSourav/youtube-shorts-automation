@@ -52,8 +52,8 @@ Requirements for the 24-hour MVP. Each maps to a roadmap phase.
 
 ### Budget
 
-- [ ] **BUDGET-01**: Every paid generation call is preceded by a check that current month-to-date spend plus the estimated cost of the request does not exceed the configured monthly budget; the call is refused with a clear explanation if it would
-- [ ] **BUDGET-02**: The monthly budget limit is configurable (e.g. via `MONTHLY_BUDGET_USD`) and enforced without a code change
+- [x] **BUDGET-01**: Every paid generation call is preceded by a check that current month-to-date spend plus the estimated cost of the request does not exceed the configured monthly budget; the call is refused with a clear explanation if it would
+- [x] **BUDGET-02**: The monthly budget limit is configurable (e.g. via `MONTHLY_BUDGET_USD`) and enforced without a code change
 - [ ] **BUDGET-03**: Wife can see running month-to-date spend broken down by generation type (video/image/LLM) against the configured limit
 - [ ] **BUDGET-04**: A retry of any failed generation passes through the same budget check as a first attempt — retries cannot bypass the budget
 - [ ] **BUDGET-05**: Each scene has a configurable maximum number of image and video retries; once reached, further retries are refused with a clear message rather than looping
@@ -137,8 +137,8 @@ Explicitly excluded from this project, not just this milestone. Documented to pr
 | VIDEO-02 | Phase 4 | Complete |
 | VIDEO-03 | Phase 3 | Complete |
 | VIDEO-04 | Phase 4 | Complete |
-| BUDGET-01 | Phase 5 | Pending |
-| BUDGET-02 | Phase 5 | Pending |
+| BUDGET-01 | Phase 5 | Complete |
+| BUDGET-02 | Phase 5 | Complete |
 | BUDGET-03 | Phase 5 | Pending |
 | BUDGET-04 | Phase 5 | Pending |
 | BUDGET-05 | Phase 5 | Pending |
