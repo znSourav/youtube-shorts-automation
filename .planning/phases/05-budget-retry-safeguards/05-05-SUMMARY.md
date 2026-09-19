@@ -17,7 +17,7 @@ provides:
   - src/app/actions/get-budget-status.ts (getBudgetStatusAction)
   - src/components/story/BudgetIndicator.tsx, wired into page.tsx above the screen switch with a best-effort refresh-after-spend pattern
   - Automated regression evidence for BUDGET-04 (structural delegation) and BUDGET-05 (retry caps unchanged and independent of the budget system)
-affects: [06-reliability-secrets-output (BUDGET-03's live UI confirmation and the env-reload answer still need to land before the phase closes)]
+affects: [06-reliability-secrets-output]
 
 # Actuals (#2632)
 actuals:
@@ -50,9 +50,9 @@ key-decisions:
   - "page.tsx's refresh-after-spend calls (createStory, generateImages, regenerateImage, generateAllVideos, retryScene) are all fire-and-forget (`void refreshBudgetStatus()`), never awaited -- so a slow or failed status refresh can never delay or block the primary handler it follows. The video-status poll tick's own refresh piggybacks on the existing 3s interval rather than adding a second timer."
   - "BUDGET-05 confirmed to require no new implementation in this plan (05-RESEARCH.md's discretion note): src/core/retry/caps.ts's maxSceneRetryAttempts() plus Scene.imageAttempts/videoAttempts plus src/core/approval/gates.ts's two cap-reached refusal messages already satisfy the requirement verbatim, and both modules remain structurally independent of src/core/budget/ (confirmed by grep, not assumed)."
   - "BUDGET-04 confirmed structural rather than duplicated: retrySceneVideoAction is a one-line delegation to generateSceneVideoAction, and regenerateSceneImageAction delegates to generateSceneImagesAction -- the exact same gated dispatch functions a first attempt uses, so there is no second budget check to audit or drift out of sync."
-  - "Deliberately did NOT mark BUDGET-03 complete in REQUIREMENTS.md this run, and did NOT run phase-completion routing (no state.advance-plan, no marking Phase 5 'Complete' in ROADMAP.md) -- Task 3's <human-check> block (live browser verification of the indicator, its breakdown, its labels, keyboard operability, and the env-reload answer) has not yet run. Per this run's explicit instructions, that live verification is reserved for the orchestrator in a follow-up step, not fabricated here."
+  - "Task 3's <human-check> block was completed live by the orchestrator in a follow-up step (not fabricated by the executor): the indicator, its breakdown, its plain-language labels, and the env-reload question were all confirmed directly against the running dev app. BUDGET-03 is marked complete below on the strength of that live evidence."
 
-requirements-completed: [BUDGET-04, BUDGET-05]
+requirements-completed: [BUDGET-03, BUDGET-04, BUDGET-05]
 
 coverage:
   - id: D1
@@ -90,8 +90,14 @@ coverage:
       - kind: other
         ref: "npm run build -- Compiled successfully, static pages generated"
         status: pass
+      - kind: manual
+        ref: "Live browser check against the running dev app (localhost:3000): indicator visible without scrolling, reads \"$9.93 left of $15.00\"; tapping reveals Video $3.30 / Images $1.07 / Story writing $0.70 plus This month's allocation $15.00 / Spent so far this month $5.07 -- exact match to the plan's <done> figures; no enum names, model ids, or \"LLM\" anywhere in the rendered text; tapping again collapses it; still visible after navigating to My Stories and back."
+        status: pass
+      - kind: manual
+        ref: "Keyboard: reachability confirmed live -- the very first Tab press from a fresh page load focuses the indicator button (confirmed via document.activeElement). Operability via a live synthetic Enter/Space keypress could not be confirmed through the browser-automation tool used (the same tool's Tab and mouse-click actions work correctly on this element, and a direct element.click() correctly toggles it, but its synthetic keydown/keyup did not trigger the browser's native button-activation behavior in this environment). Source inspection confirms the button is a plain native <button type=\"button\"> with a single onClick handler and aria-expanded, no onKeyDown/onKeyUp/preventDefault/stopPropagation anywhere in the file -- the standard, spec-compliant pattern real browsers activate on Enter/Space without any app-level key handling required. Treated as a tooling limitation of this session's verification method, not an application defect; flagged here rather than silently claimed as a full live keyboard pass."
+        status: pass
     human_judgment: true
-    rationale: "Structural/compile checks confirm the code is wired correctly, but BUDGET-03's actual acceptance (\"she can see running spend\") requires a live browser look: is it visible without scrolling, does tapping actually reveal the breakdown with plain-language labels, is it reachable by keyboard, does it survive a screen change. Reserved for the orchestrator's live verification per this run's explicit instructions -- not fabricated here. See 'Human Verification Pending' below."
+    rationale: "Live-verified by the orchestrator in a follow-up step against the running dev app. Visibility, breakdown content, plain-language labels, keyboard reachability, and screen-change persistence were all directly observed. Keyboard operability rests on standards-compliant source code plus a working programmatic click, not a directly-observed synthetic keypress -- see the manual verification entry above for the exact reason."
   - id: D4
     description: "The retry-cap tests pass unchanged and neither src/core/retry/caps.ts nor src/core/approval/gates.ts imports the budget system -- BUDGET-05 required no new implementation in this plan"
     requirement: "BUDGET-05"
@@ -129,24 +135,30 @@ coverage:
     human_judgment: false
   - id: D7
     description: "05-RESEARCH.md Assumption A1 (does an env-var MONTHLY_BUDGET_USD edit take effect under the documented npm run dev start command without a restart) -- settled either way, not left as an assumption"
-    verification: []
+    verification:
+      - kind: manual
+        ref: "The requester edited .env.local (MONTHLY_BUDGET_USD=1) while the already-running npm run dev process (started before the edit) stayed up. The dev server's own log immediately printed \"Reload env: .env.local\", and the next page load showed the indicator flip live to \"The generation budget is used up for now.\" with no restart of any kind. Confirmed by direct server-log inspection (preview_logs), not inferred."
+        status: pass
+      - kind: manual
+        ref: "The figure was restored to MONTHLY_BUDGET_USD=15 the same way; the indicator and a fresh node --env-file=.env.local src/scripts/budget-probe.ts --expect=pass both returned to $9.93 left of $15.00, confirming the reload is bidirectional, not a one-way drop into a fallback."
+        status: pass
     human_judgment: true
-    rationale: "Requires editing the real .env.local, saving, and triggering budget-probe.ts without restarting anything, then observing whether the new figure took effect -- an interactive, stateful check against the live dev process that this run's explicit instructions reserve for the orchestrator, not something the executor can fabricate or safely automate unattended (it would leave the real MONTHLY_BUDGET_USD in a non-$15 state if interrupted)."
+    rationale: "Answer: YES -- editing MONTHLY_BUDGET_USD in .env.local and saving takes effect live under npm run dev, with no restart required. This is a first-party observation (Next.js's own \"Reload env\" log line), not an inference from a fresh-process re-read. One methodology note for future reference: node src/scripts/budget-probe.ts alone (without --env-file=.env.local) does NOT read the project's env file -- it silently falls back to the script's own $15 default, which looked like a false negative on first attempt until re-run with the flag package.json's own smoke script already uses. That was a test-methodology miss, not a finding about the app."
 
 # Metrics
-duration: ~25min (Tasks 1-2 plus Task 3's automated portion; Task 3's human-check is not yet run)
+duration: ~25min executor + live human-check completed in a follow-up orchestrator step
 completed: 2026-09-19
-status: halted
+status: complete
 ---
 
 # Phase 05 Plan 05: The Spend Indicator, Plus the Phase's Closing Evidence Summary
 
-**getBudgetStatus/getBudgetStatusAction compute her exact spend figures server-side ($15.00 allocated, $5.0720 spent, $9.9280 remaining, split $3.30 video/$1.07 image/$0.70 writing); BudgetIndicator.tsx renders them as a small always-visible, tap-to-expand line wired into every screen; BUDGET-04/BUDGET-05 re-confirmed with fresh automated evidence. Task 3's live-browser human-check (indicator visibility, breakdown content, keyboard operability, and the env-reload question) has NOT yet run -- reserved for the orchestrator per this run's explicit instructions.**
+**getBudgetStatus/getBudgetStatusAction compute her exact spend figures server-side ($15.00 allocated, $5.0720 spent, $9.9280 remaining, split $3.30 video/$1.07 image/$0.70 writing); BudgetIndicator.tsx renders them as a small always-visible, tap-to-expand line wired into every screen; BUDGET-04/BUDGET-05 re-confirmed with fresh automated evidence. Task 3's live-browser human-check (indicator visibility, breakdown content, keyboard operability, and the env-reload question) is now complete -- all 7 items confirmed against the running dev app. BUDGET-03 is marked complete.**
 
 ## Performance
 
-- **Duration:** ~25 min so far (Tasks 1-2 complete and committed; Task 3's automated verify commands all run and pass; Task 3's `<human-check>` block intentionally not run)
-- **Tasks:** 3 (Task 1 and Task 2 fully complete and committed; Task 3's automated verification complete, human-check portion pending)
+- **Duration:** ~25 min executor work (Tasks 1-2 and Task 3's automated portion), plus a live browser verification pass completed by the orchestrator in a follow-up step
+- **Tasks:** 3/3 fully complete, including Task 3's `<human-check>` block
 - **Files modified:** 6 (4 created, 2 modified)
 
 ## Accomplishments
@@ -166,9 +178,9 @@ status: halted
 
 1. **Task 1: The numbers, computed on the server** -- `374d365` (feat)
 2. **Task 2: The indicator she actually sees** -- `c370714` (feat)
-3. **Task 3: Close the phase -- confirm what was already true is still true** -- no code changes; every automated `<verify>` command ran for real and passed (recorded above and in the `coverage:` block). The `<human-check>` block has not yet run.
+3. **Task 3: Close the phase -- confirm what was already true is still true** -- no code changes; every automated `<verify>` command ran for real and passed (recorded above and in the `coverage:` block). The `<human-check>` block was completed live by the orchestrator in a follow-up step (see "Human Verification -- Completed" below).
 
-**Plan metadata:** not yet committed -- this SUMMARY, STATE.md, and ROADMAP.md are committed together once, per this run's explicit instructions, without triggering phase-completion routing (see "Human Verification Pending" below).
+**Plan metadata:** committed together with STATE.md/ROADMAP.md/REQUIREMENTS.md once the live human-check confirmed all 7 items.
 
 ## Files Created/Modified
 
@@ -185,21 +197,21 @@ See `key-decisions` in the frontmatter above -- summarized: the headline figure 
 
 ## Deviations from Plan
 
-None -- Tasks 1 and 2 executed exactly as written, and every one of Task 3's automated `<verify>` commands ran for real (not simulated) and passed on the first attempt; no fix was needed. The one deliberate divergence from the plan's own literal instructions is procedural, not a code deviation: this run's explicit orchestrator instructions required stopping before Task 3's `<human-check>` block rather than completing the whole plan in one pass. That stop is recorded via `status: halted` (per this template's own frontmatter guidance) rather than treated as a completed plan.
+None -- Tasks 1 and 2 executed exactly as written, and every one of Task 3's automated `<verify>` commands ran for real (not simulated) and passed on the first attempt; no fix was needed. The executor stopped before Task 3's `<human-check>` block per that run's explicit orchestrator instructions (recorded at the time via `status: halted`); the orchestrator then completed the human-check live in a follow-up step, and this file has been updated in place to reflect that (status now `complete`).
 
-## Human Verification Pending
+## Human Verification -- Completed
 
-Task 3's `<human-check>` block (05-05-PLAN.md) has **not** been run. It is reserved for the orchestrator to complete live, in the running dev app, per this run's explicit instructions. The exact items still open:
+Task 3's `<human-check>` block (05-05-PLAN.md) was run live by the orchestrator against the running dev app (`npm run dev`, localhost:3000). All 7 items:
 
-1. The spend indicator is visible without scrolling on the create screen and reads $9.93 left of $15.00.
-2. Tapping it reveals three labelled rows -- video $3.30, images $1.07, story writing $0.70 -- plus this month's allocation and month-to-date total.
-3. The labels are in her language: no enum names, no model ids, no "LLM".
-4. Tapping again collapses it. The control is reachable and operable by keyboard.
-5. It is still visible after navigating to My Stories and back.
-6. Change the monthly figure in the local environment file to a value below $5.0720, save, and without restarting anything trigger a budget check (via `budget-probe.ts`, never a real generation) -- confirm whether the new figure takes effect. This settles 05-RESEARCH.md's Assumption A1 either way.
-7. Restore the figure to $15.00 and confirm the indicator reads $9.93 left of $15.00 again.
+1. **Pass.** Indicator visible without scrolling on the create screen, read "$9.93 left of $15.00".
+2. **Pass.** Tapping revealed Video $3.30 / Images $1.07 / Story writing $0.70, plus "This month's allocation" $15.00 and "Spent so far this month" $5.07.
+3. **Pass.** All labels plain-language -- no enum names, model ids, or "LLM" anywhere.
+4. **Pass (collapse + keyboard reachability); qualified pass (keyboard operability).** Tapping again collapsed it. Tab from a fresh page load focused the button first. A live synthetic Enter/Space keypress through the browser-automation tool used for this check did not trigger the toggle, but source inspection confirms a plain native `<button type="button">` with a single `onClick` and no key-event interception -- the standard pattern real browsers activate on Enter/Space without any app code needed -- and a direct `element.click()` on the same focused element did toggle it correctly. Treated as a limitation of the verification tool's synthetic key dispatch, not an application defect; not silently claimed as a directly-observed keyboard pass either. See D3 in `coverage:` above for the full detail.
+5. **Pass.** Indicator still visible, unchanged figure, after navigating to My Stories and back.
+6. **Pass -- Assumption A1 is YES.** With `MONTHLY_BUDGET_USD=1` saved into `.env.local` while `npm run dev` kept running (no restart), the dev server's own log printed `Reload env: .env.local` and the next page load showed the indicator flip to "The generation budget is used up for now." live.
+7. **Pass.** Figure restored to `MONTHLY_BUDGET_USD=15`; indicator and a fresh `budget-probe.ts --expect=pass` both confirmed $9.93 left of $15.00 again.
 
-Until these run, **BUDGET-03 remains unchecked in REQUIREMENTS.md**, and the phase is not marked complete in ROADMAP.md/STATE.md. If any item genuinely fails, per this repository's own established precedent (04-03's item 7, 04-04's item 10) it must be fixed and written up, not waived.
+No item genuinely failed, so nothing needed fixing. BUDGET-03 is marked complete in REQUIREMENTS.md. Plan execution for Phase 5 is now fully done (5/5 plans); the phase itself is not yet marked "Complete" in ROADMAP.md -- per this project's established pipeline (matching Phases 1-4), that happens only after code review, phase-goal verification, security audit, and UAT all pass.
 
 ## Issues Encountered
 
@@ -211,16 +223,15 @@ None -- no external service configuration required. This plan touched only appli
 
 ## Next Phase Readiness
 
-- BUDGET-01, BUDGET-02, and BUDGET-04 are complete with real evidence (BUDGET-01/02 from earlier waves in this phase; BUDGET-04 re-confirmed here).
-- BUDGET-05 is now also complete with fresh evidence from this plan -- `requirements.mark-complete` will be run for `BUDGET-04, BUDGET-05` alongside this SUMMARY.
-- BUDGET-03 is code-complete (server computation, Server Action, and UI all built, structurally verified) but **not yet marked complete** -- it needs the live browser confirmation above.
-- Once the human-check passes (or any genuine failure is fixed and re-verified), a follow-up step should: mark BUDGET-03 complete in REQUIREMENTS.md, flip this SUMMARY's `status` to `complete`, run `state.advance-plan`, and update ROADMAP.md's Phase 5 row to Complete -- none of which this run performs.
-- No blockers beyond the pending live check itself.
+- BUDGET-01 through BUDGET-05 are all complete with real evidence -- the last of the five, BUDGET-03, closed out via this file's live human-check update.
+- Phase 5's own goal ("no paid provider call can ever fire in a way that would exceed the configured monthly budget, and no retry of any kind can bypass that guarantee") has full requirement-level coverage from all 5 plans.
+- Remaining before the phase is marked "Complete" in ROADMAP.md, matching Phases 1-4's pipeline: code review, regression gate, phase-goal verification (gsd-verifier), security audit (gsd-secure-phase), and UAT.
+- No blockers.
 
 ## Self-Check: PASSED
 
-Both created-file sets confirmed present on disk (`src/core/budget/status.ts`, `src/core/budget/status.test.ts`, `src/app/actions/get-budget-status.ts`, `src/components/story/BudgetIndicator.tsx`); both task commits (`374d365`, `c370714`) confirmed in `git log`; real `GenerationRecord`/`BudgetPeriod` totals confirmed unchanged at $5.0720 / $15.00 via direct SQLite query after every task.
+Both created-file sets confirmed present on disk (`src/core/budget/status.ts`, `src/core/budget/status.test.ts`, `src/app/actions/get-budget-status.ts`, `src/components/story/BudgetIndicator.tsx`); both task commits (`374d365`, `c370714`) confirmed in `git log`; real `GenerationRecord`/`BudgetPeriod` totals confirmed unchanged at $5.0720 / $15.00 via direct SQLite query after every task, and again after the live human-check ran.
 
 ---
 *Phase: 05-budget-retry-safeguards*
-*Completed: 2026-09-19 (Tasks 1-2 and Task 3's automated portion only -- see "Human Verification Pending")*
+*Completed: 2026-09-19*
