@@ -109,12 +109,18 @@ model Scene {
 model GenerationRecord {
   id             String         @id @default(cuid())
   // Phase 5 (05-02, D-01/Decision B=B1): relaxed from a required foreign key
-  // to nullable, mirroring sceneId's existing nullable pattern below. The
-  // ONLY reason: 26 Phase 1-2 development calls carried forward under D-01
-  // genuinely belong to no story (they predate this project's persistence
-  // layer entirely). Every live write path (recordGeneration/recordGenerations)
-  // still supplies a real story id -- this relaxation is confined to the
-  // one-time historical-import script, never to a production dispatch path.
+  // to nullable, mirroring sceneId's existing nullable pattern below.
+  // Originally only the one-time historical-import script (26 carried-
+  // forward Phase 1-2 calls under D-01) wrote a null here. Phase 5's 05-03
+  // superseded that: recordGenerationAtDispatch (generation-repository.ts)
+  // now writes a null storyId on every real Story Director and uniqueness-
+  // comparison dispatch too, since the story row may not exist yet or may
+  // never exist -- attachGenerationRecordsToStory links these rows to a
+  // story afterward, once one exists (05-03-SUMMARY.md; T-05-11,
+  // 05-SECURITY.md). A null storyId is reserved for these two cases --
+  // carried-forward rows (identified by the CARRIED_FORWARD_MESSAGE marker,
+  // not by their null id) and dispatch-boundary rows pending linkage -- and
+  // no other write path should construct one.
   storyId        String?
   story          Story?         @relation(fields: [storyId], references: [id])
   sceneId        String?
