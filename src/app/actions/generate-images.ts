@@ -2,7 +2,8 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 
-import { CeilingExceededError, checkCeiling, recordSpend } from "../../lib/spend-ledger.ts";
+import { BudgetExceededError, checkBudget } from "../../core/budget/ledger.ts";
+import { serializeDispatch } from "../../core/budget/dispatch-chain.ts";
 import {
   generateImage,
   IMAGE_PRICE_PER_CALL,
@@ -85,15 +86,31 @@ function plainLanguageBlockMessage(block?: ImageBlockClassification): string {
   return "The image generation did not return a usable image. Please try again.";
 }
 
+// One dispatched scene's outcome, returned from inside the serializeDispatch
+// callback so the loop body (which owns `stopped` and `statuses`) can react
+// without re-deriving what happened. `blocked` and `write-failed` are two
+// separate kinds (not folded into one "failed") because only `blocked` sets
+// `stopped` -- a local disk-write failure must not stop later, already-
+// billable scenes from being attempted (see the write-failure branch below).
+type DispatchedSceneOutcome =
+  | { kind: "blocked"; message: string }
+  | { kind: "write-failed"; message: string }
+  | { kind: "success"; imagePath: string; imageDataUrl: string; message: string };
+
 /**
  * Generates one image per scene, sequentially -- no parallelism, no job
  * queue (02-RESEARCH.md's Architecture Patterns; Phase 4 owns real per-scene
- * job tracking). `checkCeiling` runs immediately before every single
- * scene's `generateImage` call, and `recordSpend` runs immediately after a
- * dispatched call returns (including a blocked one, conservative accounting
- * per spend-ledger.ts's own convention). On a classified block -- or on the
- * ceiling itself refusing the call -- the loop stops; every remaining scene
- * is reported as skipped rather than silently attempted. No automatic
+ * job tracking). The real monthly budget (`checkBudget`,
+ * src/core/budget/ledger.ts) is checked immediately before every single
+ * scene's `generateImage` call, and the durable spend record (`recordGeneration`)
+ * is written immediately after a dispatched call returns (including a
+ * blocked one, conservative accounting) -- both sit inside one
+ * `serializeDispatch` (src/core/budget/dispatch-chain.ts) callback per scene,
+ * so the check, the call, and the record are a single serialized unit with
+ * respect to every other paid-call site in the process (Phase 5's shared
+ * dispatch queue, established by plan 05-03). On a classified block -- or on
+ * the budget itself refusing the call -- the loop stops; every remaining
+ * scene is reported as skipped rather than silently attempted. No automatic
  * retry exists on this path.
  */
 export async function generateSceneImagesAction(
@@ -118,119 +135,122 @@ export async function generateSceneImagesAction(
       continue;
     }
 
+    let outcome: DispatchedSceneOutcome;
     try {
-      checkCeiling(estimatedUsd);
+      outcome = await serializeDispatch(async (): Promise<DispatchedSceneOutcome> => {
+        await checkBudget(estimatedUsd);
+
+        const prompt = composeScenePrompt(scene, characterBible, styleBible);
+        const result = await generateImage({ prompt, aspectRatio: "9:16" });
+
+        // This IS the record now -- generate-images.ts used to dual-write
+        // the same dispatched call to both the throwaway dev ledger and
+        // this table; the dev ledger write is gone (Phase 5), so this is
+        // the one and only durable record of this dispatched call.
+        //
+        // Behavioural note: the record reflects the provider outcome, not
+        // the wife-facing outcome -- a scene whose image generated
+        // successfully but then failed to write to local disk (the
+        // write-failed branch below) still gets a record showing a
+        // successful, billed call. That is accurate: the money bought a
+        // real image, even though she is correctly told the scene failed.
+        const generationRecordBase = {
+          generationType: GenerationType.IMAGE,
+          model: result.modelUsed,
+          estimatedUsd,
+          actualUsd: null,
+          billed: !result.blocked,
+        } as const;
+
+        if (result.blocked || !result.bytes || !result.mimeType) {
+          const message = plainLanguageBlockMessage(result.block);
+          await updateSceneImage(storyId, scene.scene_number, null, SceneAssetStatus.FAILED);
+          await recordGeneration(storyId, { ...generationRecordBase, ok: false, message }, scene.scene_number);
+          return { kind: "blocked", message };
+        }
+
+        const extension = extensionForMimeType(result.mimeType);
+        const imagePath = sceneImagePath(storyId, scene.scene_number, extension);
+        try {
+          mkdirSync(sceneDir(storyId, scene.scene_number), { recursive: true });
+          writeFileSync(imagePath, result.bytes);
+        } catch (err) {
+          // The paid call already succeeded and the spend record above
+          // already ran -- only the local write failed (locked file, full
+          // disk, permissions). Report this scene as failed but do NOT set
+          // `stopped`: the budget gate and provider call for subsequent
+          // scenes are unaffected, so already-paid-for progress on later
+          // scenes should not be discarded.
+          console.error(`generateSceneImagesAction: failed to write scene ${scene.scene_number}'s image to disk`, err);
+          const message = "The image was generated but could not be saved. Please try again.";
+          await updateSceneImage(storyId, scene.scene_number, null, SceneAssetStatus.FAILED);
+          await recordGeneration(storyId, { ...generationRecordBase, ok: false, message }, scene.scene_number);
+          return { kind: "write-failed", message };
+        }
+
+        await updateSceneImage(storyId, scene.scene_number, imagePath, SceneAssetStatus.READY);
+        await recordGeneration(
+          storyId,
+          { ...generationRecordBase, ok: true, message: "Image generated." },
+          scene.scene_number,
+        );
+
+        return {
+          kind: "success",
+          imagePath,
+          imageDataUrl: `data:${result.mimeType};base64,${result.bytes.toString("base64")}`,
+          message: "Image generated.",
+        };
+      });
     } catch (err) {
+      // Either the budget refused the call (no provider call was
+      // dispatched -- nothing was necessarily billed, so no generation
+      // record, mirroring the prior decision not to record here), or the
+      // call itself failed to complete (e.g. a network error -- also
+      // nothing necessarily billed). Either way, stop rather than keep
+      // going into an unknown state; the scene's status is still written.
       stopped = true;
       const message =
-        err instanceof CeilingExceededError
+        err instanceof BudgetExceededError
           ? "The generation budget was reached, so this scene's image could not be created."
           : "This scene's image could not be created due to an unexpected error.";
-      // No provider call was dispatched -- nothing was necessarily billed,
-      // so no generation record (mirrors the existing decision not to call
-      // recordSpend here). The scene's status is still written so it
-      // doesn't sit silently at WAITING forever.
+      if (!(err instanceof BudgetExceededError)) {
+        console.error(`generateSceneImagesAction: scene ${scene.scene_number} threw`, err);
+      }
       await updateSceneImage(storyId, scene.scene_number, null, SceneAssetStatus.FAILED);
       statuses.push({ sceneNumber: scene.scene_number, imagePath: null, imageDataUrl: null, ok: false, message });
       continue;
     }
 
-    const prompt = composeScenePrompt(scene, characterBible, styleBible);
-
-    let result;
-    try {
-      result = await generateImage({ prompt, aspectRatio: "9:16" });
-    } catch (err) {
-      // Not a classified block -- the call itself failed to complete (e.g. a
-      // network error). Nothing was necessarily billed, so no recordSpend
-      // and no generation record here; still stop rather than keep spending
-      // into an unknown state. The scene's status is still written.
+    if (outcome.kind === "blocked") {
       stopped = true;
-      console.error(`generateSceneImagesAction: scene ${scene.scene_number} threw`, err);
-      await updateSceneImage(storyId, scene.scene_number, null, SceneAssetStatus.FAILED);
       statuses.push({
         sceneNumber: scene.scene_number,
         imagePath: null,
         imageDataUrl: null,
         ok: false,
-        message: "An unexpected error prevented this scene's image from being generated.",
+        message: outcome.message,
       });
       continue;
     }
 
-    recordSpend({
-      call: `scene-image:${storyId}:${scene.scene_number}`,
-      model: result.modelUsed,
-      estimatedUsd,
-      usageMetadata: result.usageMetadata,
-      billed: !result.blocked,
-      at: new Date().toISOString(),
-    });
-
-    // Dual write for the same dispatched call recordSpend above just wrote
-    // to the real ledger -- IMAGE-03's durability requirement. Never a
-    // replacement for the ledger (unmodified above), never a bypass.
-    const generationRecordBase = {
-      generationType: GenerationType.IMAGE,
-      model: result.modelUsed,
-      estimatedUsd,
-      actualUsd: null,
-      billed: !result.blocked,
-    } as const;
-
-    if (result.blocked || !result.bytes || !result.mimeType) {
-      stopped = true;
-      const message = plainLanguageBlockMessage(result.block);
-      await updateSceneImage(storyId, scene.scene_number, null, SceneAssetStatus.FAILED);
-      await recordGeneration(storyId, { ...generationRecordBase, ok: false, message }, scene.scene_number);
+    if (outcome.kind === "write-failed") {
       statuses.push({
         sceneNumber: scene.scene_number,
         imagePath: null,
         imageDataUrl: null,
         ok: false,
-        message,
+        message: outcome.message,
       });
       continue;
     }
-
-    const extension = extensionForMimeType(result.mimeType);
-    const imagePath = sceneImagePath(storyId, scene.scene_number, extension);
-    try {
-      mkdirSync(sceneDir(storyId, scene.scene_number), { recursive: true });
-      writeFileSync(imagePath, result.bytes);
-    } catch (err) {
-      // The paid call already succeeded and recordSpend already ran above --
-      // only the local write failed (locked file, full disk, permissions).
-      // Report this scene as failed but do NOT set `stopped`: the ceiling
-      // gate and provider call for subsequent scenes are unaffected, so
-      // already-paid-for progress on later scenes should not be discarded.
-      console.error(`generateSceneImagesAction: failed to write scene ${scene.scene_number}'s image to disk`, err);
-      const message = "The image was generated but could not be saved. Please try again.";
-      await updateSceneImage(storyId, scene.scene_number, null, SceneAssetStatus.FAILED);
-      await recordGeneration(storyId, { ...generationRecordBase, ok: false, message }, scene.scene_number);
-      statuses.push({
-        sceneNumber: scene.scene_number,
-        imagePath: null,
-        imageDataUrl: null,
-        ok: false,
-        message,
-      });
-      continue;
-    }
-
-    await updateSceneImage(storyId, scene.scene_number, imagePath, SceneAssetStatus.READY);
-    await recordGeneration(
-      storyId,
-      { ...generationRecordBase, ok: true, message: "Image generated." },
-      scene.scene_number,
-    );
 
     statuses.push({
       sceneNumber: scene.scene_number,
-      imagePath,
-      imageDataUrl: `data:${result.mimeType};base64,${result.bytes.toString("base64")}`,
+      imagePath: outcome.imagePath,
+      imageDataUrl: outcome.imageDataUrl,
       ok: true,
-      message: "Image generated.",
+      message: outcome.message,
     });
   }
 
