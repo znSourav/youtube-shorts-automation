@@ -1,19 +1,19 @@
 ---
 gsd_state_version: 1.0
 current_phase: 06
-current_phase_name: reliability-secrets-hygiene-output-correctness
+current_phase_name: Reliability, Secrets Hygiene & Output Correctness
 status: executing
-stopped_at: Phase 6 context gathered
-last_updated: "2026-09-20T08:56:20.741Z"
-last_activity: 2026-09-19
-last_activity_desc: Phase 05 complete, transitioned to Phase 6
-state_head: 4a3b4b181b78cffd9a2a9dfa2847a37bbe844b52
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-09-20T11:12:59.598Z"
+last_activity: 2026-09-20
+last_activity_desc: Phase 06 execution started
+state_head: 3dc5a6b9e301831659ed4dab63ea8f044974f2f1
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 26
-  completed_plans: 21
-  percent: 81
+  completed_plans: 22
+  percent: 83
 ---
 
 # Project State
@@ -27,12 +27,12 @@ See: .planning/PROJECT.md (updated 2026-09-20)
 
 ## Current Position
 
-Phase: 06 (reliability-secrets-hygiene-output-correctness) — READY TO EXECUTE
-Plan: Not started
+Phase: 06 (Reliability, Secrets Hygiene & Output Correctness) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-09-19 — Phase 05 complete, transitioned to Phase 6
+Last activity: 2026-09-20 — Phase 06 execution started
 
-Progress: [████████████████████] 21/21 plans (100%)
+Progress: [████████████████████] 21/21 plans ([████████░░] 83%)
 
 ## Performance Metrics
 
@@ -85,6 +85,7 @@ Progress: [████████████████████] 21/21 p
 | Phase 05 P03 | 25min | 3 tasks | 9 files |
 | Phase 05 P04 | 22min | 3 tasks | 6 files |
 | Phase 05 P05 | 25min | 3 tasks | 6 files |
+| Phase 06 P01 | 7min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -150,6 +151,10 @@ Recent decisions affecting current work:
 - [Phase 05]: [Phase 05, 05-05] BudgetIndicator.tsx and page.tsx both re-derive their own local status type instead of importing core/budget/status.ts (even type-only) -- a type-only import specifier still contains the literal substring check-boundaries.ts invariant 1 forbids on a client file
 - [Phase 05]: [Phase 05, 05-05] BUDGET-05 confirmed to need no new implementation (caps.ts/gates.ts unchanged and structurally independent of core/budget/), and BUDGET-04 confirmed structural (both retry paths delegate to the same gated dispatch a first attempt uses) -- both re-confirmed with fresh automated evidence, not re-derived from research alone
 - [Phase 05]: [Phase 05, 05-05] Task 3's live-browser human-check completed by the orchestrator with the requester's direct participation: indicator visibility/breakdown/labels confirmed live, keyboard reachability confirmed live (operability via synthetic keypress flagged as a tooling limitation, not an app defect), and the env-reload Assumption A1 question settled as YES (Next's own "Reload env" log line observed firing live, no restart). BUDGET-03 marked complete; full pipeline (code review — 3 fixed/3 deferred to Phase 6/1 no-action, security audit — threats_open: 0, phase-goal re-verification, 26/26 UAT) closed clean.
+- [Phase 06]: [Phase 06, 06-01] recordSpend technical-debt item (generate-images.ts/director.ts) reconfirmed CLOSED BY PHASE 5 -- zero live call sites found; no task created
+- [Phase 06]: [Phase 06, 06-01] assertApiKeyConfigured() wired as first statement of all four gated dispatch functions (runStoryDirector, compareViaLlm, generateSceneImagesAction, dispatchSceneVideo), strictly before checkBudget; a refusal never corrupts scene status or consumes a retry attempt
+- [Phase 06]: [Phase 06, 06-01] isSecretKey narrowed via a safe-token-suffix regex to stop over-redacting real Gemini usage-metadata fields (WINDOWS #2), while a name that is also key/authorization-shaped stays redacted (defense in depth)
+- [Phase 06]: [Phase 06, 06-01] secrets-audit.ts added as a 5th automated structural gate (gitignore/placeholder/no-client-leak) appended to npm run test:lib alongside check-boundaries.ts
 
 ### Pending Todos
 
@@ -180,6 +185,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-20T08:04:51.955Z
-Stopped at: Phase 6 context gathered
-Resume file: .planning/phases/06-reliability-secrets-hygiene-output-correctness/06-CONTEXT.md
+Last session: 2026-09-20T11:12:59.117Z
+Stopped at: Completed 06-01-PLAN.md
+Resume file: None

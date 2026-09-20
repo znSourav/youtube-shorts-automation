@@ -12,7 +12,7 @@ Requirements for the 24-hour MVP. Each maps to a roadmap phase.
 ### Startup
 
 - [x] **STARTUP-01**: Wife can start the whole app with one documented command and reach it at `localhost:3000` on a fresh install, with no compilation errors and no fatal startup errors
-- [ ] **STARTUP-02**: If a required API key is missing, the app still starts and clearly explains what's missing in the UI instead of crashing or showing a stack trace, and never exposes secret values in the browser
+- [x] **STARTUP-02**: If a required API key is missing, the app still starts and clearly explains what's missing in the UI instead of crashing or showing a stack trace, and never exposes secret values in the browser
 
 ### Story
 
@@ -64,7 +64,7 @@ Requirements for the 24-hour MVP. Each maps to a roadmap phase.
 
 ### Security
 
-- [ ] **SECURITY-01**: API keys live only in server-side configuration, are never sent to client-side JavaScript, never appear in logs or generated story metadata; `.env.local` is gitignored with only a placeholder-filled `.env.local.example` committed
+- [x] **SECURITY-01**: API keys live only in server-side configuration, are never sent to client-side JavaScript, never appear in logs or generated story metadata; `.env.local` is gitignored with only a placeholder-filled `.env.local.example` committed
 
 ### Persistence
 
@@ -118,7 +118,7 @@ Explicitly excluded from this project, not just this milestone. Documented to pr
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | STARTUP-01 | Phase 2 | Complete |
-| STARTUP-02 | Phase 6 | Pending |
+| STARTUP-02 | Phase 6 | Complete |
 | STORY-01 | Phase 2 | Complete |
 | STORY-02 | Phase 2 | Complete |
 | STORY-03 | Phase 2 | Complete |
@@ -143,7 +143,7 @@ Explicitly excluded from this project, not just this milestone. Documented to pr
 | BUDGET-04 | Phase 5 | Complete |
 | BUDGET-05 | Phase 5 | Complete |
 | RELIABILITY-01 | Phase 6 | Pending |
-| SECURITY-01 | Phase 6 | Pending |
+| SECURITY-01 | Phase 6 | Complete |
 | PERSIST-01 | Phase 3 | Complete |
 | LIBRARY-01 | Phase 4 | Complete |
 | OUTPUT-01 | Phase 4 | Complete |

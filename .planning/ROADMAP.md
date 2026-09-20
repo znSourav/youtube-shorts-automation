@@ -208,12 +208,12 @@ Plans:
   3. API keys live only in server-side configuration, are never sent to client-side JavaScript, and never appear in logs or generated story metadata; `.env.local` is gitignored with only a placeholder-filled `.env.local.example` committed.
   4. Every saved video file is confirmed to be a valid, non-empty, playable MP4 at approximately the requested duration and 9:16 dimensions when requested — never a text or image file mislabeled as `.mp4`.
 
-**Plans:** 5 plans
+**Plans:** 1/5 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — Tracer: a missing API key explains itself in plain language at the point of use, plus the secrets-hygiene regression gates
+- [x] 06-01-PLAN.md — Tracer: a missing API key explains itself in plain language at the point of use, plus the secrets-hygiene regression gates
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -245,4 +245,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. Persistence & Structural Uniqueness | 4/4 | Complete    | 2026-09-14 |
 | 4. Wife-Facing Review & Approval Flow | 4/4 | Complete    | 2026-09-16 |
 | 5. Budget & Retry Safeguards | 5/5 | Complete    | 2026-09-19 |
-| 6. Reliability, Secrets Hygiene & Output Correctness | 0/5 | Planned     | - |
+| 6. Reliability, Secrets Hygiene & Output Correctness | 1/5 | In Progress|  |
