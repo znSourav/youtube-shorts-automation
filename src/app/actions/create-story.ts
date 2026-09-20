@@ -3,6 +3,7 @@
 import type { StoryDirectorInput } from "../../core/story/director.ts";
 import { runUniqueStoryDirector } from "../../core/uniqueness/check.ts";
 import { BudgetExceededError } from "../../core/budget/ledger.ts";
+import { MissingApiKeyError, MISSING_API_KEY_MESSAGE } from "../../core/config/provider-key.ts";
 import type { StoryDirectorOutput } from "../../core/story/schema.ts";
 import { generateStoryId } from "../../core/story/story-id.ts";
 import { saveStoryWithScenes, UniquenessStatus } from "../../core/persistence/story-repository.ts";
@@ -149,6 +150,14 @@ export async function createStoryAction(input: StoryDirectorInput): Promise<Crea
 
     return { ok: true, data: result.data, storyId, uniquenessWarning };
   } catch (err) {
+    // STARTUP-02 (06-01, Task 1): a classified, expected outcome -- no
+    // console.error, matching the `if (!(err instanceof BudgetExceededError))`
+    // guard convention generate-video.ts already established. This branch
+    // sits strictly above BudgetExceededError so a missing key is diagnosed
+    // before a budget refusal ever gets the chance to.
+    if (err instanceof MissingApiKeyError) {
+      return { ok: false, error: MISSING_API_KEY_MESSAGE };
+    }
     if (err instanceof BudgetExceededError) {
       return {
         ok: false,

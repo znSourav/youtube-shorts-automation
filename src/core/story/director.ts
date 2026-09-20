@@ -1,4 +1,5 @@
 import { checkBudget } from "../../core/budget/ledger.ts";
+import { assertApiKeyConfigured } from "../../core/config/provider-key.ts";
 import { serializeDispatch } from "../budget/dispatch-chain.ts";
 import { recordGenerationAtDispatch, GenerationType } from "../persistence/generation-repository.ts";
 import { generateStory, LLM_PRICE_PER_CALL } from "../../providers/llm/gemini.ts";
@@ -230,6 +231,11 @@ export function buildStoryPrompt(input: StoryDirectorInput): string {
  * a second call site.
  */
 export async function runStoryDirector(input: StoryDirectorInput): Promise<StoryDirectorResult> {
+  // STARTUP-02 (06-01, Task 1): synchronous and free, so it short-circuits
+  // before the app pays for a queue slot or a budget query -- D-03's
+  // "point of use" placement. Must run before checkBudget, never after.
+  assertApiKeyConfigured();
+
   // Conservative: always estimate against the higher of the two priced
   // models, regardless of which one ends up actually dispatching (fallback
   // is cheaper, so this never under-estimates).
