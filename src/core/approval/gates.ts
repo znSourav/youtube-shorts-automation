@@ -16,7 +16,9 @@ export type GateRefusal = { allowed: false; message: string };
 
 export type SceneRow = StoryWithScenes["scenes"][number];
 
-export type VideoDispatchDecision = GateRefusal | { allowed: true; scene: SceneRow; imagePath: string };
+export type VideoDispatchDecision =
+  | GateRefusal
+  | { allowed: true; scene: SceneRow; imagePath: string; capExempt: boolean };
 
 export type ApprovalDecision = GateRefusal | { allowed: true };
 
@@ -28,7 +30,7 @@ export type ImageRegenerationRefusal = { allowed: false; message: string; reason
 
 export type ImageRegenerationDecision =
   | ImageRegenerationRefusal
-  | { allowed: true; scene: SceneRow; alreadyApproved: boolean };
+  | { allowed: true; scene: SceneRow; alreadyApproved: boolean; capExempt: boolean };
 
 export type BatchDispatchDecision = GateRefusal | { allowed: true; sceneNumbers: number[] };
 
@@ -39,7 +41,18 @@ export type BatchDispatchDecision = GateRefusal | { allowed: true; sceneNumbers:
  *   1. story not found
  *   2. story not approved (APPROVAL-01's "through any path" gate)
  *   3. scene not found
- *   4. scene's video-attempt cap reached (D-03)
+ *   4. scene's video-attempt cap reached (D-03) -- UNLESS the scene's
+ *      videoSaveCorrupted flag is set (D-05, Phase 6 06-04), in which case
+ *      this refusal is skipped even at or above the cap. The guard stays in
+ *      this exact position in the branch order -- narrowed, not moved -- so
+ *      it still runs strictly after the story-not-found and
+ *      images-not-approved guards above: a capped-and-flagged scene on an
+ *      unapproved story is still refused with the approval message, never
+ *      granted early. The granted decision's `capExempt` field reports
+ *      whether this scene's grant came from the exemption (true even when
+ *      the scene is also below the cap -- the exemption is fundamentally
+ *      about not charging an attempt at the dispatch boundary, not only
+ *      about clearing this refusal).
  *   5. scene's video is already READY (fourth-pass review CR-01: a scene
  *      that has already succeeded must never be re-dispatched by any
  *      caller -- batch or single-scene retry -- since two overlapping
@@ -50,10 +63,28 @@ export type BatchDispatchDecision = GateRefusal | { allowed: true; sceneNumbers:
  *      redundant call trips the ceiling). Deliberately does NOT refuse
  *      "GENERATING" -- that status is what a legitimate stuck-scene retry
  *      (a dropped after() callback, 04-RESEARCH.md Pitfall 2) must still be
- *      able to re-dispatch through this same gate.
+ *      able to re-dispatch through this same gate. This guard also stays
+ *      unconditional on the exemption: a corruption flag must never re-bill
+ *      a scene that already succeeded (READY), since D-05 only concerns a
+ *      SAVE that failed, not one that already worked.
  *   6. scene's image isn't ready
- *   7. grant, handing back the scene row and its own server-resolved
- *      imagePath (RESEARCH.md Pattern 3 -- never a client-supplied path)
+ *   7. grant, handing back the scene row, its own server-resolved imagePath
+ *      (RESEARCH.md Pattern 3 -- never a client-supplied path), and whether
+ *      this grant is capExempt.
+ *
+ * D-02/D-05 asymmetry, deliberate and NOT an inconsistency to fix: a
+ * technical generation failure (timeout, malformed response, content block)
+ * still consumes an attempt per D-02, because the cap's job is to stop an
+ * accidental click-loop from burning money and that applies regardless of
+ * cause. A local save-integrity failure (this app's own write step
+ * producing an unplayable file even though the provider likely did its job)
+ * does not consume one, per D-05 -- these are genuinely different
+ * categories. The exemption is one-shot by construction: the dispatch
+ * boundary (dispatchSceneVideo, src/app/actions/generate-video.ts) clears
+ * the flag BEFORE the paid call runs, so a second free retry requires a
+ * second recorded corruption. The unchanged monthly budget check
+ * (checkBudget) remains the money backstop for any repeated-corruption
+ * loop -- this gate only ever controls attempt-cap bookkeeping, never spend.
  */
 export function evaluateVideoDispatch(
   story: StoryWithScenes | null,
@@ -76,7 +107,7 @@ export function evaluateVideoDispatch(
     return { allowed: false, message: "That scene could not be found in this story." };
   }
 
-  if (scene.videoAttempts >= maxVideoAttempts) {
+  if (scene.videoAttempts >= maxVideoAttempts && !scene.videoSaveCorrupted) {
     return {
       allowed: false,
       message:
@@ -93,7 +124,7 @@ export function evaluateVideoDispatch(
     return { allowed: false, message: "This scene's image isn't ready yet, so its video can't be generated." };
   }
 
-  return { allowed: true, scene, imagePath: scene.imagePath };
+  return { allowed: true, scene, imagePath: scene.imagePath, capExempt: scene.videoSaveCorrupted };
 }
 
 /**
@@ -126,6 +157,13 @@ export function evaluateApproval(story: StoryWithScenes | null): ApprovalDecisio
  * resolving 04-RESEARCH.md Open Question 1 the way the UI-SPEC's
  * state-persistence row settled it: the approval flag stays intact and the
  * change is surfaced to her rather than silently voided.
+ *
+ * Mirrors evaluateVideoDispatch's D-05 exemption (Phase 6, 06-04): the
+ * attempt-cap refusal below is skipped when the scene's imageSaveCorrupted
+ * flag is set, without moving the guard or changing the refusal's `reason`
+ * tag when the flag is absent. The granted decision's `capExempt` field
+ * reports whether this grant came from the exemption, same shape and same
+ * one-shot-by-construction reasoning as the video path.
  */
 export function evaluateImageRegeneration(
   story: StoryWithScenes | null,
@@ -141,7 +179,7 @@ export function evaluateImageRegeneration(
     return { allowed: false, message: "That scene could not be found in this story.", reason: "not-found" };
   }
 
-  if (scene.imageAttempts >= maxImageAttempts) {
+  if (scene.imageAttempts >= maxImageAttempts && !scene.imageSaveCorrupted) {
     return {
       allowed: false,
       message:
@@ -151,7 +189,12 @@ export function evaluateImageRegeneration(
     };
   }
 
-  return { allowed: true, scene, alreadyApproved: story.imagesApprovedAt !== null };
+  return {
+    allowed: true,
+    scene,
+    alreadyApproved: story.imagesApprovedAt !== null,
+    capExempt: scene.imageSaveCorrupted,
+  };
 }
 
 /**
@@ -166,13 +209,20 @@ export function evaluateImageRegeneration(
  *   1. story not found
  *   2. story not approved (same locked string evaluateVideoDispatch uses)
  *   3. compute the work list: READY-imaged, not-already-video-READY,
- *      not-already-GENERATING, under the retry cap -- skipping
- *      already-READY scenes is a money decision (makes pressing the button
- *      twice safe), skipping already-GENERATING scenes keeps a re-run batch
- *      from re-dispatching a scene that's already mid-flight (CR-01: e.g.
- *      re-clicking "Generate All Videos" after reopening a story mid-batch),
- *      skipping capped scenes keeps the batch from burning attempts it
- *      would only refuse one layer down
+ *      not-already-GENERATING, under the retry cap OR carrying the video
+ *      corruption flag (D-05, Phase 6 06-04) -- skipping already-READY
+ *      scenes is a money decision (makes pressing the button twice safe),
+ *      skipping already-GENERATING scenes keeps a re-run batch from
+ *      re-dispatching a scene that's already mid-flight (CR-01: e.g.
+ *      re-clicking "Generate All Videos" after reopening a story
+ *      mid-batch), and the capped-but-not-exempt condition keeps the batch
+ *      from burning attempts it would only refuse one layer down. Every
+ *      other condition in this filter is unrelated to the retry-cap
+ *      exemption and stays exactly as strict as it already is -- this
+ *      filter is a FAST REFUSAL for her benefit only, never the gate itself
+ *      (see the doc comment above), so leaving the cap condition here
+ *      stricter than evaluateVideoDispatch's own would silently hide a
+ *      scene that a per-scene retry through that gate would happily accept.
  *   4. an empty work list refuses with a plain-language "nothing left" message
  */
 export function evaluateBatchDispatch(
@@ -197,7 +247,7 @@ export function evaluateBatchDispatch(
         s.imagePath !== null &&
         s.videoStatus !== "READY" &&
         s.videoStatus !== "GENERATING" &&
-        s.videoAttempts < maxVideoAttempts,
+        (s.videoAttempts < maxVideoAttempts || s.videoSaveCorrupted),
     )
     .map((s) => s.sceneNumber)
     .sort((a, b) => a - b);

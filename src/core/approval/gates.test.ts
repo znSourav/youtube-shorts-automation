@@ -144,6 +144,79 @@ test("evaluateVideoDispatch: an unapproved story with a nonexistent scene number
   );
 });
 
+// --- evaluateVideoDispatch: D-05 corruption exemption (Phase 6, 06-04) ---
+
+test("evaluateVideoDispatch grants a scene at its cap when the video corruption flag is set, and reports the exemption as active", () => {
+  const story = storyFixture({
+    scenes: [sceneFixture(1, { videoAttempts: MAX_ATTEMPTS, videoSaveCorrupted: true })],
+  });
+  const decision = evaluateVideoDispatch(story, 1, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, true);
+  assert.equal(decision.allowed && decision.capExempt, true);
+});
+
+test("evaluateVideoDispatch refuses a scene at its cap with the byte-identical cap message when the video corruption flag is NOT set", () => {
+  const story = storyFixture({ scenes: [sceneFixture(1, { videoAttempts: MAX_ATTEMPTS, videoSaveCorrupted: false })] });
+  const decision = evaluateVideoDispatch(story, 1, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, false);
+  assert.equal(
+    !decision.allowed && decision.message,
+    "This scene's video has reached its limit of 3 attempts. The other scenes aren't affected — you can continue with what's ready, or start a new story to try again.",
+  );
+});
+
+test("evaluateVideoDispatch grants a scene below its cap with the video corruption flag set, and still reports the exemption as active", () => {
+  const story = storyFixture({
+    scenes: [sceneFixture(1, { videoAttempts: MAX_ATTEMPTS - 1, videoSaveCorrupted: true })],
+  });
+  const decision = evaluateVideoDispatch(story, 1, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, true);
+  assert.equal(decision.allowed && decision.capExempt, true);
+});
+
+test("evaluateVideoDispatch grants a scene below its cap with the video corruption flag not set, and reports the exemption as NOT active", () => {
+  const story = storyFixture({
+    scenes: [sceneFixture(1, { videoAttempts: MAX_ATTEMPTS - 1, videoSaveCorrupted: false })],
+  });
+  const decision = evaluateVideoDispatch(story, 1, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, true);
+  assert.equal(decision.allowed && decision.capExempt, false);
+});
+
+test("evaluateVideoDispatch refuses an UNAPPROVED story whose scene is both capped and flagged with the exact existing approval sentence (APPROVAL-01 not weakened)", () => {
+  const story = storyFixture({
+    imagesApprovedAt: null,
+    scenes: [sceneFixture(1, { videoAttempts: MAX_ATTEMPTS, videoSaveCorrupted: true })],
+  });
+  const decision = evaluateVideoDispatch(story, 1, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, false);
+  assert.equal(
+    !decision.allowed && decision.message,
+    "These images haven't been approved yet. Approve them before generating video.",
+  );
+});
+
+test("evaluateVideoDispatch refuses a nonexistent story with the not-found message even with a flag conceptually set", () => {
+  const decision = evaluateVideoDispatch(null, 1, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, false);
+  assert.equal(!decision.allowed && decision.message, "This story could not be found.");
+});
+
+test("evaluateVideoDispatch refuses a video-READY, flagged scene with the exact existing already-generated sentence (the exemption must never re-bill a scene that already succeeded)", () => {
+  const story = storyFixture({
+    scenes: [
+      sceneFixture(1, {
+        videoStatus: "READY",
+        videoPath: "storage/stories/fixture-story/scenes/01/video.mp4",
+        videoSaveCorrupted: true,
+      }),
+    ],
+  });
+  const decision = evaluateVideoDispatch(story, 1, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, false);
+  assert.equal(!decision.allowed && decision.message, "This scene's video has already been generated.");
+});
+
 // --- evaluateApproval ---
 
 test("evaluateApproval grants when every scene is ready", () => {
@@ -223,6 +296,48 @@ test("evaluateImageRegeneration grants with alreadyApproved=true for an approved
   assert.equal(decision.allowed && decision.alreadyApproved, true);
 });
 
+// --- evaluateImageRegeneration: D-05 corruption exemption (Phase 6, 06-04) ---
+
+test("evaluateImageRegeneration grants a scene at its cap when the image corruption flag is set, and reports the exemption as active", () => {
+  const story = storyFixture({
+    scenes: [sceneFixture(1, { imageAttempts: MAX_ATTEMPTS, imageSaveCorrupted: true })],
+  });
+  const decision = evaluateImageRegeneration(story, 1, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, true);
+  assert.equal(decision.allowed && decision.capExempt, true);
+});
+
+test("evaluateImageRegeneration refuses a scene at its cap with the byte-identical cap message and 'cap' reason tag when the image corruption flag is NOT set", () => {
+  const story = storyFixture({
+    scenes: [sceneFixture(1, { imageAttempts: MAX_ATTEMPTS, imageSaveCorrupted: false })],
+  });
+  const decision = evaluateImageRegeneration(story, 1, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, false);
+  assert.equal(!decision.allowed && decision.reason, "cap");
+  assert.equal(
+    !decision.allowed && decision.message,
+    "This scene's image has reached its limit of 3 attempts. You can keep the current image and move on, or start a new story for a different result.",
+  );
+});
+
+test("evaluateImageRegeneration grants a scene below its cap with the image corruption flag set, and still reports the exemption as active", () => {
+  const story = storyFixture({
+    scenes: [sceneFixture(1, { imageAttempts: MAX_ATTEMPTS - 1, imageSaveCorrupted: true })],
+  });
+  const decision = evaluateImageRegeneration(story, 1, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, true);
+  assert.equal(decision.allowed && decision.capExempt, true);
+});
+
+test("evaluateImageRegeneration grants a scene below its cap with the image corruption flag not set, and reports the exemption as NOT active", () => {
+  const story = storyFixture({
+    scenes: [sceneFixture(1, { imageAttempts: MAX_ATTEMPTS - 1, imageSaveCorrupted: false })],
+  });
+  const decision = evaluateImageRegeneration(story, 1, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, true);
+  assert.equal(decision.allowed && decision.capExempt, false);
+});
+
 // --- evaluateBatchDispatch ---
 
 test("evaluateBatchDispatch refuses a null story", () => {
@@ -275,6 +390,19 @@ test("evaluateBatchDispatch excludes scenes at the retry cap", () => {
   const decision = evaluateBatchDispatch(story, MAX_ATTEMPTS);
   assert.equal(decision.allowed, true);
   assert.deepEqual(decision.allowed && decision.sceneNumbers, [2]);
+});
+
+test("evaluateBatchDispatch includes a scene that is at its cap but carries the video corruption flag, and still excludes one that is at its cap without it (D-05, Phase 6 06-04)", () => {
+  const story = storyFixture({
+    scenes: [
+      sceneFixture(1, { videoAttempts: MAX_ATTEMPTS, videoSaveCorrupted: true }),
+      sceneFixture(2, { videoAttempts: MAX_ATTEMPTS, videoSaveCorrupted: false }),
+      sceneFixture(3),
+    ],
+  });
+  const decision = evaluateBatchDispatch(story, MAX_ATTEMPTS);
+  assert.equal(decision.allowed, true);
+  assert.deepEqual(decision.allowed && decision.sceneNumbers, [1, 3]);
 });
 
 test("evaluateBatchDispatch excludes scenes whose image isn't READY", () => {
