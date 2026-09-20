@@ -12,10 +12,12 @@ import type { Scene } from "../../core/story/schema.ts";
 import { findStoryWithScenes } from "../../core/persistence/story-repository.ts";
 import { evaluateVideoDispatch } from "../../core/approval/gates.ts";
 import { maxSceneRetryAttempts } from "../../core/retry/caps.ts";
+import { validateMp4Buffer, CORRUPT_VIDEO_MESSAGE } from "../../core/output/mp4-validation.ts";
 import {
   recordGeneration,
   updateSceneVideo,
   incrementVideoAttempt,
+  setVideoSaveCorrupted,
   GenerationType,
   SceneAssetStatus,
 } from "../../core/persistence/generation-repository.ts";
@@ -331,10 +333,15 @@ async function dispatchSceneVideo(
     return { ok: false, videoPath: null, videoDataUrl: null, message, durationSeconds };
   }
 
-  let videoDataUrl: string | null = null;
+  // Step 1: read the file into a buffer, in its own try. Unchanged from the
+  // pre-Task-3 combined block -- same log, same READY-with-real-path write,
+  // same billed generation record, same returned message. This branch has
+  // no bytes to validate (the read itself is what failed), so OUTPUT-02's
+  // proof does not apply here; the sixth-pass review's reasoning still
+  // holds unchanged, see below.
+  let videoBytes: Buffer;
   try {
-    const videoBytes = readFileSync(result.filePath);
-    videoDataUrl = `data:video/mp4;base64,${videoBytes.toString("base64")}`;
+    videoBytes = readFileSync(result.filePath);
   } catch (err) {
     // Sixth-pass review BLOCKER: the Veo call already succeeded and the
     // video file genuinely exists at result.filePath -- only reading it
@@ -367,6 +374,47 @@ async function dispatchSceneVideo(
       durationSeconds,
     };
   }
+
+  // Step 2: OUTPUT-02 -- proves videoBytes is a genuine, non-empty,
+  // playable MP4 at approximately durationSeconds and exactly 9:16 BEFORE
+  // the scene is ever marked READY. Reuses the buffer already read above
+  // (no second disk read, 06-RESEARCH.md Pattern 4). The invalid file is
+  // deliberately left on disk -- the next attempt overwrites the same
+  // path, and episode-export.ts's existing file-existence downgrade only
+  // applies to an already-READY scene, so deleting it here would only add
+  // a new I/O failure mode on an already-failing path for no benefit.
+  const verdict = validateMp4Buffer(videoBytes, { durationSeconds });
+  if (!verdict.valid) {
+    console.error(
+      `generateSceneVideoAction: scene ${sceneNumber} of story ${storyId} failed MP4 validation -- ${verdict.reason}`,
+    );
+    await updateSceneVideo(storyId, sceneNumber, null, SceneAssetStatus.FAILED);
+    // D-05: the free-retry exemption flag, not the retry-cap increment --
+    // incrementVideoAttempt already ran before dispatch (D-03/D-02) and is
+    // deliberately left untouched here; the exemption is what lets gates.ts
+    // (plan 06-04) bypass the cap check on the next retry for this scene.
+    await setVideoSaveCorrupted(storyId, sceneNumber);
+    // The Veo call already succeeded and already cost real money regardless
+    // of this local save-integrity failure -- billed: true, unconditionally,
+    // via the existing generationRecordBase spread (PROJECT.md's "billed on
+    // dispatch, not on local observability" convention, Phase 2 CR-01).
+    await recordGeneration(
+      storyId,
+      { ...generationRecordBase, ok: false, message: CORRUPT_VIDEO_MESSAGE },
+      sceneNumber,
+    );
+    return {
+      ok: false,
+      videoPath: null,
+      videoDataUrl: null,
+      message: CORRUPT_VIDEO_MESSAGE,
+      durationSeconds,
+    };
+  }
+
+  // Step 3: valid verdict -- fall through to the existing READY write and
+  // success return, both unchanged.
+  const videoDataUrl = `data:video/mp4;base64,${videoBytes.toString("base64")}`;
 
   await updateSceneVideo(storyId, sceneNumber, result.filePath, SceneAssetStatus.READY);
   await recordGeneration(

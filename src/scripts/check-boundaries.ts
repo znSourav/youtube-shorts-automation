@@ -73,6 +73,20 @@
 //    edit adding failure-type branching around the dispatch could otherwise
 //    accidentally make the increment skip on one branch and not another.
 //
+// 10. src/app/actions/generate-video.ts's `validateMp4Buffer` call must
+//     appear exactly once, and the LAST occurrence of the `READY` status
+//     constant must appear at a higher character index than that call, on
+//     comment-stripped source (Phase 6, plan 06-03; OUTPUT-02). This keeps
+//     the success-path READY write structurally unreachable without
+//     validation ever having run first -- a future edit that reorders the
+//     save-time block, or adds a new READY write before the validator call,
+//     fails the build instead of silently shipping a mislabeled file into
+//     her CapCut folder as "ready". The readback-failure branch's OWN
+//     earlier READY write (no bytes to validate, per that branch's own
+//     doc comment) is deliberately not what this invariant checks against
+//     -- only the LAST occurrence matters, which is always the
+//     validated success path's write.
+//
 // Run with: node src/scripts/check-boundaries.ts
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -540,6 +554,47 @@ function main(): void {
     }
   } else {
     console.log("OK: generate-video.ts's retry-cap increment is unconditional and precedes the video dispatch call");
+  }
+
+  // Invariant 10 -- generate-video.ts's validateMp4Buffer call must appear
+  // exactly once, and the LAST occurrence of the READY status constant must
+  // appear at a higher character index than that call, on comment-stripped
+  // source (Phase 6, plan 06-03; OUTPUT-02). Keeps the success-path READY
+  // write structurally unreachable without validation ever having run
+  // first.
+  const VALIDATE_MP4_CALL = "validateMp4Buffer(";
+  const READY_STATUS_CONSTANT = "SceneAssetStatus.READY";
+  const offenders10: string[] = [];
+  {
+    const content = readFileSync(ALLOWED_VIDEO_DISPATCH_PATH, "utf8");
+    const stripped = stripWholeLineComments(content);
+    const validateMatches = stripped.split(VALIDATE_MP4_CALL).length - 1;
+    const validateIndex = stripped.indexOf(VALIDATE_MP4_CALL);
+    const lastReadyIndex = stripped.lastIndexOf(READY_STATUS_CONSTANT);
+    if (validateMatches !== 1) {
+      offenders10.push(
+        `${ALLOWED_VIDEO_DISPATCH_PATH} -- expected exactly one validateMp4Buffer call, found ${validateMatches}`,
+      );
+    } else if (lastReadyIndex === -1) {
+      offenders10.push(`${ALLOWED_VIDEO_DISPATCH_PATH} -- no READY status write found`);
+    } else if (lastReadyIndex <= validateIndex) {
+      offenders10.push(
+        `${ALLOWED_VIDEO_DISPATCH_PATH} -- the last READY status write does not follow the validateMp4Buffer call`,
+      );
+    }
+  }
+  if (offenders10.length > 0) {
+    failed = true;
+    console.log(
+      "BOUNDARY CHECK FAILED (invariant 10 -- the success-path READY write is unreachable before MP4 validation, OUTPUT-02):",
+    );
+    for (const offender of offenders10) {
+      console.log(`  ${offender}`);
+    }
+  } else {
+    console.log(
+      "OK: generate-video.ts's success-path READY write is unreachable before its validateMp4Buffer call",
+    );
   }
 
   if (failed) {
