@@ -15,6 +15,7 @@ import type { Scene, StoryDirectorOutput } from "../../core/story/schema.ts";
 import {
   recordGeneration,
   updateSceneImage,
+  setImageSaveCorrupted,
   GenerationType,
   SceneAssetStatus,
 } from "../../core/persistence/generation-repository.ts";
@@ -205,9 +206,22 @@ export async function generateSceneImagesAction(
           // `stopped`: the budget gate and provider call for subsequent
           // scenes are unaffected, so already-paid-for progress on later
           // scenes should not be discarded.
+          //
+          // D-05 (Phase 6, 06-04): this is the image path's local
+          // save-integrity failure branch -- the image analog of a
+          // corrupted video save (06-RESEARCH.md Open Question 2: OUTPUT-02
+          // itself is video-only, so no image container/pixel validator is
+          // added here; D-05's exemption wording covers both asset types,
+          // and this existing write-failure branch is the real, already-
+          // present integrity failure on the image side). Sets the
+          // exemption flag alongside the existing status write and
+          // generation record, and the message tells her the retry is
+          // free -- matching CORRUPT_VIDEO_MESSAGE's shape and tone.
           console.error(`generateSceneImagesAction: failed to write scene ${scene.scene_number}'s image to disk`, err);
-          const message = "The image was generated but could not be saved. Please try again.";
+          const message =
+            "This scene's image didn't save properly, so it can't be used. Trying again won't use up one of this scene's attempts.";
           await updateSceneImage(storyId, scene.scene_number, null, SceneAssetStatus.FAILED);
+          await setImageSaveCorrupted(storyId, scene.scene_number);
           await recordGeneration(storyId, { ...generationRecordBase, ok: false, message }, scene.scene_number);
           return { kind: "write-failed", message };
         }

@@ -4,7 +4,7 @@ import { storyDir } from "../../core/storage-paths.ts";
 import { findStoryWithScenes } from "../../core/persistence/story-repository.ts";
 import { evaluateImageRegeneration } from "../../core/approval/gates.ts";
 import { maxSceneRetryAttempts } from "../../core/retry/caps.ts";
-import { incrementImageAttempt } from "../../core/persistence/generation-repository.ts";
+import { incrementImageAttempt, clearImageSaveCorrupted } from "../../core/persistence/generation-repository.ts";
 import { generateSceneImagesAction } from "./generate-images.ts";
 import type { Scene, StoryDirectorOutput } from "../../core/story/schema.ts";
 
@@ -97,15 +97,26 @@ export async function regenerateSceneImageAction(
   const characterBible = story?.characterBible as StoryDirectorOutput["character_bible"];
   const styleBible = story?.styleBible as StoryDirectorOutput["style_bible"];
 
-  // D-03 (WR-06 fix, 04-REVIEW.md second pass): the increment now sits
+  // D-03 (WR-06 fix, 04-REVIEW.md second pass): this bookkeeping write sits
   // immediately before the real per-scene dispatch boundary (the call into
   // generateSceneImagesAction), not before this file's own local
   // pre-dispatch work above -- mirroring WR-02's identical fix already
   // applied to generate-video.ts. A local failure that never reaches
   // Gemini's Image API must not consume one of the scene's limited
   // image-regeneration attempts; only a call that reaches the real
-  // dispatch boundary must, even if it dies mid-call.
-  await incrementImageAttempt(storyId, sceneNumber);
+  // dispatch boundary must write something, even if it dies mid-call.
+  //
+  // D-05 (Phase 6, 06-04): same one-shot reasoning as the video path
+  // (src/app/actions/generate-video.ts) -- when the decision granted a
+  // corruption exemption (scene.imageSaveCorrupted was set), the exemption
+  // is spent by clearing the flag INSTEAD OF incrementing the attempt
+  // counter, before the dispatch, so a second free regeneration requires a
+  // second recorded save failure.
+  if (decision.capExempt) {
+    await clearImageSaveCorrupted(storyId, sceneNumber);
+  } else {
+    await incrementImageAttempt(storyId, sceneNumber);
+  }
 
   const statuses = await generateSceneImagesAction(storyId, [thatOneScene], characterBible, styleBible);
   const status = statuses[0];
