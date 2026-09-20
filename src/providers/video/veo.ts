@@ -1,5 +1,6 @@
 import { GoogleGenAI, type GenerateVideosOperation } from "@google/genai";
 import { logRawResponse } from "../../lib/log-response.ts";
+import { VIDEO_HTTP_TIMEOUT_MS } from "../../core/config/provider-timeouts.ts";
 
 // Pricing verified live 2026-09-12 against ai.google.dev/gemini-api/docs/pricing
 // (RESEARCH.md "Cost calculation").
@@ -57,6 +58,11 @@ export async function generateVideo(params: GenerateVideoParams): Promise<Genera
       // SDK's GenerateVideosConfig.durationSeconds is typed `number`, not the
       // string `"8"` shown in Google's own Veo docs sample.
       durationSeconds: params.durationSeconds,
+      // 05-REVIEW.md WR-01 / 06-RESEARCH.md Pattern 6: bounds this one
+      // dispatch HTTP attempt only -- NOT the polling loop below, which
+      // POLL_TIMEOUT_MS already bounds separately. See
+      // src/core/config/provider-timeouts.ts's header comment.
+      httpOptions: { timeout: VIDEO_HTTP_TIMEOUT_MS },
     },
   });
 
@@ -74,7 +80,14 @@ export async function generateVideo(params: GenerateVideoParams): Promise<Genera
     }
     console.log(`VEO POLL: waiting for operation ${operation.name ?? "(unnamed)"} to complete...`);
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-    operation = await ai.operations.getVideosOperation({ operation });
+    // 05-REVIEW.md WR-01 / 06-RESEARCH.md Pitfall 3: this per-call timeout
+    // bounds ONE individual poll request -- a single hung poll would
+    // otherwise never be reached by the POLL_TIMEOUT_MS check above, since
+    // that check only runs between iterations, after each await resolves.
+    operation = await ai.operations.getVideosOperation({
+      operation,
+      config: { httpOptions: { timeout: VIDEO_HTTP_TIMEOUT_MS } },
+    });
   }
 
   logRawResponse("generateVideos operation raw response (done)", operation);

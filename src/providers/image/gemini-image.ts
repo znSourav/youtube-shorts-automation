@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { logRawResponse } from "../../lib/log-response.ts";
+import { IMAGE_HTTP_TIMEOUT_MS } from "../../core/config/provider-timeouts.ts";
 
 // Pricing verified live 2026-09-12 against ai.google.dev/gemini-api/docs/pricing
 // (RESEARCH.md "Cost calculation"). Only the primary model is priced per the
@@ -74,6 +75,11 @@ export async function generateImage(params: GenerateImageParams): Promise<Genera
       config: {
         responseModalities: ["IMAGE"],
         imageConfig: { aspectRatio: params.aspectRatio },
+        // 05-REVIEW.md WR-01 / 06-RESEARCH.md Pattern 6: bounds this one HTTP
+        // attempt so a hung request can never wedge serializeDispatch's
+        // shared queue. See src/core/config/provider-timeouts.ts's header
+        // comment.
+        httpOptions: { timeout: IMAGE_HTTP_TIMEOUT_MS },
       },
     });
   } catch (err) {
@@ -92,6 +98,9 @@ export async function generateImage(params: GenerateImageParams): Promise<Genera
       config: {
         responseModalities: ["IMAGE"],
         imageConfig: { aspectRatio: params.aspectRatio },
+        // 05-REVIEW.md WR-01 / 06-RESEARCH.md Pattern 6: same per-attempt
+        // bound as the primary call above.
+        httpOptions: { timeout: IMAGE_HTTP_TIMEOUT_MS },
       },
     });
   }

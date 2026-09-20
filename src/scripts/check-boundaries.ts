@@ -57,6 +57,15 @@
 //    (src/lib/spend-ledger.ts) from anywhere outside src/scripts/ or
 //    src/lib/ itself, so it cannot creep back onto a wife-facing path.
 //
+// 8. Every file under src/providers/ that imports the Google GenAI SDK
+//    (@google/genai) must also import src/core/config/provider-timeouts.ts
+//    AND its comment-stripped source must set the "timeout:" option key on
+//    a config object (Phase 6, plan 06-02; 05-REVIEW.md WR-01,
+//    06-RESEARCH.md Pattern 6). This is what keeps a single hung provider
+//    HTTP call from being able to wedge serializeDispatch's shared queue
+//    forever -- a future provider file that forgets the import or the
+//    config key fails the build instead of silently reintroducing the gap.
+//
 // Run with: node src/scripts/check-boundaries.ts
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -116,6 +125,16 @@ const ALLOWED_BUDGET_MODULE_IMPORT_PATHS = [
 // any wife-facing dispatch path.
 const ALLOWED_RETIRED_LEDGER_IMPORT_PATH = "src/core/budget/historical-import.ts";
 
+// Invariant 8's constants -- the exact SDK specifier every provider file's
+// import is checked against, the timeouts module's specifier fragment every
+// such file must also import, and the literal HttpOptions field name
+// (per 06-RESEARCH.md Pattern 6) that must appear on a config object. Held
+// as named constants so the scan below has one source of truth rather than
+// a repeated literal.
+const GOOGLE_GENAI_SPECIFIER = "@google/genai";
+const PROVIDER_TIMEOUTS_SPECIFIER_FRAGMENT = "core/config/provider-timeouts";
+const TIMEOUT_OPTION_KEY = "timeout:";
+
 // Held as named constants (not inlined into the scan below) so invariant 4
 // can skip this file's own path without also needing string-literal
 // obfuscation to avoid self-matching.
@@ -166,6 +185,17 @@ function importSpecifiers(content: string): string[] {
 
 function normalize(path: string): string {
   return path.replace(/\\/g, "/");
+}
+
+// Invariant 8: strips every whole-line "//" comment (a line whose trimmed
+// text starts with "//") so a doc comment merely mentioning the timeout
+// option key can never satisfy the content check on its own -- only a real
+// config-object key counts.
+function stripWholeLineComments(content: string): string {
+  return content
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("//"))
+    .join("\n");
 }
 
 function main(): void {
@@ -428,6 +458,41 @@ function main(): void {
     }
   } else {
     console.log("OK: the retired development ledger is not imported outside src/scripts/ or src/lib/");
+  }
+
+  // Invariant 8 -- every file under src/providers/ that imports the Google
+  // GenAI SDK must also import provider-timeouts.ts AND must actually set
+  // the "timeout:" option key on a config object, checked against the
+  // file's comment-stripped source (05-REVIEW.md WR-01, 06-RESEARCH.md
+  // Pattern 6). A hung provider HTTP call with no per-call bound can
+  // permanently wedge serializeDispatch's shared queue (T-06-05).
+  const offenders8: string[] = [];
+  for (const file of allFiles) {
+    if (!file.startsWith("src/providers/")) continue;
+    const content = readFileSync(file, "utf8");
+    const specifiers = importSpecifiers(content);
+    if (!specifiers.some((spec) => spec === GOOGLE_GENAI_SPECIFIER)) continue;
+    if (!specifiers.some((spec) => spec.includes(PROVIDER_TIMEOUTS_SPECIFIER_FRAGMENT))) {
+      offenders8.push(`${file} -- imports @google/genai but not src/core/config/provider-timeouts.ts`);
+      continue;
+    }
+    const stripped = stripWholeLineComments(content);
+    if (!stripped.includes(TIMEOUT_OPTION_KEY)) {
+      offenders8.push(`${file} -- imports @google/genai and provider-timeouts.ts but sets no "timeout:" config key`);
+    }
+  }
+  if (offenders8.length > 0) {
+    failed = true;
+    console.log(
+      "BOUNDARY CHECK FAILED (invariant 8 -- every provider file importing the Google GenAI SDK must import provider-timeouts.ts and set a timeout config key):",
+    );
+    for (const offender of offenders8) {
+      console.log(`  ${offender}`);
+    }
+  } else {
+    console.log(
+      "OK: every provider file importing the Google GenAI SDK imports provider-timeouts.ts and sets a timeout config key",
+    );
   }
 
   if (failed) {

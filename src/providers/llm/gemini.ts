@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { logRawResponse } from "../../lib/log-response.ts";
+import { LLM_HTTP_TIMEOUT_MS } from "../../core/config/provider-timeouts.ts";
 
 // RESEARCH.md "Standard Stack" / Assumption A1: gemini-3.1-pro-preview wins
 // on creative-writing quality (LMArena Creative Writing #1 for Pro-tier);
@@ -177,6 +178,11 @@ export async function generateStory(params: GenerateStoryParams): Promise<Genera
     responseMimeType: "application/json",
     responseSchema: params.responseSchema,
     maxOutputTokens: 16384,
+    // 05-REVIEW.md WR-01 / 06-RESEARCH.md Pattern 6: bounds this one HTTP
+    // attempt (shared by the primary and fallback generateContent calls
+    // below) so a hung request can never wedge serializeDispatch's shared
+    // queue. See src/core/config/provider-timeouts.ts's header comment.
+    httpOptions: { timeout: LLM_HTTP_TIMEOUT_MS },
   };
 
   let modelUsed = primaryModel;
@@ -336,6 +342,10 @@ export async function compareStructuralSimilarity(
     responseMimeType: "application/json",
     responseSchema: params.responseSchema,
     maxOutputTokens: 256,
+    // 05-REVIEW.md WR-01 / 06-RESEARCH.md Pattern 6: bounds this one HTTP
+    // attempt so a hung request can never wedge serializeDispatch's shared
+    // queue. See src/core/config/provider-timeouts.ts's header comment.
+    httpOptions: { timeout: LLM_HTTP_TIMEOUT_MS },
   };
 
   const response = await ai.models.generateContent({

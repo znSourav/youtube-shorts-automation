@@ -31,6 +31,24 @@
 // A1: a separate, explicitly-labelled developer ceiling for probe scripts)
 // so a cross-process race stays confined to money set aside for testing,
 // never her real monthly allowance.
+//
+// NO TIMEOUT OF ITS OWN (05-REVIEW.md WR-01, closed by 06-02): this queue
+// deliberately has no timeout mechanism -- it simply waits for `run` to
+// settle, however long that takes. A single provider HTTP call that never
+// resolves therefore wedges every future dispatch queued behind it until
+// the process restarts, UNLESS the function passed to `run` bounds itself.
+// A `Promise.race`-based wrapper around this queue (aborting only the wait,
+// not the underlying request) was explicitly rejected as the fix: the
+// original hung request would keep running in the background forever,
+// still holding whatever resources/connections it opened, while the queue
+// moved on believing it had recovered -- a fix that hides the symptom
+// without closing the actual gap. The real fix has to abort the request
+// itself, at the point where it is issued.
+//
+// Because of this, every function ever passed to `serializeDispatch` MUST
+// carry its own bounded per-call timeout on any HTTP request it issues --
+// this queue provides none. See src/core/config/provider-timeouts.ts for
+// where those per-call bounds live and why their values were chosen.
 
 let dispatchChain: Promise<unknown> = Promise.resolve();
 

@@ -3,6 +3,11 @@ import assert from "node:assert/strict";
 
 import { buildStorySchema, buildStoryPrompt } from "./director.ts";
 import { STYLE_PRESETS } from "./styles.ts";
+import {
+  LLM_HTTP_TIMEOUT_MS,
+  IMAGE_HTTP_TIMEOUT_MS,
+  VIDEO_HTTP_TIMEOUT_MS,
+} from "../config/provider-timeouts.ts";
 
 function containsForbiddenKeyword(value: unknown): boolean {
   if (value === null || typeof value !== "object") {
@@ -87,4 +92,16 @@ test("buildStoryPrompt places the wife's free text in the content section, after
   const ideaIndex = prompt.indexOf("UNIQUE_IDEA_MARKER");
   assert.ok(delimiterIndex > -1, "content-section delimiter not found");
   assert.ok(ideaIndex > delimiterIndex, "idea text must appear after the delimiter, not before it");
+});
+
+// (e) 06-02 Task 1: a three-line guard against a future edit silently
+// setting one of provider-timeouts.ts's constants to 0 or a non-finite
+// value, which the SDK treats as "no timeout" -- reopening the exact
+// unbounded-hang gap this module exists to close. This module has no test
+// file of its own (a leaf constants module doesn't warrant a new entry in
+// test:lib); this guard lives here instead.
+test("every provider HTTP timeout constant is a finite integer greater than zero", () => {
+  for (const value of [LLM_HTTP_TIMEOUT_MS, IMAGE_HTTP_TIMEOUT_MS, VIDEO_HTTP_TIMEOUT_MS]) {
+    assert.ok(Number.isFinite(value) && value > 0, `expected a finite positive timeout, got ${value}`);
+  }
 });
