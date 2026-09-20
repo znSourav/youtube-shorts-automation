@@ -208,7 +208,7 @@ Plans:
   3. API keys live only in server-side configuration, are never sent to client-side JavaScript, and never appear in logs or generated story metadata; `.env.local` is gitignored with only a placeholder-filled `.env.local.example` committed.
   4. Every saved video file is confirmed to be a valid, non-empty, playable MP4 at approximately the requested duration and 9:16 dimensions when requested — never a text or image file mislabeled as `.mp4`.
 
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans executed
 
 Plans:
 **Wave 1**
@@ -229,7 +229,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 06-05-PLAN.md — Server-anchored stuck-generation clock and the phase-closing zero-cost verification
+- [x] 06-05-PLAN.md — Server-anchored stuck-generation clock and the phase-closing zero-cost verification
 
 **UI hint**: yes
 
@@ -245,4 +245,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. Persistence & Structural Uniqueness | 4/4 | Complete    | 2026-09-14 |
 | 4. Wife-Facing Review & Approval Flow | 4/4 | Complete    | 2026-09-16 |
 | 5. Budget & Retry Safeguards | 5/5 | Complete    | 2026-09-19 |
-| 6. Reliability, Secrets Hygiene & Output Correctness | 4/5 | In Progress|  |
+| 6. Reliability, Secrets Hygiene & Output Correctness | 5/5 | In Progress|  |
