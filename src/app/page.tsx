@@ -9,7 +9,6 @@ import SceneCard, { type SceneCardState } from "@/components/scenes/SceneCard";
 import type { SceneVideoState } from "@/components/scenes/SceneVideo";
 import VideoStatusScreen, {
   POLL_INTERVAL_MS,
-  STUCK_AFTER_MS,
   type VideoStatusSceneRow,
 } from "@/components/story/VideoStatusScreen";
 import { createStoryAction } from "./actions/create-story.ts";
@@ -128,11 +127,11 @@ export default function Home() {
 
   // VIDEO-04: which scene (if any) is currently being retried -- only one at
   // a time, guarded in the handler below, matching handleRegenerateImage's
-  // convention. `generatingStartedAtRef` records the timestamp each scene
-  // first entered "generating" (04-RESEARCH.md Pitfall 2's stuck detector),
-  // keyed by scene number, cleared whenever a scene leaves "generating".
+  // convention. The stuck-generation signal itself (04-RESEARCH.md Pitfall
+  // 2's stuck detector) is now computed server-side, from a persisted
+  // timestamp (Phase 6, 06-05) -- see getStoryStatusAction's `stuck` field,
+  // consumed directly below rather than derived from any client clock.
   const [retryingScene, setRetryingScene] = useState<number | null>(null);
-  const generatingStartedAtRef = useRef<Record<number, number>>({});
 
   // OUTPUT-01 (plan 04-04): "Open Output Folder" control state.
   const [openingFolder, setOpeningFolder] = useState(false);
@@ -341,7 +340,6 @@ export default function Home() {
     setBatchStarting(false);
     setBatchError(null);
     setRetryingScene(null);
-    generatingStartedAtRef.current = {};
     setOpeningFolder(false);
     setOutputMessage(null);
     setFinalizedStoryId(null);
@@ -372,7 +370,6 @@ export default function Home() {
     setBatchStarting(false);
     setBatchError(null);
     setRetryingScene(null);
-    generatingStartedAtRef.current = {};
     setOpeningFolder(false);
     setOutputMessage(null);
     setFinalizedStoryId(null);
@@ -530,7 +527,6 @@ export default function Home() {
   async function handleRetryScene(sceneNumber: number) {
     if (!storyId || retryingScene !== null) return;
     setRetryingScene(sceneNumber);
-    generatingStartedAtRef.current[sceneNumber] = Date.now();
     setVideoScenes((prev) => ({
       ...prev,
       [sceneNumber]: { videoState: "generating", videoSrc: null, videoMessage: null },
@@ -626,20 +622,33 @@ export default function Home() {
                   ? "generating"
                   : "waiting";
 
-          // 04-RESEARCH.md Pitfall 2: a scene first observed "generating" is
-          // timestamped; a scene no longer "generating" has its timestamp
-          // cleared, so a fresh retry never inherits a stale stuck clock.
-          let stuck = false;
-          if (videoState === "generating") {
-            const startedAt = generatingStartedAtRef.current[row.sceneNumber] ?? Date.now();
-            generatingStartedAtRef.current[row.sceneNumber] = startedAt;
-            stuck = Date.now() - startedAt > STUCK_AFTER_MS;
-          } else {
-            delete generatingStartedAtRef.current[row.sceneNumber];
-          }
+          // 04-RESEARCH.md Pitfall 2 / Phase 6 06-05: the stuck signal comes
+          // straight from the status row -- getStoryStatusAction computes it
+          // server-side from Scene.videoGeneratingSince, a persisted
+          // timestamp that survives a page reload. No timestamp is recorded,
+          // compared, or reset anywhere in this client.
+          const stuck = row.stuck;
 
           let videoMessage: string | null =
             videoState === "failed" ? "This scene's video could not be created." : null;
+
+          // Phase 6 06-05, D-05: overrides the generic failure message with
+          // the plain-language save-failure explanation, byte-identical to
+          // the sentence generate-video.ts's own validation failure returns
+          // (src/core/output/mp4-validation.ts's CORRUPT_VIDEO_MESSAGE).
+          // Deliberately duplicated here rather than imported -- following
+          // the same convention the cap sentence below already uses in this
+          // file -- since a client file must never import a server-only
+          // module, and mp4-validation.ts in particular pulls in the mp4box
+          // container parser, which has no business in the browser bundle.
+          // Placed AFTER the generic failure message and BEFORE the capped
+          // check below, so a save-corrupted scene is never shown as capped
+          // -- Task 1 already narrows the row's own capReached signal for an
+          // exempt scene, so this branch only needs to supply the message.
+          if (row.saveCorrupted && videoState === "failed") {
+            videoMessage =
+              "This scene's video file didn't save properly, so it can't be used. Trying again won't use up one of this scene's attempts.";
+          }
 
           // D-03: the cap is checked LAST so it takes priority over "failed"
           // -- an exhausted scene shows the calm amber explanation, never
