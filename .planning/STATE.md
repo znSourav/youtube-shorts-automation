@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 06
 current_phase_name: Reliability, Secrets Hygiene & Output Correctness
 status: executing
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-09-20T11:12:59.598Z"
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-09-20T11:25:04.146Z"
 last_activity: 2026-09-20
 last_activity_desc: Phase 06 execution started
-state_head: 3dc5a6b9e301831659ed4dab63ea8f044974f2f1
+state_head: 61de6bfbd0fb138924514f0075985039bc719365
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 26
-  completed_plans: 22
+  completed_plans: 23
   percent: 83
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-20)
 ## Current Position
 
 Phase: 06 (Reliability, Secrets Hygiene & Output Correctness) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-09-20 — Phase 06 execution started
 
@@ -86,6 +86,7 @@ Progress: [████████████████████] 21/21 p
 | Phase 05 P04 | 22min | 3 tasks | 6 files |
 | Phase 05 P05 | 25min | 3 tasks | 6 files |
 | Phase 06 P01 | 7min | 3 tasks | 14 files |
+| Phase 06 P02 | 7min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -155,6 +156,10 @@ Recent decisions affecting current work:
 - [Phase 06]: [Phase 06, 06-01] assertApiKeyConfigured() wired as first statement of all four gated dispatch functions (runStoryDirector, compareViaLlm, generateSceneImagesAction, dispatchSceneVideo), strictly before checkBudget; a refusal never corrupts scene status or consumes a retry attempt
 - [Phase 06]: [Phase 06, 06-01] isSecretKey narrowed via a safe-token-suffix regex to stop over-redacting real Gemini usage-metadata fields (WINDOWS #2), while a name that is also key/authorization-shaped stays redacted (defense in depth)
 - [Phase 06]: [Phase 06, 06-01] secrets-audit.ts added as a 5th automated structural gate (gitignore/placeholder/no-client-leak) appended to npm run test:lib alongside check-boundaries.ts
+- [Phase 06]: [Phase 06, 06-02] Timeout values kept exactly as 06-RESEARCH.md Assumption A3 sized them (180s LLM, 120s image, 60s per video HTTP attempt) -- a defense against an infinite hang, not a latency optimization
+- [Phase 06]: [Phase 06, 06-02] veo.ts's poll call gained its own per-call httpOptions.timeout distinct from POLL_TIMEOUT_MS, confirmed via the installed SDK's own .d.ts (GetOperationConfig.httpOptions) as a real, separate opt-in bound a single hung poll would otherwise bypass
+- [Phase 06]: [Phase 06, 06-02] check-boundaries.ts invariant 8 scans for the literal content substring "timeout:" after stripping whole-line // comments, consistent with this file's existing content-scan invariants; verified both positively and negatively (temporarily removing veo.ts's import) before committing
+- [Phase 06]: [Phase 06, 06-02] create-story.ts's two collapsed blocked branches (MAX_TOKENS special case + generic block) collapsed into one branch calling plainLanguageStoryBlockMessage -- the selector's own branch order reproduces the exact prior special-casing, so no behavior regressed
 
 ### Pending Todos
 
@@ -185,6 +190,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-20T11:12:59.117Z
-Stopped at: Completed 06-01-PLAN.md
+Last session: 2026-09-20T11:25:03.656Z
+Stopped at: Completed 06-02-PLAN.md
 Resume file: None

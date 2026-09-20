@@ -60,7 +60,7 @@ Requirements for the 24-hour MVP. Each maps to a roadmap phase.
 
 ### Reliability
 
-- [ ] **RELIABILITY-01**: A provider failure (error, timeout, rate limit, malformed response) is caught, shown to the wife in plain language, and leaves the affected scene in a clearly failed-but-retryable state without corrupting other scenes' data
+- [x] **RELIABILITY-01**: A provider failure (error, timeout, rate limit, malformed response) is caught, shown to the wife in plain language, and leaves the affected scene in a clearly failed-but-retryable state without corrupting other scenes' data
 
 ### Security
 
@@ -142,7 +142,7 @@ Explicitly excluded from this project, not just this milestone. Documented to pr
 | BUDGET-03 | Phase 5 | Complete |
 | BUDGET-04 | Phase 5 | Complete |
 | BUDGET-05 | Phase 5 | Complete |
-| RELIABILITY-01 | Phase 6 | Pending |
+| RELIABILITY-01 | Phase 6 | Complete |
 | SECURITY-01 | Phase 6 | Complete |
 | PERSIST-01 | Phase 3 | Complete |
 | LIBRARY-01 | Phase 4 | Complete |
