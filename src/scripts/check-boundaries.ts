@@ -65,6 +65,13 @@
 //    HTTP call from being able to wedge serializeDispatch's shared queue
 //    forever -- a future provider file that forgets the import or the
 //    config key fails the build instead of silently reintroducing the gap.
+// 9. src/app/actions/generate-video.ts's awaited `incrementVideoAttempt`
+//    call must appear exactly once, and must textually precede the awaited
+//    `generateVideo` dispatch call, on comment-stripped source (Phase 6,
+//    plan 06-02; D-02). This structurally protects the retry-cap increment
+//    from ever becoming conditional on the CAUSE of a failure -- a future
+//    edit adding failure-type branching around the dispatch could otherwise
+//    accidentally make the increment skip on one branch and not another.
 //
 // Run with: node src/scripts/check-boundaries.ts
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -493,6 +500,46 @@ function main(): void {
     console.log(
       "OK: every provider file importing the Google GenAI SDK imports provider-timeouts.ts and sets a timeout config key",
     );
+  }
+
+  // Invariant 9 -- generate-video.ts's awaited incrementVideoAttempt call
+  // must appear exactly once and must textually precede the awaited
+  // generateVideo dispatch call, on comment-stripped source (Phase 6, plan
+  // 06-02; D-02). Structurally protects the retry-cap increment from ever
+  // becoming conditional on the cause of a failure: a future edit adding
+  // failure-type branching around the dispatch fails this gate instead of
+  // silently skipping the increment on one branch and not another.
+  const INCREMENT_VIDEO_ATTEMPT_CALL = "await incrementVideoAttempt(";
+  const GENERATE_VIDEO_DISPATCH_CALL = "await generateVideo(";
+  const offenders9: string[] = [];
+  {
+    const content = readFileSync(ALLOWED_VIDEO_DISPATCH_PATH, "utf8");
+    const stripped = stripWholeLineComments(content);
+    const incrementMatches = stripped.split(INCREMENT_VIDEO_ATTEMPT_CALL).length - 1;
+    const incrementIndex = stripped.indexOf(INCREMENT_VIDEO_ATTEMPT_CALL);
+    const dispatchIndex = stripped.indexOf(GENERATE_VIDEO_DISPATCH_CALL);
+    if (incrementMatches !== 1) {
+      offenders9.push(
+        `${ALLOWED_VIDEO_DISPATCH_PATH} -- expected exactly one awaited incrementVideoAttempt call, found ${incrementMatches}`,
+      );
+    } else if (dispatchIndex === -1) {
+      offenders9.push(`${ALLOWED_VIDEO_DISPATCH_PATH} -- no awaited generateVideo dispatch call found`);
+    } else if (incrementIndex >= dispatchIndex) {
+      offenders9.push(
+        `${ALLOWED_VIDEO_DISPATCH_PATH} -- incrementVideoAttempt does not textually precede the generateVideo dispatch call`,
+      );
+    }
+  }
+  if (offenders9.length > 0) {
+    failed = true;
+    console.log(
+      "BOUNDARY CHECK FAILED (invariant 9 -- the video retry-cap increment must be unconditional on failure cause, D-02):",
+    );
+    for (const offender of offenders9) {
+      console.log(`  ${offender}`);
+    }
+  } else {
+    console.log("OK: generate-video.ts's retry-cap increment is unconditional and precedes the video dispatch call");
   }
 
   if (failed) {

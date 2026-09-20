@@ -6,7 +6,7 @@ import { extname } from "node:path";
 import { BudgetExceededError, checkBudget } from "../../core/budget/ledger.ts";
 import { MissingApiKeyError, MISSING_API_KEY_MESSAGE, assertApiKeyConfigured } from "../../core/config/provider-key.ts";
 import { serializeDispatch } from "../../core/budget/dispatch-chain.ts";
-import { generateVideo, VIDEO_PRICE_PER_SECOND } from "../../providers/video/veo.ts";
+import { generateVideo, VIDEO_PRICE_PER_SECOND, plainLanguageVideoBlockMessage } from "../../providers/video/veo.ts";
 import { storyDir, sceneVideoPath } from "../../core/storage-paths.ts";
 import type { Scene } from "../../core/story/schema.ts";
 import { findStoryWithScenes } from "../../core/persistence/story-repository.ts";
@@ -321,7 +321,11 @@ async function dispatchSceneVideo(
   }
 
   if (result.blocked || !result.filePath) {
-    const message = "The video could not be generated. Please try again.";
+    // D-01/06-RESEARCH.md Pattern 2: chosen by the failure's own real cause
+    // (result.blockKind), never a single generic sentence -- a genuine RAI
+    // content-safety block now tells her to rephrase, while an operation
+    // error or malformed response still gets the try-again framing.
+    const message = plainLanguageVideoBlockMessage(result.blockKind);
     await updateSceneVideo(storyId, sceneNumber, null, SceneAssetStatus.FAILED);
     await recordGeneration(storyId, { ...generationRecordBase, ok: false, message }, sceneNumber);
     return { ok: false, videoPath: null, videoDataUrl: null, message, durationSeconds };

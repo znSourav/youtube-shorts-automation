@@ -23,12 +23,48 @@ export interface GenerateVideoParams {
   outputPath: string;
 }
 
+// D-01/06-RESEARCH.md Pattern 2: mirrors gemini-image.ts's `stage`
+// discriminator and gemini.ts's `StoryBlockClassification.stage` -- the
+// same "classify the real cause, don't collapse it into one boolean" shape,
+// extended to the one provider that was still missing it. "content" is the
+// ONLY genuine content-safety classification Veo reports
+// (raiMediaFilteredCount > 0); every other blocked branch is "technical" (an
+// operation error, or a malformed/empty response).
+export type VideoBlockKind = "content" | "technical";
+
+// The rephrase framing -- set only on the genuine RAI content-safety block.
+export const VIDEO_CONTENT_BLOCK_MESSAGE =
+  "This scene's video couldn't be made from that image and movement description. Try rephrasing the scene, or regenerate its image first.";
+
+// The try-again framing -- byte-identical to what generate-video.ts already
+// returned for every blocked case before this discriminator existed, so a
+// technical failure's observable message is unchanged.
+export const VIDEO_TECHNICAL_BLOCK_MESSAGE = "The video could not be generated. Please try again.";
+
+/**
+ * Selects the plain-language sentence for a blocked video result, mirroring
+ * gemini-image.ts's plainLanguageBlockMessage shape (a guard for the
+ * specific classified case, then a single fall-through). An undefined
+ * blockKind (an unclassified block, which should not happen given the three
+ * branches in generateVideo below always set one, but is defended against
+ * anyway) gets the safe try-again framing, never the rephrase framing --
+ * telling her to rewrite a scene that failed for a technical reason would
+ * waste one of her limited retry attempts on advice that cannot help.
+ */
+export function plainLanguageVideoBlockMessage(blockKind?: VideoBlockKind): string {
+  if (blockKind === "content") {
+    return VIDEO_CONTENT_BLOCK_MESSAGE;
+  }
+  return VIDEO_TECHNICAL_BLOCK_MESSAGE;
+}
+
 export interface GenerateVideoResult {
   filePath: string | null;
   usageMetadata: unknown;
   estimatedUsd: number;
   blocked: boolean;
   blockReason?: string;
+  blockKind?: VideoBlockKind;
   timedOut?: boolean;
   operationName?: string;
 }
@@ -93,11 +129,14 @@ export async function generateVideo(params: GenerateVideoParams): Promise<Genera
   logRawResponse("generateVideos operation raw response (done)", operation);
 
   if (operation.error) {
+    // Technical: the long-running operation itself errored, not a
+    // content-safety decision.
     return {
       filePath: null,
       usageMetadata: operation.response ?? null,
       estimatedUsd,
       blocked: true,
+      blockKind: "technical",
       blockReason: `operation error: ${JSON.stringify(operation.error)}`,
     };
   }
@@ -105,22 +144,26 @@ export async function generateVideo(params: GenerateVideoParams): Promise<Genera
   const raiCount = operation.response?.raiMediaFilteredCount;
   const raiReasons = operation.response?.raiMediaFilteredReasons;
   if (raiCount && raiCount > 0) {
+    // Content: the ONLY genuine content-safety classification Veo reports.
     return {
       filePath: null,
       usageMetadata: operation.response ?? null,
       estimatedUsd,
       blocked: true,
+      blockKind: "content",
       blockReason: (raiReasons ?? []).join("; ") || "raiMediaFilteredCount>0 with no reasons given",
     };
   }
 
   const generatedVideo = operation.response?.generatedVideos?.[0];
   if (!generatedVideo?.video) {
+    // Technical: a malformed or empty response, not a policy decision.
     return {
       filePath: null,
       usageMetadata: operation.response ?? null,
       estimatedUsd,
       blocked: true,
+      blockKind: "technical",
       blockReason: "NO_VIDEO_IN_RESPONSE",
     };
   }
