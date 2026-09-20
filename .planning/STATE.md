@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 06
 current_phase_name: Reliability, Secrets Hygiene & Output Correctness
 status: executing
-stopped_at: Completed 06-03-PLAN.md
-last_updated: "2026-09-20T11:42:31.499Z"
+stopped_at: Completed 06-04-PLAN.md
+last_updated: "2026-09-20T11:50:23.188Z"
 last_activity: 2026-09-20
 last_activity_desc: Phase 06 execution started
-state_head: 43ce46bcd004eea0819426063aafbfa949692d0f
+state_head: f05f2f72c72a48b4b2fb9e236fab5e1e6df43855
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 26
-  completed_plans: 24
+  completed_plans: 25
   percent: 83
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-20)
 ## Current Position
 
 Phase: 06 (Reliability, Secrets Hygiene & Output Correctness) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-09-20 — Phase 06 execution started
 
@@ -88,6 +88,7 @@ Progress: [████████████████████] 21/21 p
 | Phase 06 P01 | 7min | 3 tasks | 14 files |
 | Phase 06 P02 | 7min | 3 tasks | 13 files |
 | Phase 06 P03 | 7min | 3 tasks | 15 files |
+| Phase 06 P04 | 2min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -164,6 +165,10 @@ Recent decisions affecting current work:
 - [Phase 06]: [Phase 6, 06-03] mp4box pinned exactly at 2.4.1, re-confirmed clean postinstall live against npm registry before installing; evaluateMp4Info split out as its own pure function with missing video-track dimensions treated as an explicit INVALID verdict (deliberate corrections to 06-RESEARCH.md's reference snippet)
 - [Phase 06]: [Phase 6, 06-03] updateSceneVideo derives videoGeneratingSince from its existing status argument so no call site can forget to set/clear it; the four new corruption-flag writers copy generation-repository.ts's existing never-throw best-effort contract verbatim
 - [Phase 06]: [Phase 6, 06-03] generate-video.ts's invalid-MP4 branch leaves the bad file on disk rather than deleting it (documented inline); the readback-failure branch and incrementVideoAttempt are textually unchanged, confirmed via git diff; check-boundaries.ts invariant 10 verified both positively and negatively before committing
+- [Phase 06]: [Phase 6, 06-04] Cap guards in gates.ts narrowed in place (added && !scene.xSaveCorrupted), never moved -- keeps APPROVAL-01 provably ahead of the cap check; a capped-and-flagged scene on an unapproved story still refuses with the approval sentence
+- [Phase 06]: [Phase 6, 06-04] D-02/D-05 asymmetry is deliberate, recorded inline in gates.ts: technical generation failures always cost an attempt (D-02); local save-integrity failures never do (D-05) -- genuinely different categories, not an inconsistency
+- [Phase 06]: [Phase 6, 06-04] Both dispatch boundaries (generate-video.ts, regenerate-scene-image.ts) spend the exemption at the exact textual position the attempt increment already occupied, keeping check-boundaries.ts invariant 9 valid unchanged
+- [Phase 06]: [Phase 6, 06-04] No image container/pixel validator added -- OUTPUT-02 is video-only by its literal text; generate-images.ts's existing local-write-failure branch is D-05's image-side exemption trigger
 
 ### Pending Todos
 
@@ -194,6 +199,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-20T11:42:31.038Z
-Stopped at: Completed 06-03-PLAN.md
+Last session: 2026-09-20T11:50:22.668Z
+Stopped at: Completed 06-04-PLAN.md
 Resume file: None
