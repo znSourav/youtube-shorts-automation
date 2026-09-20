@@ -73,6 +73,52 @@ test("the return value survives JSON.parse(JSON.stringify(...)) without throwing
   assert.doesNotThrow(() => JSON.parse(JSON.stringify(result)));
 });
 
+test("real usage-metadata token-count fields are left unchanged, not redacted (WINDOWS #2)", () => {
+  const value = { promptTokenCount: 42 };
+  const result = redactLargeStrings(value) as typeof value;
+  assert.equal(result.promptTokenCount, 42);
+});
+
+test("a nested tokensDetails array's tokenCount field is left unchanged", () => {
+  const value = { candidatesTokensDetails: [{ modality: "TEXT", tokenCount: 10 }] };
+  const result = redactLargeStrings(value) as typeof value;
+  assert.equal(result.candidatesTokensDetails[0].tokenCount, 10);
+});
+
+test("every real usage-metadata field name is left unchanged, all twelve at once", () => {
+  const value = {
+    cachedContentTokenCount: 1,
+    candidatesTokenCount: 2,
+    promptTokenCount: 3,
+    thoughtsTokenCount: 4,
+    toolUsePromptTokenCount: 5,
+    totalTokenCount: 6,
+    tokensDetails: [{ modality: "TEXT", tokenCount: 7 }],
+    candidatesTokensDetails: [{ modality: "TEXT", tokenCount: 8 }],
+    promptTokensDetails: [{ modality: "TEXT", tokenCount: 9 }],
+    cacheTokensDetails: [{ modality: "TEXT", tokenCount: 10 }],
+    toolUsePromptTokensDetails: [{ modality: "TEXT", tokenCount: 11 }],
+    responseTokensDetails: [{ modality: "TEXT", tokenCount: 12 }],
+  };
+  const result = redactLargeStrings(value) as typeof value;
+  assert.deepEqual(result, value);
+});
+
+test("apiKey, x-goog-api-key, authorization, and bare token remain redacted", () => {
+  const value = { apiKey: "secret", "x-goog-api-key": "secret", authorization: "Bearer secret", token: "secret" };
+  const result = redactLargeStrings(value) as Record<string, unknown>;
+  assert.equal(result.apiKey, "[REDACTED:secret]");
+  assert.equal(result["x-goog-api-key"], "[REDACTED:secret]");
+  assert.equal(result.authorization, "[REDACTED:secret]");
+  assert.equal(result.token, "[REDACTED:secret]");
+});
+
+test("a name that passes the safe-token-suffix test but is also key-shaped still redacts (defense in depth)", () => {
+  const value = { apiKeyTokenCount: "secret" };
+  const result = redactLargeStrings(value) as Record<string, unknown>;
+  assert.equal(result.apiKeyTokenCount, "[REDACTED:secret]");
+});
+
 test("logRawResponse prints the label followed by the redacted JSON without throwing", () => {
   const originalLog = console.log;
   const lines: string[] = [];

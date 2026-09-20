@@ -7,11 +7,29 @@ function isPayloadKey(key: string): boolean {
   return PAYLOAD_KEYS.has(key.toLowerCase());
 }
 
+// Every real usage-metadata field name this SDK returns (verified
+// exhaustively against node_modules/@google/genai/dist/genai.d.ts,
+// 06-RESEARCH.md Code Example 2 -- promptTokenCount, candidatesTokenCount,
+// totalTokenCount, etc., and the nested tokensDetails/TokensDetails arrays)
+// ends in one of exactly these two suffixes. This is what narrows the
+// over-redaction WINDOWS #2 named without weakening the true-positive match
+// on a genuinely key/token/authorization-shaped field name (06-RESEARCH.md
+// Code Example 3).
+const SAFE_TOKEN_FIELD_SUFFIX = /tokencount$|tokensdetails$/i;
+
 // Any key whose lowercased name contains "key", "token", or "authorization"
 // is a secret carrier (T-01-01). Matched by substring so "apiKey",
-// "x-goog-api-key", "authorization", and "token" are all caught.
+// "x-goog-api-key", "authorization", and "token" are all caught -- UNLESS
+// the name both contains "token" AND ends in one of the SDK's verified
+// usage-metadata suffixes (tokenCount/tokensDetails), in which case only the
+// key/authorization-shaped substrings still redact it (defense in depth: a
+// name that happens to ALSO look key-shaped, e.g. "apiKeyTokenCount", stays
+// redacted even though it passes the safe-suffix test).
 function isSecretKey(key: string): boolean {
   const lowered = key.toLowerCase();
+  if (lowered.includes("token") && SAFE_TOKEN_FIELD_SUFFIX.test(lowered)) {
+    return lowered.includes("key") || lowered.includes("authorization");
+  }
   return lowered.includes("key") || lowered.includes("token") || lowered.includes("authorization");
 }
 
@@ -69,8 +87,13 @@ function redactValue(value: unknown, maxLen: number, seen: WeakSet<object>, keyN
  * placeholder; any value under a key named `data`, `imageBytes`, or
  * `videoBytes` becomes a placeholder regardless of length; and any value
  * under a key whose lowercased name contains `key`, `token`, or
- * `authorization` is replaced in full. Visited objects are tracked in a
- * WeakSet so a circular reference yields a marker instead of throwing.
+ * `authorization` is replaced in full -- EXCEPT a name that contains `token`
+ * only because it is one of the SDK's real usage-metadata fields (ends in
+ * `TokenCount` or `TokensDetails`, e.g. `promptTokenCount`,
+ * `candidatesTokensDetails`), which is left unchanged so legitimate token
+ * telemetry is no longer redacted alongside real secrets (06-01, Task 3;
+ * WINDOWS #2). Visited objects are tracked in a WeakSet so a circular
+ * reference yields a marker instead of throwing.
  */
 export function redactLargeStrings(value: unknown, maxLen: number = 256): unknown {
   return redactValue(value, maxLen, new WeakSet());

@@ -210,10 +210,11 @@ function main(): void {
         spec.includes("core/budget") ||
         // Phase 6 (06-01, Task 2, T-06-03): src/core/config/provider-key.ts
         // reads the raw key-bearing environment variables (GOOGLE_API_KEY /
-        // GEMINI_API_KEY). Next would not inline a non-NEXT_PUBLIC_ variable
-        // into the client bundle regardless, but a client file importing
-        // this module must still fail the build -- defense in depth, the
-        // same reasoning the core/budget entry above already carries.
+        // GEMINI_API_KEY). Next would not inline a plain, non-publicly-
+        // prefixed variable into the client bundle regardless, but a client
+        // file importing this module must still fail the build -- defense
+        // in depth, the same reasoning the core/budget entry above already
+        // carries.
         spec.includes("core/config")
       ) {
         offenders1.push(`${file} -> "${spec}"`);
