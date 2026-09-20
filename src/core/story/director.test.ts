@@ -1,7 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { buildStorySchema, buildStoryPrompt } from "./director.ts";
+import {
+  buildStorySchema,
+  buildStoryPrompt,
+  plainLanguageStoryBlockMessage,
+  STORY_CUT_SHORT_MESSAGE,
+  STORY_REPHRASE_MESSAGE,
+  STORY_TRY_AGAIN_MESSAGE,
+} from "./director.ts";
 import { STYLE_PRESETS } from "./styles.ts";
 import {
   LLM_HTTP_TIMEOUT_MS,
@@ -103,5 +110,51 @@ test("buildStoryPrompt places the wife's free text in the content section, after
 test("every provider HTTP timeout constant is a finite integer greater than zero", () => {
   for (const value of [LLM_HTTP_TIMEOUT_MS, IMAGE_HTTP_TIMEOUT_MS, VIDEO_HTTP_TIMEOUT_MS]) {
     assert.ok(Number.isFinite(value) && value > 0, `expected a finite positive timeout, got ${value}`);
+  }
+});
+
+// (f) 06-02 Task 3: plainLanguageStoryBlockMessage's selector, tested as a
+// pure function (does NOT call runStoryDirector -- that dispatches real
+// work per this task's own scope note).
+
+test('plainLanguageStoryBlockMessage returns STORY_CUT_SHORT_MESSAGE for a MAX_TOKENS blockReason, regardless of blockStage', () => {
+  assert.equal(
+    plainLanguageStoryBlockMessage({ blockReason: "MAX_TOKENS", blockStage: "candidate" }),
+    STORY_CUT_SHORT_MESSAGE,
+  );
+});
+
+test('plainLanguageStoryBlockMessage returns STORY_REPHRASE_MESSAGE for a "prompt" stage block', () => {
+  assert.equal(
+    plainLanguageStoryBlockMessage({ blockStage: "prompt", blockReason: "SAFETY" }),
+    STORY_REPHRASE_MESSAGE,
+  );
+});
+
+test('plainLanguageStoryBlockMessage returns STORY_TRY_AGAIN_MESSAGE for a "candidate" stage block other than MAX_TOKENS', () => {
+  assert.equal(
+    plainLanguageStoryBlockMessage({ blockStage: "candidate", blockReason: "NO_TEXT_IN_RESPONSE" }),
+    STORY_TRY_AGAIN_MESSAGE,
+  );
+});
+
+test('plainLanguageStoryBlockMessage returns STORY_TRY_AGAIN_MESSAGE for a "parse" stage block', () => {
+  assert.equal(
+    plainLanguageStoryBlockMessage({ blockStage: "parse", blockReason: "JSON.parse failed" }),
+    STORY_TRY_AGAIN_MESSAGE,
+  );
+});
+
+test("plainLanguageStoryBlockMessage returns STORY_TRY_AGAIN_MESSAGE for an unclassified block", () => {
+  assert.equal(plainLanguageStoryBlockMessage({}), STORY_TRY_AGAIN_MESSAGE);
+});
+
+test("none of the three story block message constants leak provider/API terminology", () => {
+  const forbidden = ["gemini", "finishreason", "promptfeedback", "json", "model"];
+  for (const message of [STORY_CUT_SHORT_MESSAGE, STORY_REPHRASE_MESSAGE, STORY_TRY_AGAIN_MESSAGE]) {
+    const lowered = message.toLowerCase();
+    for (const term of forbidden) {
+      assert.ok(!lowered.includes(term), `"${message}" unexpectedly contains forbidden substring "${term}"`);
+    }
   }
 });

@@ -1,6 +1,8 @@
 "use server";
 
-import type { StoryDirectorInput } from "../../core/story/director.ts";
+// invariant 2 (check-boundaries.ts): imported from src/core/, never the LLM
+// provider directly.
+import { plainLanguageStoryBlockMessage, type StoryDirectorInput } from "../../core/story/director.ts";
 import { runUniqueStoryDirector } from "../../core/uniqueness/check.ts";
 import { BudgetExceededError } from "../../core/budget/ledger.ts";
 import { MissingApiKeyError, MISSING_API_KEY_MESSAGE } from "../../core/config/provider-key.ts";
@@ -84,16 +86,15 @@ export async function createStoryAction(input: StoryDirectorInput): Promise<Crea
       // back to a flush -- there is nothing left to write, only (never
       // attempted below) something to link, and there is no story id here
       // to link it to.
-      if (result.reason === "blocked" && result.blockReason === "MAX_TOKENS") {
-        return {
-          ok: false,
-          error: "The response was cut short before it finished. Please try again with fewer scenes.",
-        };
-      }
+      // D-01/06-RESEARCH.md Pattern 2: the message is now chosen by the
+      // failure's own real cause (result.blockStage/result.blockReason),
+      // never a single generic sentence -- and never names "the model" as
+      // the thing that blocked the request (the plain-language convention
+      // forbids provider/model terminology in any wife-facing message).
       if (result.reason === "blocked") {
         return {
           ok: false,
-          error: "The story could not be generated because the request was blocked by the model. Please try a different idea or wording.",
+          error: plainLanguageStoryBlockMessage({ blockStage: result.blockStage, blockReason: result.blockReason }),
         };
       }
       if (result.reason === "parse_failed") {

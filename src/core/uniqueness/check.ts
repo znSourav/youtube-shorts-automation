@@ -16,6 +16,7 @@ import {
   runStoryDirector,
   type StoryDirectorInput,
   type StoryDirectorResult,
+  type StoryBlockStage,
 } from "../story/director.ts";
 import type { StoryDirectorOutput } from "../story/schema.ts";
 import { listAcceptedFingerprints, type AcceptedFingerprint } from "../persistence/story-repository.ts";
@@ -311,6 +312,11 @@ export interface UniqueStoryFailure {
   reason: "blocked" | "parse_failed" | "validation_failed";
   detail: string;
   blockReason?: string;
+  // D-01/06-RESEARCH.md Pattern 2: re-emitted from StoryDirectorFailure.blockStage
+  // (director.ts) alongside blockReason above, so create-story.ts's
+  // plainLanguageStoryBlockMessage selector can branch on it without reaching
+  // past this module into the LLM provider directly.
+  blockStage?: StoryBlockStage;
   issues?: string[];
   attempt: number;
   recordIds: string[];
@@ -395,6 +401,7 @@ export async function runUniqueStoryDirector(
         reason: directorResult.reason,
         detail: directorResult.detail,
         blockReason: directorResult.blockReason,
+        blockStage: directorResult.blockStage,
         issues: directorResult.issues,
         attempt,
         recordIds,

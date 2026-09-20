@@ -21,11 +21,25 @@ export interface StoryDirectorInput {
   avoidPattern?: StructuralFingerprint;
 }
 
+// D-01/06-RESEARCH.md Pattern 2: the exact three stages classifyStoryResponse
+// (src/providers/llm/gemini.ts) already produces -- exported here (the core
+// module, per check-boundaries.ts invariant 2) rather than re-exported from
+// gemini.ts, so create-story.ts can import the selector below without
+// reaching past src/core/ into the LLM provider directly.
+export type StoryBlockStage = "prompt" | "candidate" | "parse";
+
 export interface StoryDirectorFailure {
   ok: false;
   reason: "blocked" | "parse_failed" | "validation_failed";
   detail: string;
   blockReason?: string;
+  // D-01/06-RESEARCH.md Pattern 2: populated from classifyStoryResponse's own
+  // stage for a "blocked" reason -- lets the message selector below tell a
+  // genuine prompt-level content block ("prompt") apart from a truncated or
+  // malformed candidate ("candidate"/"parse"), which classifyStoryResponse
+  // already distinguishes but create-story.ts used to collapse into one
+  // sentence.
+  blockStage?: StoryBlockStage;
   issues?: string[];
   // Mirrors the exact `billed` value written to the enforcement ledger for
   // this dispatched attempt (see runStoryDirector below).
@@ -37,6 +51,46 @@ export interface StoryDirectorFailure {
   // record is written immediately after generateStory returns, before any
   // parsing or validation runs.
   generationRecordId: string | null;
+}
+
+// The cut-short case -- byte-identical to what create-story.ts already
+// returned for a MAX_TOKENS block today; the existing special case was
+// already correctly specific, so this plan only names it as a constant.
+export const STORY_CUT_SHORT_MESSAGE =
+  "The response was cut short before it finished. Please try again with fewer scenes.";
+
+// The rephrase framing -- REPLACES today's sentence, which named "the
+// model" as the thing that blocked the request. D-01 and the plain-language
+// convention forbid provider/model terminology in any wife-facing message.
+export const STORY_REPHRASE_MESSAGE =
+  "The story could not be generated from that idea. Please try rephrasing it, or describing your character a little differently.";
+
+// The try-again framing -- covers every technical cause: a truncated or
+// malformed candidate, or an unparseable response.
+export const STORY_TRY_AGAIN_MESSAGE = "The story could not be generated just now. Please try again.";
+
+/**
+ * Selects the plain-language sentence for a blocked Story Director result.
+ * Branch order is load-bearing: the cut-short case is checked FIRST (keyed
+ * on the existing MAX_TOKENS blockReason special case, which stays correct
+ * regardless of stage), then the prompt-stage rephrase case, then a single
+ * fall-through to the try-again case -- mirroring
+ * plainLanguageVideoBlockMessage's (veo.ts) and plainLanguageBlockMessage's
+ * (gemini-image.ts) guard-then-fall-through shape. An unclassified block
+ * (no blockStage, not MAX_TOKENS) gets the safe try-again framing, never the
+ * rephrase framing.
+ */
+export function plainLanguageStoryBlockMessage(failure: {
+  blockStage?: StoryBlockStage;
+  blockReason?: string;
+}): string {
+  if (failure.blockReason === "MAX_TOKENS") {
+    return STORY_CUT_SHORT_MESSAGE;
+  }
+  if (failure.blockStage === "prompt") {
+    return STORY_REPHRASE_MESSAGE;
+  }
+  return STORY_TRY_AGAIN_MESSAGE;
 }
 
 export interface StoryDirectorSuccess {
@@ -268,6 +322,7 @@ export async function runStoryDirector(input: StoryDirectorInput): Promise<Story
         reason: "blocked",
         detail: result.block ? `${result.block.stage}: ${result.block.reason}` : "unknown block reason",
         blockReason: result.block?.reason,
+        blockStage: result.block?.stage,
         // Mirrors the `billed: !result.blocked` written above -- for a
         // blocked response that's `false`.
         billed: false,
