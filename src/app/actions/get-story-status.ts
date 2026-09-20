@@ -13,6 +13,7 @@ import { storyDir } from "../../core/storage-paths.ts";
 import { findStoryWithScenes } from "../../core/persistence/story-repository.ts";
 import { maxSceneRetryAttempts } from "../../core/retry/caps.ts";
 import { checkBudget, BudgetExceededError } from "../../core/budget/ledger.ts";
+import { STUCK_AFTER_MS } from "../../core/video/stuck-threshold.ts";
 
 // WR-02 (04-REVIEW.md, third pass): the worst-case per-scene cost this app
 // ever dispatches -- 8 seconds (the longest supported scene, per
@@ -42,6 +43,12 @@ export interface SceneVideoStatusRow {
   imageStatus: string;
   videoStatus: string;
   videoAttempts: number;
+  // True when the scene is at or above the configured attempt cap AND does
+  // NOT carry a video corruption exemption (D-05, Phase 6 06-04). A scene
+  // granted the free-retry exemption is never reported as capped, even at
+  // or above the numeric limit -- mirrors evaluateVideoDispatch's own
+  // narrowed guard (gates.ts) so the screen can never show a dead-end
+  // message for a retry the gate would actually allow.
   capReached: boolean;
   // WR-02: true when this FAILED, not-already-capped scene's failure
   // coincides with the project's spend ceiling currently having no room
@@ -51,6 +58,17 @@ export interface SceneVideoStatusRow {
   // the ceiling" (no schema column records why a scene failed) -- an
   // intentional simplification for a Warning-severity UX message.
   budgetExceeded: boolean;
+  // True when the scene's video status is GENERATING and its recorded
+  // start time (Scene.videoGeneratingSince) is older than STUCK_AFTER_MS.
+  // This elapsed-time comparison moved server-side (Phase 6, 06-05) because
+  // the browser's own clock -- a page-local useRef -- was reset by every
+  // page reload, silently deferring the recovery affordance for a scene
+  // that had genuinely been in flight far longer than the threshold.
+  stuck: boolean;
+  // True when the scene carries a recorded video save-integrity failure
+  // (Scene.videoSaveCorrupted) -- lets the browser show the plain-language
+  // save-failure explanation instead of the generic failure sentence.
+  saveCorrupted: boolean;
 }
 
 export interface StoryStatusResult {
@@ -129,7 +147,11 @@ export async function getStoryStatusAction(storyId: string): Promise<StoryStatus
         videoStatus = "FAILED";
       }
 
-      const capReached = scene.videoAttempts >= maxAttempts;
+      // Narrowed to exclude a scene carrying the video corruption exemption
+      // (D-05, Phase 6 06-04) -- mirrors evaluateVideoDispatch's own
+      // narrowed cap guard (gates.ts) so this action never reports a scene
+      // as capped when the dispatch gate would actually grant it a retry.
+      const capReached = scene.videoAttempts >= maxAttempts && !scene.videoSaveCorrupted;
 
       // WR-02: a FAILED, not-already-capped scene whose failure coincides
       // with the real budget currently having no room left for even one
@@ -137,6 +159,21 @@ export async function getStoryStatusAction(storyId: string): Promise<StoryStatus
       // transient failure. budgetExhausted is computed once above, not
       // per-scene.
       const budgetExceeded = videoStatus === "FAILED" && !capReached && budgetExhausted;
+
+      // Keyed off the scene's ORIGINAL database status, not the locally-
+      // downgraded `videoStatus` variable above -- a GENERATING scene is
+      // never subject to the file-existence READY downgrade, so either
+      // value works today, but keying off the database value keeps the two
+      // concerns independent. An explicit non-null check on the recorded
+      // start time is required: a row written before this phase's
+      // migration must never be reported as stuck on the strength of a
+      // missing value (T-06-19).
+      const stuck =
+        scene.videoStatus === "GENERATING" &&
+        scene.videoGeneratingSince !== null &&
+        Date.now() - scene.videoGeneratingSince.getTime() > STUCK_AFTER_MS;
+
+      const saveCorrupted = scene.videoSaveCorrupted;
 
       return {
         sceneNumber: scene.sceneNumber,
@@ -146,6 +183,8 @@ export async function getStoryStatusAction(storyId: string): Promise<StoryStatus
         videoAttempts: scene.videoAttempts,
         capReached,
         budgetExceeded,
+        stuck,
+        saveCorrupted,
       };
     });
 

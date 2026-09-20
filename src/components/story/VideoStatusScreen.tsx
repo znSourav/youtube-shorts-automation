@@ -6,12 +6,6 @@ import SceneVideo, { type SceneVideoState } from "../scenes/SceneVideo";
 // page.tsx's polling effect uses the same single source of truth.
 export const POLL_INTERVAL_MS = 3000;
 
-// A scene sitting in "generating" longer than this is treated as possibly
-// stuck (04-RESEARCH.md Pitfall 2 -- an after() callback can be dropped by a
-// dev-server recompile). Set just beyond veo.ts's own 10-minute POLL_TIMEOUT_MS
-// so a genuinely slow-but-live generation is never mislabelled.
-export const STUCK_AFTER_MS = 12 * 60 * 1000;
-
 export interface VideoStatusSceneRow {
   sceneNumber: number;
   storyPurpose: string;
