@@ -22,6 +22,12 @@ function sceneFixture(sceneNumber: number, overrides: SceneOverrides = {}): Stor
     videoStatus: "WAITING",
     imageAttempts: 0,
     videoAttempts: 0,
+    // Phase 6 (06-03): schema defaults -- plan 06-04 owns the gate
+    // behaviour changes for these fields, so this fixture only needs to
+    // typecheck, not exercise them.
+    videoGeneratingSince: null,
+    videoSaveCorrupted: false,
+    imageSaveCorrupted: false,
     ...overrides,
   };
 }

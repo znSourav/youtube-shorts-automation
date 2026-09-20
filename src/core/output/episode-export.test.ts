@@ -50,6 +50,9 @@ function storyFixture(overrides: Partial<StoryWithScenes> = {}): StoryWithScenes
       videoStatus: "READY",
       imageAttempts: 0,
       videoAttempts: 0,
+      videoGeneratingSince: null,
+      videoSaveCorrupted: false,
+      imageSaveCorrupted: false,
     })),
     ...overrides,
   };
@@ -97,6 +100,9 @@ test("scenes 1 and 3 ready, scene 2 not ready -> clipsWritten [1,3], clipsMissin
           videoStatus: "READY",
           imageAttempts: 0,
           videoAttempts: 0,
+          videoGeneratingSince: null,
+          videoSaveCorrupted: false,
+          imageSaveCorrupted: false,
         },
         {
           id: "s2",
@@ -111,6 +117,9 @@ test("scenes 1 and 3 ready, scene 2 not ready -> clipsWritten [1,3], clipsMissin
           videoStatus: "WAITING",
           imageAttempts: 0,
           videoAttempts: 0,
+          videoGeneratingSince: null,
+          videoSaveCorrupted: false,
+          imageSaveCorrupted: false,
         },
         {
           id: "s3",
@@ -125,6 +134,9 @@ test("scenes 1 and 3 ready, scene 2 not ready -> clipsWritten [1,3], clipsMissin
           videoStatus: "READY",
           imageAttempts: 0,
           videoAttempts: 0,
+          videoGeneratingSince: null,
+          videoSaveCorrupted: false,
+          imageSaveCorrupted: false,
         },
       ],
     });
@@ -195,6 +207,9 @@ test("a story whose scenes are all unready still creates the output directory an
         videoStatus: "WAITING",
         imageAttempts: 0,
         videoAttempts: 0,
+        videoGeneratingSince: null,
+        videoSaveCorrupted: false,
+        imageSaveCorrupted: false,
       })),
     });
     // No seedTree call -- no source files exist on disk at all.
@@ -264,6 +279,9 @@ test("a story with no recorded asset path yet still creates its directory when i
         videoStatus: "WAITING",
         imageAttempts: 0,
         videoAttempts: 0,
+        videoGeneratingSince: null,
+        videoSaveCorrupted: false,
+        imageSaveCorrupted: false,
       })),
     });
     // No seedTree call, same as "a story whose scenes are all unready" above
@@ -292,6 +310,9 @@ test("buildStoryJson parses as JSON, carries the title, exposes scenes in ascend
       videoStatus: "READY",
       imageAttempts: 0,
       videoAttempts: 0,
+      videoGeneratingSince: null,
+      videoSaveCorrupted: false,
+      imageSaveCorrupted: false,
     })),
   });
 
@@ -362,6 +383,9 @@ test("a fixture whose every scene image is unready writes no character reference
         videoStatus: "WAITING",
         imageAttempts: 0,
         videoAttempts: 0,
+        videoGeneratingSince: null,
+        videoSaveCorrupted: false,
+        imageSaveCorrupted: false,
       })),
     });
 

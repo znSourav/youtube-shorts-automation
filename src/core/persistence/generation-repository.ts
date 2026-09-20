@@ -237,6 +237,17 @@ export async function updateSceneImage(
 /**
  * Targeted single-scene video path/status update -- VIDEO-03's database
  * half. Same best-effort contract as updateSceneImage.
+ *
+ * Phase 6 (06-03, Pattern 5): also writes `videoGeneratingSince`, derived
+ * from the `status` argument rather than a new parameter -- a new
+ * timestamp when the incoming status is GENERATING, null for every other
+ * status (READY, FAILED, WAITING). Deriving it here, inside the
+ * repository, means no call site can forget to set or clear it, and no
+ * existing call site's signature changes. This is what fixes the stuck-
+ * generation detector's client-only clock (Phase 4 code review pass 6): a
+ * page reload can no longer reset an elapsed-time countdown for a scene
+ * that has genuinely been in flight far longer, because the anchor now
+ * lives in the database, not a browser useRef.
  */
 export async function updateSceneVideo(
   storyId: string,
@@ -248,7 +259,11 @@ export async function updateSceneVideo(
   try {
     await client.scene.update({
       where: { storyId_sceneNumber: { storyId, sceneNumber } },
-      data: { videoPath, videoStatus: status },
+      data: {
+        videoPath,
+        videoStatus: status,
+        videoGeneratingSince: status === SceneAssetStatus.GENERATING ? new Date() : null,
+      },
     });
   } catch (err) {
     console.error(`generation-repository: updateSceneVideo failed for story ${storyId} scene ${sceneNumber}`, err);
@@ -288,5 +303,74 @@ export async function incrementVideoAttempt(
     });
   } catch (err) {
     console.error(`generation-repository: incrementVideoAttempt failed for story ${storyId} scene ${sceneNumber}`, err);
+  }
+}
+
+/**
+ * D-05's free-retry exemption writers (Phase 6, 06-03): each copies the
+ * existing best-effort contract verbatim -- try, a single targeted
+ * scene.update keyed on the composite [storyId, sceneNumber] unique index,
+ * catch, console.error naming the function and the story/scene, return
+ * normally, never throw. Losing one of these writes can only cost an
+ * exemption or a stuck-state signal; throwing could cost an already-
+ * paid-for generation, which is exactly why none of them may throw.
+ */
+export async function setVideoSaveCorrupted(
+  storyId: string,
+  sceneNumber: number,
+  client: PrismaClient = prisma,
+): Promise<void> {
+  try {
+    await client.scene.update({
+      where: { storyId_sceneNumber: { storyId, sceneNumber } },
+      data: { videoSaveCorrupted: true },
+    });
+  } catch (err) {
+    console.error(`generation-repository: setVideoSaveCorrupted failed for story ${storyId} scene ${sceneNumber}`, err);
+  }
+}
+
+export async function clearVideoSaveCorrupted(
+  storyId: string,
+  sceneNumber: number,
+  client: PrismaClient = prisma,
+): Promise<void> {
+  try {
+    await client.scene.update({
+      where: { storyId_sceneNumber: { storyId, sceneNumber } },
+      data: { videoSaveCorrupted: false },
+    });
+  } catch (err) {
+    console.error(`generation-repository: clearVideoSaveCorrupted failed for story ${storyId} scene ${sceneNumber}`, err);
+  }
+}
+
+export async function setImageSaveCorrupted(
+  storyId: string,
+  sceneNumber: number,
+  client: PrismaClient = prisma,
+): Promise<void> {
+  try {
+    await client.scene.update({
+      where: { storyId_sceneNumber: { storyId, sceneNumber } },
+      data: { imageSaveCorrupted: true },
+    });
+  } catch (err) {
+    console.error(`generation-repository: setImageSaveCorrupted failed for story ${storyId} scene ${sceneNumber}`, err);
+  }
+}
+
+export async function clearImageSaveCorrupted(
+  storyId: string,
+  sceneNumber: number,
+  client: PrismaClient = prisma,
+): Promise<void> {
+  try {
+    await client.scene.update({
+      where: { storyId_sceneNumber: { storyId, sceneNumber } },
+      data: { imageSaveCorrupted: false },
+    });
+  } catch (err) {
+    console.error(`generation-repository: clearImageSaveCorrupted failed for story ${storyId} scene ${sceneNumber}`, err);
   }
 }

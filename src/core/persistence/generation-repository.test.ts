@@ -12,6 +12,10 @@ import {
   updateSceneVideo,
   incrementImageAttempt,
   incrementVideoAttempt,
+  setVideoSaveCorrupted,
+  clearVideoSaveCorrupted,
+  setImageSaveCorrupted,
+  clearImageSaveCorrupted,
   GenerationType,
   SceneAssetStatus,
   type PendingGenerationRecord,
@@ -469,5 +473,178 @@ test("markImagesApproved sets a non-null imagesApprovedAt readable by a second i
     assert.ok(story!.imagesApprovedAt instanceof Date);
   } finally {
     await reader.$disconnect();
+  }
+});
+
+// -- Phase 6 (plan 06-03): videoGeneratingSince / videoSaveCorrupted / imageSaveCorrupted --
+
+test("a freshly seeded scene defaults videoGeneratingSince to null and both corruption flags to false", async () => {
+  const url = tmpDatabaseUrl();
+  const storyId = "story-genrepo-defaults";
+  await seedStory(storyId, url);
+
+  const client = createPrismaClient(url);
+  try {
+    const story = await findStoryWithScenes(storyId, client);
+    for (const scene of story!.scenes) {
+      assert.equal(scene.videoGeneratingSince, null);
+      assert.equal(scene.videoSaveCorrupted, false);
+      assert.equal(scene.imageSaveCorrupted, false);
+    }
+  } finally {
+    await client.$disconnect();
+  }
+});
+
+test("updateSceneVideo to GENERATING sets videoGeneratingSince to a non-null Date within a few seconds of now", async () => {
+  const url = tmpDatabaseUrl();
+  const storyId = "story-genrepo-generating-since";
+  await seedStory(storyId, url);
+
+  const client = createPrismaClient(url);
+  try {
+    const before = Date.now();
+    await updateSceneVideo(storyId, 1, null, SceneAssetStatus.GENERATING, client);
+    const after = Date.now();
+
+    const story = await findStoryWithScenes(storyId, client);
+    const scene1 = story!.scenes.find((s) => s.sceneNumber === 1)!;
+    assert.ok(scene1.videoGeneratingSince instanceof Date);
+    const ts = scene1.videoGeneratingSince!.getTime();
+    assert.ok(ts >= before - 1000 && ts <= after + 1000, "expected the timestamp to be close to now");
+  } finally {
+    await client.$disconnect();
+  }
+});
+
+test("updateSceneVideo to READY clears videoGeneratingSince back to null", async () => {
+  const url = tmpDatabaseUrl();
+  const storyId = "story-genrepo-generating-ready";
+  await seedStory(storyId, url);
+
+  const client = createPrismaClient(url);
+  try {
+    await updateSceneVideo(storyId, 1, null, SceneAssetStatus.GENERATING, client);
+    await updateSceneVideo(
+      storyId,
+      1,
+      "storage/stories/story-genrepo-generating-ready/scenes/01/video.mp4",
+      SceneAssetStatus.READY,
+      client,
+    );
+
+    const story = await findStoryWithScenes(storyId, client);
+    const scene1 = story!.scenes.find((s) => s.sceneNumber === 1)!;
+    assert.equal(scene1.videoGeneratingSince, null);
+    assert.equal(scene1.videoStatus, "READY");
+  } finally {
+    await client.$disconnect();
+  }
+});
+
+test("updateSceneVideo to FAILED clears videoGeneratingSince back to null", async () => {
+  const url = tmpDatabaseUrl();
+  const storyId = "story-genrepo-generating-failed";
+  await seedStory(storyId, url);
+
+  const client = createPrismaClient(url);
+  try {
+    await updateSceneVideo(storyId, 1, null, SceneAssetStatus.GENERATING, client);
+    await updateSceneVideo(storyId, 1, null, SceneAssetStatus.FAILED, client);
+
+    const story = await findStoryWithScenes(storyId, client);
+    const scene1 = story!.scenes.find((s) => s.sceneNumber === 1)!;
+    assert.equal(scene1.videoGeneratingSince, null);
+    assert.equal(scene1.videoStatus, "FAILED");
+  } finally {
+    await client.$disconnect();
+  }
+});
+
+test("setVideoSaveCorrupted sets the flag true for exactly the targeted scene and false for every sibling", async () => {
+  const url = tmpDatabaseUrl();
+  const storyId = "story-genrepo-video-corrupted";
+  await seedStory(storyId, url);
+
+  const client = createPrismaClient(url);
+  try {
+    await setVideoSaveCorrupted(storyId, 1, client);
+
+    const story = await findStoryWithScenes(storyId, client);
+    const scene1 = story!.scenes.find((s) => s.sceneNumber === 1)!;
+    assert.equal(scene1.videoSaveCorrupted, true);
+    for (const scene of story!.scenes) {
+      if (scene.sceneNumber === 1) continue;
+      assert.equal(scene.videoSaveCorrupted, false);
+    }
+  } finally {
+    await client.$disconnect();
+  }
+});
+
+test("clearVideoSaveCorrupted returns the flag to false", async () => {
+  const url = tmpDatabaseUrl();
+  const storyId = "story-genrepo-video-corrupted-clear";
+  await seedStory(storyId, url);
+
+  const client = createPrismaClient(url);
+  try {
+    await setVideoSaveCorrupted(storyId, 1, client);
+    await clearVideoSaveCorrupted(storyId, 1, client);
+
+    const story = await findStoryWithScenes(storyId, client);
+    const scene1 = story!.scenes.find((s) => s.sceneNumber === 1)!;
+    assert.equal(scene1.videoSaveCorrupted, false);
+  } finally {
+    await client.$disconnect();
+  }
+});
+
+test("setImageSaveCorrupted / clearImageSaveCorrupted behave identically on the image flag and never touch the video flag", async () => {
+  const url = tmpDatabaseUrl();
+  const storyId = "story-genrepo-image-corrupted";
+  await seedStory(storyId, url);
+
+  const client = createPrismaClient(url);
+  try {
+    await setVideoSaveCorrupted(storyId, 1, client);
+    await setImageSaveCorrupted(storyId, 1, client);
+
+    let story = await findStoryWithScenes(storyId, client);
+    let scene1 = story!.scenes.find((s) => s.sceneNumber === 1)!;
+    assert.equal(scene1.imageSaveCorrupted, true);
+    assert.equal(scene1.videoSaveCorrupted, true, "setImageSaveCorrupted must not touch the video flag");
+
+    await clearImageSaveCorrupted(storyId, 1, client);
+
+    story = await findStoryWithScenes(storyId, client);
+    scene1 = story!.scenes.find((s) => s.sceneNumber === 1)!;
+    assert.equal(scene1.imageSaveCorrupted, false);
+    assert.equal(scene1.videoSaveCorrupted, true, "clearImageSaveCorrupted must not touch the video flag");
+  } finally {
+    await client.$disconnect();
+  }
+});
+
+test("calling any of the four new writers for a scene number that does not exist logs once and returns normally without throwing", async () => {
+  const url = tmpDatabaseUrl();
+  const storyId = "story-genrepo-corrupted-missing-scene";
+  await seedStory(storyId, url);
+
+  const client = createPrismaClient(url);
+  try {
+    const writers = [setVideoSaveCorrupted, clearVideoSaveCorrupted, setImageSaveCorrupted, clearImageSaveCorrupted];
+    for (const writer of writers) {
+      const errorCount = await countConsoleErrors(() => writer(storyId, 99, client));
+      assert.equal(errorCount, 1, `expected exactly one log line from ${writer.name}`);
+    }
+
+    const story = await findStoryWithScenes(storyId, client);
+    for (const scene of story!.scenes) {
+      assert.equal(scene.videoSaveCorrupted, false);
+      assert.equal(scene.imageSaveCorrupted, false);
+    }
+  } finally {
+    await client.$disconnect();
   }
 });

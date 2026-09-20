@@ -97,6 +97,27 @@ model Scene {
   // checked at the same server-side dispatch point as the approval gate.
   imageAttempts     Int                @default(0)
   videoAttempts     Int                @default(0)
+  // Phase 6 (06-03, Pattern 5): the server-anchored replacement for the
+  // stuck-generation detector's browser-only clock. Written whenever the
+  // scene's video status becomes GENERATING and cleared on every other
+  // status, so a page reload can no longer reset an elapsed-time countdown
+  // for a scene that has genuinely been in flight far longer.
+  videoGeneratingSince DateTime?
+  // Phase 6 (06-03, D-05/T-06-10): schema-shape decision -- a boolean
+  // column per asset type was chosen over a new status enum value or a
+  // side table because it is the smallest additive change, it composes
+  // cleanly with the existing four-value status enum without widening it,
+  // it matches the existing per-asset-type column convention the two
+  // attempt counters above already establish, and it survives a page
+  // reload -- which D-05 requires and browser state cannot provide.
+  //
+  // D-05's one-shot free-retry exemption for video: orthogonal to the
+  // status enum rather than a replacement for it, set only by the
+  // save-time validation failure (generate-video.ts), cleared at the next
+  // dispatch boundary regardless of outcome.
+  videoSaveCorrupted   Boolean            @default(false)
+  // The same exemption for the image path's local-save failure.
+  imageSaveCorrupted   Boolean            @default(false)
   createdAt         DateTime           @default(now())
   generationRecords GenerationRecord[]
 

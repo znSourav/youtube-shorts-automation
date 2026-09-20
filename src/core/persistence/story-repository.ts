@@ -53,6 +53,13 @@ export interface StoryWithScenes {
     // D-03: per-scene click-loop guard counters.
     imageAttempts: number;
     videoAttempts: number;
+    // Phase 6 (06-03): the server-anchored "generating since" timestamp
+    // (Pattern 5) and the two D-05 free-retry exemption flags. findStoryWithScenes
+    // uses an `include` rather than a `select`, so it already returns these
+    // columns -- only this declared type needed widening.
+    videoGeneratingSince: Date | null;
+    videoSaveCorrupted: boolean;
+    imageSaveCorrupted: boolean;
   }[];
 }
 
