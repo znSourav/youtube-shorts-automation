@@ -3,6 +3,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 
 import { BudgetExceededError, checkBudget } from "../../core/budget/ledger.ts";
+import { MissingApiKeyError, MISSING_API_KEY_MESSAGE, assertApiKeyConfigured } from "../../core/config/provider-key.ts";
 import { serializeDispatch } from "../../core/budget/dispatch-chain.ts";
 import {
   generateImage,
@@ -119,6 +120,29 @@ export async function generateSceneImagesAction(
   characterBible: CharacterBible,
   styleBible: StyleBible,
 ): Promise<SceneImageStatus[]> {
+  // STARTUP-02 (06-01, Task 2): checked ONCE, before the loop -- a missing
+  // key cannot become present midway through a per-scene loop. Wrapped in
+  // its own try/catch (rather than letting it throw out of the action
+  // uncaught) so every requested scene gets a status carrying
+  // MISSING_API_KEY_MESSAGE without ever calling updateSceneImage: no
+  // dispatch occurred, so a scene's stored status must not be corrupted by
+  // a refusal (the same reasoning dispatchSceneVideo's evaluateVideoDispatch
+  // early return already documents).
+  try {
+    assertApiKeyConfigured();
+  } catch (err) {
+    if (err instanceof MissingApiKeyError) {
+      return scenes.map((scene) => ({
+        sceneNumber: scene.scene_number,
+        imagePath: null,
+        imageDataUrl: null,
+        ok: false,
+        message: MISSING_API_KEY_MESSAGE,
+      }));
+    }
+    throw err;
+  }
+
   const estimatedUsd = Math.max(...Object.values(IMAGE_PRICE_PER_CALL));
   const statuses: SceneImageStatus[] = [];
   let stopped = false;
@@ -210,11 +234,18 @@ export async function generateSceneImagesAction(
       // nothing necessarily billed). Either way, stop rather than keep
       // going into an unknown state; the scene's status is still written.
       stopped = true;
+      // MissingApiKeyError branch ahead of the BudgetExceededError ternary:
+      // unreachable in practice since the guard above already ran once
+      // before this loop started, but kept here so this catch's message
+      // selection stays correct in shape even if a future change moves the
+      // guard back inside the loop.
       const message =
-        err instanceof BudgetExceededError
-          ? "The generation budget was reached, so this scene's image could not be created."
-          : "This scene's image could not be created due to an unexpected error.";
-      if (!(err instanceof BudgetExceededError)) {
+        err instanceof MissingApiKeyError
+          ? MISSING_API_KEY_MESSAGE
+          : err instanceof BudgetExceededError
+            ? "The generation budget was reached, so this scene's image could not be created."
+            : "This scene's image could not be created due to an unexpected error.";
+      if (!(err instanceof MissingApiKeyError) && !(err instanceof BudgetExceededError)) {
         console.error(`generateSceneImagesAction: scene ${scene.scene_number} threw`, err);
       }
       await updateSceneImage(storyId, scene.scene_number, null, SceneAssetStatus.FAILED);

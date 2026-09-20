@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { extname } from "node:path";
 
 import { BudgetExceededError, checkBudget } from "../../core/budget/ledger.ts";
+import { MissingApiKeyError, MISSING_API_KEY_MESSAGE, assertApiKeyConfigured } from "../../core/config/provider-key.ts";
 import { serializeDispatch } from "../../core/budget/dispatch-chain.ts";
 import { generateVideo, VIDEO_PRICE_PER_SECOND } from "../../providers/video/veo.ts";
 import { storyDir, sceneVideoPath } from "../../core/storage-paths.ts";
@@ -131,6 +132,22 @@ async function dispatchSceneVideo(
   storyId: string,
   sceneNumber: number,
 ): Promise<GenerateSceneVideoResult> {
+  // STARTUP-02 (06-01, Task 2): the very first check, ahead of even the
+  // storyDir(storyId) guard -- synchronous and free. Wrapped in its own
+  // try/catch so a refusal returns the plain-language sentence rather than
+  // throwing out of the action. A refusal is not a generation failure -- do
+  // NOT call updateSceneVideo(FAILED) and do NOT call incrementVideoAttempt
+  // here: no dispatch occurred, exactly the same reasoning the
+  // evaluateVideoDispatch refusal branch below already documents.
+  try {
+    assertApiKeyConfigured();
+  } catch (err) {
+    if (err instanceof MissingApiKeyError) {
+      return { ok: false, videoPath: null, videoDataUrl: null, message: MISSING_API_KEY_MESSAGE, durationSeconds: 0 };
+    }
+    throw err;
+  }
+
   try {
     storyDir(storyId);
   } catch {

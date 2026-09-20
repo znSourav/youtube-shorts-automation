@@ -207,7 +207,14 @@ function main(): void {
         // src/core/budget/ instead of through a Server Action would ship
         // real-budget-enforcement/database-access code into the client
         // bundle undetected.
-        spec.includes("core/budget")
+        spec.includes("core/budget") ||
+        // Phase 6 (06-01, Task 2, T-06-03): src/core/config/provider-key.ts
+        // reads the raw key-bearing environment variables (GOOGLE_API_KEY /
+        // GEMINI_API_KEY). Next would not inline a non-NEXT_PUBLIC_ variable
+        // into the client bundle regardless, but a client file importing
+        // this module must still fail the build -- defense in depth, the
+        // same reasoning the core/budget entry above already carries.
+        spec.includes("core/config")
       ) {
         offenders1.push(`${file} -> "${spec}"`);
       }
@@ -216,14 +223,14 @@ function main(): void {
   if (offenders1.length > 0) {
     failed = true;
     console.log(
-      "BOUNDARY CHECK FAILED (invariant 1 -- client bundle must never import a provider, the spend ledger, the real budget module, or the database layer):",
+      "BOUNDARY CHECK FAILED (invariant 1 -- client bundle must never import a provider, the spend ledger, the real budget module, the server-only configuration module, or the database layer):",
     );
     for (const offender of offenders1) {
       console.log(`  ${offender}`);
     }
   } else {
     console.log(
-      "OK: no \"use client\" file imports a provider, the spend ledger, the real budget module, or the database layer",
+      "OK: no \"use client\" file imports a provider, the spend ledger, the real budget module, the server-only configuration module, or the database layer",
     );
   }
 

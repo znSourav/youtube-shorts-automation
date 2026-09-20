@@ -10,6 +10,7 @@
 // parameter established, carried forward as an injectable `client`).
 import type { PrismaClient } from "../../generated/prisma/client.ts";
 import { BudgetExceededError, checkBudget } from "../../core/budget/ledger.ts";
+import { assertApiKeyConfigured } from "../../core/config/provider-key.ts";
 import { serializeDispatch } from "../budget/dispatch-chain.ts";
 import {
   runStoryDirector,
@@ -223,6 +224,14 @@ export async function compareViaLlm(
   past: AcceptedFingerprint,
   options: CompareViaLlmOptions = {},
 ): Promise<boolean> {
+  // STARTUP-02 (06-01, Task 2): same pre-flight placement as
+  // runStoryDirector -- synchronous, free, checked before serializeDispatch
+  // is ever entered. This function's existing catch below only re-throws a
+  // non-BudgetExceededError, so a MissingApiKeyError thrown here propagates
+  // unchanged up through runUniqueStoryDirector to createStoryAction's
+  // MissingApiKeyError branch (Task 1) -- no new catch needed here.
+  assertApiKeyConfigured();
+
   const comparator = options.comparator ?? compareStructuralSimilarity;
   const estimatedUsd = LLM_PRICE_PER_CALL[COMPARISON_MODEL];
 

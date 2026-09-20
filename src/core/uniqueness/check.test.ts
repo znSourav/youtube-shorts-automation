@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 
 import {
@@ -30,6 +30,26 @@ import {
 // tmpDatabaseUrl() (src/lib/test-db.ts) -- never the real prisma/dev.db.
 // Phase 5 (05-03) replaces the old temp-ledger-file helper with this
 // convention, matching generation-repository.test.ts's own pattern.
+
+// Phase 6 (06-01, Task 2): compareViaLlm now calls assertApiKeyConfigured()
+// (src/core/config/provider-key.ts) as its first statement, reading
+// process.env directly -- it has no injectable env parameter, unlike
+// checkBudget's `client`. This file's tests exercise the budget/dispatch
+// logic below that guard, not the guard itself (provider-key.test.ts owns
+// that), so a fake key is set for the whole file's duration and restored
+// afterward -- mirroring the MONTHLY_BUDGET_USD save/restore convention
+// already used per-test further down in this file.
+const ORIGINAL_GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+before(() => {
+  process.env.GEMINI_API_KEY = "test-fake-key-not-real";
+});
+after(() => {
+  if (ORIGINAL_GEMINI_API_KEY === undefined) {
+    delete process.env.GEMINI_API_KEY;
+  } else {
+    process.env.GEMINI_API_KEY = ORIGINAL_GEMINI_API_KEY;
+  }
+});
 
 function fakeComparisonResult(overrides: Partial<ClassifyComparisonResult> = {}): ClassifyComparisonResult {
   return {
