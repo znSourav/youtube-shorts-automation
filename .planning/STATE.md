@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 06
 current_phase_name: Reliability, Secrets Hygiene & Output Correctness
 status: executing
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-09-20T11:25:04.146Z"
+stopped_at: Completed 06-03-PLAN.md
+last_updated: "2026-09-20T11:42:31.499Z"
 last_activity: 2026-09-20
 last_activity_desc: Phase 06 execution started
-state_head: 61de6bfbd0fb138924514f0075985039bc719365
+state_head: 43ce46bcd004eea0819426063aafbfa949692d0f
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 26
-  completed_plans: 23
+  completed_plans: 24
   percent: 83
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-20)
 ## Current Position
 
 Phase: 06 (Reliability, Secrets Hygiene & Output Correctness) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-09-20 — Phase 06 execution started
 
@@ -87,6 +87,7 @@ Progress: [████████████████████] 21/21 p
 | Phase 05 P05 | 25min | 3 tasks | 6 files |
 | Phase 06 P01 | 7min | 3 tasks | 14 files |
 | Phase 06 P02 | 7min | 3 tasks | 13 files |
+| Phase 06 P03 | 7min | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -160,6 +161,9 @@ Recent decisions affecting current work:
 - [Phase 06]: [Phase 06, 06-02] veo.ts's poll call gained its own per-call httpOptions.timeout distinct from POLL_TIMEOUT_MS, confirmed via the installed SDK's own .d.ts (GetOperationConfig.httpOptions) as a real, separate opt-in bound a single hung poll would otherwise bypass
 - [Phase 06]: [Phase 06, 06-02] check-boundaries.ts invariant 8 scans for the literal content substring "timeout:" after stripping whole-line // comments, consistent with this file's existing content-scan invariants; verified both positively and negatively (temporarily removing veo.ts's import) before committing
 - [Phase 06]: [Phase 06, 06-02] create-story.ts's two collapsed blocked branches (MAX_TOKENS special case + generic block) collapsed into one branch calling plainLanguageStoryBlockMessage -- the selector's own branch order reproduces the exact prior special-casing, so no behavior regressed
+- [Phase 06]: [Phase 6, 06-03] mp4box pinned exactly at 2.4.1, re-confirmed clean postinstall live against npm registry before installing; evaluateMp4Info split out as its own pure function with missing video-track dimensions treated as an explicit INVALID verdict (deliberate corrections to 06-RESEARCH.md's reference snippet)
+- [Phase 06]: [Phase 6, 06-03] updateSceneVideo derives videoGeneratingSince from its existing status argument so no call site can forget to set/clear it; the four new corruption-flag writers copy generation-repository.ts's existing never-throw best-effort contract verbatim
+- [Phase 06]: [Phase 6, 06-03] generate-video.ts's invalid-MP4 branch leaves the bad file on disk rather than deleting it (documented inline); the readback-failure branch and incrementVideoAttempt are textually unchanged, confirmed via git diff; check-boundaries.ts invariant 10 verified both positively and negatively before committing
 
 ### Pending Todos
 
@@ -190,6 +194,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-20T11:25:03.656Z
-Stopped at: Completed 06-02-PLAN.md
+Last session: 2026-09-20T11:42:31.038Z
+Stopped at: Completed 06-03-PLAN.md
 Resume file: None

@@ -77,7 +77,7 @@ Requirements for the 24-hour MVP. Each maps to a roadmap phase.
 ### Output
 
 - [x] **OUTPUT-01**: Every completed episode's assets are written to a predictable local folder structure (story.json, story.txt, character reference, per-scene image+video, numbered output clips) that the wife can open directly from the app
-- [ ] **OUTPUT-02**: Every saved video file is a valid, non-empty, playable MP4 at approximately the requested duration and 9:16 dimensions when requested — never a text or image file mislabeled as `.mp4`
+- [x] **OUTPUT-02**: Every saved video file is a valid, non-empty, playable MP4 at approximately the requested duration and 9:16 dimensions when requested — never a text or image file mislabeled as `.mp4`
 - [x] **OUTPUT-03**: Output clips are numbered so the wife can import them into CapCut in the correct order with no extra tooling beyond CapCut itself
 
 ### UI
@@ -147,7 +147,7 @@ Explicitly excluded from this project, not just this milestone. Documented to pr
 | PERSIST-01 | Phase 3 | Complete |
 | LIBRARY-01 | Phase 4 | Complete |
 | OUTPUT-01 | Phase 4 | Complete |
-| OUTPUT-02 | Phase 6 | Pending |
+| OUTPUT-02 | Phase 6 | Complete |
 | OUTPUT-03 | Phase 4 | Complete |
 | UI-01 | Phase 4 | Complete |
 
