@@ -18,6 +18,7 @@ import {
   updateSceneVideo,
   incrementVideoAttempt,
   setVideoSaveCorrupted,
+  clearVideoSaveCorrupted,
   GenerationType,
   SceneAssetStatus,
 } from "../../core/persistence/generation-repository.ts";
@@ -172,6 +173,7 @@ async function dispatchSceneVideo(
   }
 
   const imagePath = decision.imagePath;
+  const capExempt = decision.capExempt;
   // camera/environment are absent because they are not Scene columns (only
   // durationSeconds/storyPurpose/imagePrompt/motionPrompt are persisted) --
   // an accepted, documented narrowing of the CR-03 guard's phrasing, not a
@@ -244,13 +246,36 @@ async function dispatchSceneVideo(
   const motionPrompt = safeMotionPrompt(scene);
   const outputPath = sceneVideoPath(storyId, sceneNumber);
 
-  // D-03 (WR-02 fix): the increment now sits immediately before the actual
-  // Veo dispatch, not before the pre-dispatch image read above. A scene
-  // refused by the budget check above, or one whose local image read fails
-  // before this point, has not cost anything and must not consume one of
-  // its limited attempts -- only a scene that reaches this real dispatch
-  // boundary must consume one, even if the process dies mid-call.
-  await incrementVideoAttempt(storyId, sceneNumber);
+  // D-03 (WR-02 fix): this bookkeeping write sits immediately before the
+  // actual Veo dispatch, not before the pre-dispatch image read above. A
+  // scene refused by the budget check above, or one whose local image read
+  // fails before this point, has not cost anything and must not consume one
+  // of its limited attempts -- only a scene that reaches this real dispatch
+  // boundary must write something, even if the process dies mid-call.
+  //
+  // D-05 (Phase 6, 06-04): exactly one of two writes happens here, at this
+  // exact position -- when the decision granted a corruption exemption
+  // (scene.videoSaveCorrupted was set), the exemption is spent by clearing
+  // the flag INSTEAD OF incrementing the attempt counter; otherwise the
+  // existing unconditional increment runs exactly as it always has
+  // (check-boundaries.ts invariant 9 still requires the awaited
+  // incrementVideoAttempt call to appear exactly once and to textually
+  // precede the awaited generateVideo dispatch below -- both still hold,
+  // since this branch is the increment's only call site and it still sits
+  // ahead of the dispatch). Spending the exemption HERE, before the paid
+  // call, is what makes it one-shot even if this very attempt also fails --
+  // a second free retry requires a second recorded corruption, per D-05's
+  // own one-shot design in gates.ts. clearVideoSaveCorrupted is best-effort
+  // like every other write in this module (generation-repository.ts's
+  // documented never-throw contract): if it fails, the scene simply keeps
+  // an exemption it has already used, which costs at most one extra
+  // permitted retry later and can never discard an already-paid-for
+  // generation.
+  if (capExempt) {
+    await clearVideoSaveCorrupted(storyId, sceneNumber);
+  } else {
+    await incrementVideoAttempt(storyId, sceneNumber);
+  }
 
   let result;
   try {
