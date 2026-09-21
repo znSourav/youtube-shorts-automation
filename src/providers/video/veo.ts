@@ -1,6 +1,6 @@
 import { GoogleGenAI, type GenerateVideosOperation } from "@google/genai";
 import { logRawResponse } from "../../lib/log-response.ts";
-import { VIDEO_HTTP_TIMEOUT_MS } from "../../core/config/provider-timeouts.ts";
+import { VIDEO_HTTP_TIMEOUT_MS, VIDEO_DOWNLOAD_TIMEOUT_MS } from "../../core/config/provider-timeouts.ts";
 
 // Pricing verified live 2026-09-12 against ai.google.dev/gemini-api/docs/pricing
 // (RESEARCH.md "Cost calculation").
@@ -66,7 +66,43 @@ export interface GenerateVideoResult {
   blockReason?: string;
   blockKind?: VideoBlockKind;
   timedOut?: boolean;
+  // True when Veo's own generation succeeded (a real video existed to
+  // download) but saving it locally did not complete within
+  // VIDEO_DOWNLOAD_TIMEOUT_MS or otherwise failed -- distinct from
+  // `timedOut`, which means the generation itself never finished. See the
+  // download call below for why this can't be folded into a thrown error.
+  downloadFailed?: boolean;
   operationName?: string;
+}
+
+// Security audit T-06-05: `ai.files.download()`'s own `httpOptions.timeout`
+// only bounds the initial request that returns the response object -- the
+// installed SDK then pipes that response's body to a file write stream and
+// awaits its completion in a separate step with no timeout of its own (see
+// provider-timeouts.ts's VIDEO_DOWNLOAD_TIMEOUT_MS comment for the exact
+// source lines). A connection that stalls mid-transfer would otherwise hang
+// this call forever -- and because it runs inside dispatchSceneVideo's
+// `serializeDispatch` callback, that hang wedges every future paid dispatch
+// app-wide (story, uniqueness, image, and video), not just this one scene.
+// This wrapper can't cancel the underlying stream (Node has no primitive for
+// that here), but it frees the dispatch queue to move on once the deadline
+// passes, exactly like POLL_TIMEOUT_MS already does for the polling loop
+// above -- the leftover write, if it ever completes, lands at the same
+// deterministic per-scene path a later retry would also write to.
+export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err: unknown) => {
+        clearTimeout(timer);
+        reject(err instanceof Error ? err : new Error(String(err)));
+      },
+    );
+  });
 }
 
 /**
@@ -169,10 +205,32 @@ export async function generateVideo(params: GenerateVideoParams): Promise<Genera
   }
 
   // Don't hand-roll the download/auth-header wiring (RESEARCH.md "Don't Hand-Roll").
-  await ai.files.download({
-    file: generatedVideo.video,
-    downloadPath: params.outputPath,
-  });
+  try {
+    await withTimeout(
+      ai.files.download({
+        file: generatedVideo.video,
+        downloadPath: params.outputPath,
+        config: { httpOptions: { timeout: VIDEO_HTTP_TIMEOUT_MS } },
+      }),
+      VIDEO_DOWNLOAD_TIMEOUT_MS,
+      "video download timed out",
+    );
+  } catch (err) {
+    // Veo's own generation already succeeded (generatedVideo.video is real)
+    // and already cost real money -- only the local save stalled or failed.
+    // Returned as a result field, not re-thrown: dispatchSceneVideo's catch
+    // block around the whole generateVideo() call assumes "nothing was
+    // billed" for a thrown error, which would be wrong here and would let
+    // this call's real cost go unrecorded against the budget.
+    console.error("generateVideo: files.download failed or timed out", err);
+    return {
+      filePath: null,
+      usageMetadata: operation.response ?? null,
+      estimatedUsd,
+      blocked: false,
+      downloadFailed: true,
+    };
+  }
 
   return {
     filePath: params.outputPath,

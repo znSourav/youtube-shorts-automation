@@ -347,6 +347,32 @@ async function dispatchSceneVideo(
     return { ok: false, videoPath: null, videoDataUrl: null, message, durationSeconds };
   }
 
+  // Security audit T-06-05: unlike result.timedOut above (where the
+  // generation itself never finished, so whether Veo succeeded at all is
+  // unknown), a download failure means Veo's generation DID succeed --
+  // generatedVideo.video existed and downloading it is what failed or
+  // stalled. This is the same "succeeded upstream, unconfirmed locally"
+  // situation D-05 already exists for, so it gets the same one-shot free
+  // retry (setVideoSaveCorrupted) and the same CORRUPT_VIDEO_MESSAGE
+  // sentence as a failed validation verdict below, rather than consuming one
+  // of the scene's three limited attempts for a purely local failure.
+  if (result.downloadFailed) {
+    await updateSceneVideo(storyId, sceneNumber, null, SceneAssetStatus.FAILED);
+    await setVideoSaveCorrupted(storyId, sceneNumber);
+    await recordGeneration(
+      storyId,
+      { ...generationRecordBase, ok: false, message: CORRUPT_VIDEO_MESSAGE },
+      sceneNumber,
+    );
+    return {
+      ok: false,
+      videoPath: null,
+      videoDataUrl: null,
+      message: CORRUPT_VIDEO_MESSAGE,
+      durationSeconds,
+    };
+  }
+
   if (result.blocked || !result.filePath) {
     // D-01/06-RESEARCH.md Pattern 2: chosen by the failure's own real cause
     // (result.blockKind), never a single generic sentence -- a genuine RAI
@@ -358,44 +384,39 @@ async function dispatchSceneVideo(
     return { ok: false, videoPath: null, videoDataUrl: null, message, durationSeconds };
   }
 
-  // Step 1: read the file into a buffer, in its own try. Unchanged from the
-  // pre-Task-3 combined block -- same log, same READY-with-real-path write,
-  // same billed generation record, same returned message. This branch has
-  // no bytes to validate (the read itself is what failed), so OUTPUT-02's
-  // proof does not apply here; the sixth-pass review's reasoning still
-  // holds unchanged, see below.
+  // Step 1: read the file into a buffer, in its own try.
   let videoBytes: Buffer;
   try {
     videoBytes = readFileSync(result.filePath);
   } catch (err) {
-    // Sixth-pass review BLOCKER: the Veo call already succeeded and the
-    // video file genuinely exists at result.filePath -- only reading it
-    // back for THIS response's inline preview failed (a transient local
-    // I/O hiccup: a locked file, an antivirus scan mid-write, a momentary
-    // disk issue). Writing READY with the real path (not FAILED with null)
-    // is what the success branch four lines below already does for the
-    // happy path; mirroring it here means a scene is never marked failed,
-    // never loses its retry-cap headroom, and is never dropped from the
-    // CapCut output folder over a readback failure that has nothing to do
-    // with whether the video itself is good. The next poll/reload
-    // (getStoryStatusAction's own existsSync check, or a fresh
-    // loadStoryAction readFileSync) gets an independent chance to read the
-    // same file again -- likely succeeding, since the failure here was
-    // local and transient, not a property of the file itself. This
-    // response still can't show her the video inline right now, so it
-    // still returns ok: false with a plain explanation, but that return
-    // value is discarded by every real caller (both the batch and the
-    // retry path rely entirely on the next poll tick to read the real
-    // DB-backed status, per this function's own callers' documentation).
+    // Security audit T-06-09 (supersedes the sixth-pass review's original
+    // READY-with-real-path handling here, from before OUTPUT-02's
+    // validateMp4Buffer call existed): a file this process cannot read back
+    // is a file Step 2 below can never validate. Writing READY for it --
+    // the prior behaviour -- let an unvalidated, possibly-corrupt file reach
+    // episode-export.ts's existence-only copy check and her CapCut folder
+    // with no verification at all, defeating OUTPUT-02's own guarantee for
+    // exactly the files least able to prove themselves good. The Veo call
+    // did already succeed and already cost real money regardless, so this
+    // is treated identically to a failed validation verdict below: FAILED
+    // with no path, the D-05 free-retry exemption granted (a local readback
+    // hiccup must not cost her one of three limited attempts on top of the
+    // money already spent), and the byte-identical CORRUPT_VIDEO_MESSAGE --
+    // from her side, "couldn't confirm this file is good" reads the same
+    // whether the cause was an unreadable file or a validation failure.
     console.error(`generateSceneVideoAction: failed to read generated video at ${result.filePath}`, err);
-    const message = "The video was generated but could not be loaded for playback just now.";
-    await updateSceneVideo(storyId, sceneNumber, result.filePath, SceneAssetStatus.READY);
-    await recordGeneration(storyId, { ...generationRecordBase, ok: true, message: "Video generated." }, sceneNumber);
+    await updateSceneVideo(storyId, sceneNumber, null, SceneAssetStatus.FAILED);
+    await setVideoSaveCorrupted(storyId, sceneNumber);
+    await recordGeneration(
+      storyId,
+      { ...generationRecordBase, ok: false, message: CORRUPT_VIDEO_MESSAGE },
+      sceneNumber,
+    );
     return {
       ok: false,
-      videoPath: result.filePath,
+      videoPath: null,
       videoDataUrl: null,
-      message,
+      message: CORRUPT_VIDEO_MESSAGE,
       durationSeconds,
     };
   }
