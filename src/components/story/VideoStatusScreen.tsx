@@ -66,6 +66,20 @@ export default function VideoStatusScreen({
   openingFolder,
   outputMessage,
 }: VideoStatusScreenProps) {
+  // 06-REVIEW.md WR-02: `allReady` (from page.tsx's allVideosSettled) now
+  // also turns true once every scene is permanently capped/budget-exhausted,
+  // not just when every scene is literally "ready" -- otherwise a single
+  // stuck scene made the Open Output Folder button permanently unreachable
+  // even though finalizeEpisodeAction already exports whatever did finish.
+  // These two narrower checks are computed here, from the scenes this
+  // component already receives, purely to keep the completion copy honest:
+  // it must never claim "every scene is ready" when some are only capped,
+  // and must never claim "the rest are ready" when none actually are (every
+  // scene capped/budget-exhausted with zero survivors -- an unlucky but
+  // reachable edge given the shared $15 budget).
+  const everySceneReady = scenes.length > 0 && scenes.every((scene) => scene.videoState === "ready");
+  const anySceneReady = scenes.some((scene) => scene.videoState === "ready");
+
   return (
     <div className="flex flex-col gap-8">
       <h2 className="text-2xl font-semibold text-black dark:text-zinc-50">{storyTitle}</h2>
@@ -114,7 +128,11 @@ export default function VideoStatusScreen({
       {allReady && (
         <>
           <p className="text-sm text-black dark:text-zinc-50">
-            Every scene is ready. Your episode&apos;s clips are saved and numbered for CapCut.
+            {everySceneReady
+              ? "Every scene is ready. Your episode's clips are saved and numbered for CapCut."
+              : anySceneReady
+                ? "Some scenes couldn't be finished, but the rest are ready. Your episode's available clips are saved and numbered for CapCut."
+                : "None of this episode's scenes could be finished. You can open the folder to see what's there, or start a new story to try again."}
           </p>
           {onOpenOutputFolder && (
             <button

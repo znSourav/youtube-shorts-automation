@@ -73,35 +73,46 @@ test("the return value survives JSON.parse(JSON.stringify(...)) without throwing
   assert.doesNotThrow(() => JSON.parse(JSON.stringify(result)));
 });
 
-test("real usage-metadata token-count fields are left unchanged, not redacted (WINDOWS #2)", () => {
-  const value = { promptTokenCount: 42 };
+test("real usage-metadata token-count fields, nested under usageMetadata as the SDK actually shapes them, are left unchanged (WINDOWS #2)", () => {
+  const value = { usageMetadata: { promptTokenCount: 42 } };
   const result = redactLargeStrings(value) as typeof value;
-  assert.equal(result.promptTokenCount, 42);
+  assert.equal(result.usageMetadata.promptTokenCount, 42);
 });
 
-test("a nested tokensDetails array's tokenCount field is left unchanged", () => {
-  const value = { candidatesTokensDetails: [{ modality: "TEXT", tokenCount: 10 }] };
+test("a nested tokensDetails array's tokenCount field, inside usageMetadata, is left unchanged", () => {
+  const value = { usageMetadata: { candidatesTokensDetails: [{ modality: "TEXT", tokenCount: 10 }] } };
   const result = redactLargeStrings(value) as typeof value;
-  assert.equal(result.candidatesTokensDetails[0].tokenCount, 10);
+  assert.equal(result.usageMetadata.candidatesTokensDetails[0].tokenCount, 10);
 });
 
-test("every real usage-metadata field name is left unchanged, all twelve at once", () => {
+test("every real usage-metadata field name, nested under usageMetadata, is left unchanged, all twelve at once", () => {
   const value = {
-    cachedContentTokenCount: 1,
-    candidatesTokenCount: 2,
-    promptTokenCount: 3,
-    thoughtsTokenCount: 4,
-    toolUsePromptTokenCount: 5,
-    totalTokenCount: 6,
-    tokensDetails: [{ modality: "TEXT", tokenCount: 7 }],
-    candidatesTokensDetails: [{ modality: "TEXT", tokenCount: 8 }],
-    promptTokensDetails: [{ modality: "TEXT", tokenCount: 9 }],
-    cacheTokensDetails: [{ modality: "TEXT", tokenCount: 10 }],
-    toolUsePromptTokensDetails: [{ modality: "TEXT", tokenCount: 11 }],
-    responseTokensDetails: [{ modality: "TEXT", tokenCount: 12 }],
+    usageMetadata: {
+      cachedContentTokenCount: 1,
+      candidatesTokenCount: 2,
+      promptTokenCount: 3,
+      thoughtsTokenCount: 4,
+      toolUsePromptTokenCount: 5,
+      totalTokenCount: 6,
+      tokensDetails: [{ modality: "TEXT", tokenCount: 7 }],
+      candidatesTokensDetails: [{ modality: "TEXT", tokenCount: 8 }],
+      promptTokensDetails: [{ modality: "TEXT", tokenCount: 9 }],
+      cacheTokensDetails: [{ modality: "TEXT", tokenCount: 10 }],
+      toolUsePromptTokensDetails: [{ modality: "TEXT", tokenCount: 11 }],
+      responseTokensDetails: [{ modality: "TEXT", tokenCount: 12 }],
+    },
   };
   const result = redactLargeStrings(value) as typeof value;
   assert.deepEqual(result, value);
+});
+
+test("06-REVIEW.md WR-01: a suffix-shaped field OUTSIDE usageMetadata is NOT exempted -- the pre-Phase-6 strict behavior still applies elsewhere in the tree", () => {
+  const value = { promptTokenCount: 42, nested: { sessionTokenCount: "a-real-secret-value" } };
+  const result = redactLargeStrings(value) as Record<string, unknown>;
+  assert.notEqual(result.promptTokenCount, 42, "a top-level field sharing the suffix, with no usageMetadata ancestor, must still redact");
+  assert.equal(result.promptTokenCount, "[REDACTED:secret]");
+  const nested = result.nested as Record<string, unknown>;
+  assert.equal(nested.sessionTokenCount, "[REDACTED:secret]", "a nested field sharing the suffix, with no usageMetadata ancestor, must still redact");
 });
 
 test("apiKey, x-goog-api-key, authorization, and bare token remain redacted", () => {
@@ -113,10 +124,11 @@ test("apiKey, x-goog-api-key, authorization, and bare token remain redacted", ()
   assert.equal(result.token, "[REDACTED:secret]");
 });
 
-test("a name that passes the safe-token-suffix test but is also key-shaped still redacts (defense in depth)", () => {
-  const value = { apiKeyTokenCount: "secret" };
+test("a name that passes the safe-token-suffix test but is also key-shaped still redacts (defense in depth), even inside usageMetadata", () => {
+  const value = { usageMetadata: { apiKeyTokenCount: "secret" } };
   const result = redactLargeStrings(value) as Record<string, unknown>;
-  assert.equal(result.apiKeyTokenCount, "[REDACTED:secret]");
+  const usageMetadata = result.usageMetadata as Record<string, unknown>;
+  assert.equal(usageMetadata.apiKeyTokenCount, "[REDACTED:secret]");
 });
 
 test("logRawResponse prints the label followed by the redacted JSON without throwing", () => {

@@ -683,10 +683,19 @@ export default function Home() {
       // eligible for the VIDEO-04 "Try again" action), keeps this false so
       // the poll stays alive to observe the outcome of a later single-scene
       // retry dispatched after the rest of the batch has already settled.
+      //
+      // 06-REVIEW.md WR-03: a budget-ceiling refusal is exactly as permanent
+      // a dead end as a retry-cap refusal (row.budgetExceeded renders the
+      // same non-retryable "capped" style above, T-06's own WR-02 fix) but
+      // was missing from this predicate -- without it, a story stuck on
+      // budget exhaustion polled forever and finalizeEpisodeAction never
+      // fired for its already-ready scenes.
       const nothingLeftToRetry =
         status.scenes.length > 0 &&
         status.scenes.every(
-          (row) => row.videoStatus === "READY" || (row.videoStatus === "FAILED" && row.capReached),
+          (row) =>
+            row.videoStatus === "READY" ||
+            (row.videoStatus === "FAILED" && (row.capReached || row.budgetExceeded)),
         );
       if (nothingLeftToRetry) {
         clearInterval(intervalId);
@@ -739,10 +748,22 @@ export default function Home() {
         };
       })
     : [];
-  const allVideosReady =
+  // 06-REVIEW.md WR-02: "settled" (ready, or permanently capped/budget-
+  // exhausted) is the correct gate for the completion section and the
+  // Open Output Folder affordance -- mirrors the poll effect's own
+  // nothingLeftToRetry predicate above, since a story that stopped polling
+  // must also be able to show that it stopped. VideoStatusScreen already
+  // receives the full scenes prop, so it computes its own stricter "every
+  // scene literally ready" check internally to choose the completion
+  // section's wording -- a partially-capped story must never say "Every
+  // scene is ready" when some genuinely are not.
+  const allVideosSettled =
     story !== null &&
     story.scenes.length > 0 &&
-    story.scenes.every((scene) => videoScenes[scene.scene_number]?.videoState === "ready");
+    story.scenes.every((scene) => {
+      const state = videoScenes[scene.scene_number]?.videoState;
+      return state === "ready" || state === "capped";
+    });
 
   return (
     <div className="flex flex-col flex-1 items-center bg-zinc-50 font-sans dark:bg-black">
@@ -873,7 +894,7 @@ export default function Home() {
             dispatched={batchDispatched}
             starting={batchStarting}
             error={batchError}
-            allReady={allVideosReady}
+            allReady={allVideosSettled}
             onGenerateAll={handleGenerateAllVideos}
             onRetryScene={handleRetryScene}
             retryDisabled={retryingScene !== null}

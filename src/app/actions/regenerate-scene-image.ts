@@ -6,6 +6,7 @@ import { evaluateImageRegeneration } from "../../core/approval/gates.ts";
 import { maxSceneRetryAttempts } from "../../core/retry/caps.ts";
 import { incrementImageAttempt, clearImageSaveCorrupted } from "../../core/persistence/generation-repository.ts";
 import { generateSceneImagesAction } from "./generate-images.ts";
+import { MissingApiKeyError, MISSING_API_KEY_MESSAGE, assertApiKeyConfigured } from "../../core/config/provider-key.ts";
 import type { Scene, StoryDirectorOutput } from "../../core/story/schema.ts";
 
 export interface RegenerateSceneImageResult {
@@ -49,6 +50,29 @@ export async function regenerateSceneImageAction(
   storyId: string,
   sceneNumber: number,
 ): Promise<RegenerateSceneImageResult> {
+  // 06-REVIEW.md CR-01: checked first, before any bookkeeping write below --
+  // generateSceneImagesAction (the real dispatch boundary this function
+  // calls into) also checks this, but only after this file's own
+  // capExempt/attempt write already ran. A local-only refusal that never
+  // reaches Gemini's Image API must not consume a limited attempt or a
+  // hard-won D-05 exemption, so the check is duplicated here rather than
+  // relying on the callee's own guard.
+  try {
+    assertApiKeyConfigured();
+  } catch (err) {
+    if (err instanceof MissingApiKeyError) {
+      return {
+        ok: false,
+        sceneNumber,
+        imageDataUrl: null,
+        message: MISSING_API_KEY_MESSAGE,
+        capMessage: null,
+        approvalNotice: null,
+      };
+    }
+    throw err;
+  }
+
   try {
     storyDir(storyId);
   } catch {
