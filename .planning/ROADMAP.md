@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Persistence & Structural Uniqueness** - Stories, scenes, and generation records survive a restart, and structurally-similar stories are rejected and regenerated before reaching review (completed 2026-09-14)
 - [x] **Phase 4: Wife-Facing Review & Approval Flow** - The non-technical target user can run the full create → review → approve → generate → find-output flow using only plain-language UI (completed 2026-09-16)
 - [x] **Phase 5: Budget & Retry Safeguards** - Every paid call is guarded by a hard monthly budget check that no retry can bypass (completed 2026-09-19)
-- [ ] **Phase 6: Reliability, Secrets Hygiene & Output Correctness** - The tool fails safely and honestly at every edge instead of corrupting state or leaking secrets
+- [x] **Phase 6: Reliability, Secrets Hygiene & Output Correctness** - The tool fails safely and honestly at every edge instead of corrupting state or leaking secrets (completed 2026-09-22)
 
 ## Phase Details
 
@@ -208,7 +208,7 @@ Plans:
   3. API keys live only in server-side configuration, are never sent to client-side JavaScript, and never appear in logs or generated story metadata; `.env.local` is gitignored with only a placeholder-filled `.env.local.example` committed.
   4. Every saved video file is confirmed to be a valid, non-empty, playable MP4 at approximately the requested duration and 9:16 dimensions when requested — never a text or image file mislabeled as `.mp4`.
 
-**Plans:** 5/5 plans executed
+**Plans:** 5/5 plans complete
 
 Plans:
 **Wave 1**
@@ -245,4 +245,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. Persistence & Structural Uniqueness | 4/4 | Complete    | 2026-09-14 |
 | 4. Wife-Facing Review & Approval Flow | 4/4 | Complete    | 2026-09-16 |
 | 5. Budget & Retry Safeguards | 5/5 | Complete    | 2026-09-19 |
-| 6. Reliability, Secrets Hygiene & Output Correctness | 5/5 | In Progress|  |
+| 6. Reliability, Secrets Hygiene & Output Correctness | 5/5 | Complete    | 2026-09-22 |

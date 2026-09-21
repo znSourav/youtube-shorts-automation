@@ -31,13 +31,13 @@
     {
       "number": "6",
       "name": "Reliability, Secrets Hygiene & Output Correctness",
-      "status": "in_progress"
+      "status": "complete"
     }
   ],
   "next": {
-    "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 6 of 6 · 83% · executing"
+    "command": "/gsd:new-milestone",
+    "label": "Start a new milestone",
+    "reason": "All phases complete — start a new milestone"
   },
-  "updated_at": "2026-09-20T11:49:56.374Z"
+  "updated_at": "2026-09-21T16:27:27.022Z"
 }
