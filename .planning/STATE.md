@@ -19,10 +19,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-20)
+See: .planning/PROJECT.md (updated 2026-09-22)
 
 **Core value:** One simple idea in → one genuinely original, structurally-unique animated episode's worth of local video assets out, without ever exceeding the $15 experiment budget or silently shipping a story that's a thin reskin of a previous one.
-**Current focus:** Phase 06 — Reliability, Secrets Hygiene & Output Correctness
+**Current focus:** All 6 v1 roadmap phases complete (33/33 requirements) — no next phase planned; ready for `/gsd-complete-milestone` or a new phase, at the requester's discretion
 
 ## Current Position
 
@@ -31,7 +31,7 @@ Plan: Not started
 Status: All phases complete
 Last activity: 2026-09-22 — Phase 06 complete
 
-Progress: [████████████████████] 21/21 plans ([████████░░] 83%)
+Progress: [████████████████████] 26/26 plans (100%)
 
 ## Performance Metrics
 
@@ -169,6 +169,9 @@ Recent decisions affecting current work:
 - [Phase 06]: [Phase 6, 06-04] D-02/D-05 asymmetry is deliberate, recorded inline in gates.ts: technical generation failures always cost an attempt (D-02); local save-integrity failures never do (D-05) -- genuinely different categories, not an inconsistency
 - [Phase 06]: [Phase 6, 06-04] Both dispatch boundaries (generate-video.ts, regenerate-scene-image.ts) spend the exemption at the exact textual position the attempt increment already occupied, keeping check-boundaries.ts invariant 9 valid unchanged
 - [Phase 06]: [Phase 6, 06-04] No image container/pixel validator added -- OUTPUT-02 is video-only by its literal text; generate-images.ts's existing local-write-failure branch is D-05's image-side exemption trigger
+- [Phase 06]: [Phase 6, code review + security audit] Code review found and fixed CR-01 (image-regen key guard ran after D-03/D-05 bookkeeping), WR-01 (redaction exemption unscoped by path), WR-02 (Open Output Folder unreachable once any scene permanently failed), WR-03 (budget-exhausted scenes never stopped the status poll); WR-04/WR-05 deferred/no-action with documented rationale
+- [Phase 06]: [Phase 6, security audit] Independent security audit (not the self-review above) found 2 genuine high-severity gaps a text-pattern review missed: T-06-05 (ai.files.download() had no timeout, could wedge the app-wide dispatch queue forever) and T-06-09 (a readback-failure branch could mark an unvalidated file READY, predating OUTPUT-02's validation step). Both fixed same-day; full register (21 threats, threats_open: 0) in 06-SECURITY.md
+- [Phase 06]: [Phase 6, security audit re-check] A second, independent audit pass on the T-06-05 fix found its own justifying comment misdescribed the installed SDK (httpOptions.timeout does stay armed through the download body, contrary to the first comment's claim) -- the fix's real-world effect was still correct (empirically verified: the SDK's own abort can't unblock a stalled download either way, due to a stream-piping propagation gap), but passing that timeout to the download call was actively counterproductive (a new unhandled-stream-error crash risk for no benefit) and was removed; both comments corrected to state the verified mechanism
 
 ### Pending Todos
 
@@ -199,6 +202,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-20T11:50:22.668Z
-Stopped at: Phase 06 complete — all phases complete
+Last session: 2026-09-21T16:30:44.000Z
+Stopped at: Phase 06 complete (code review + security audit both clean, threats_open: 0) — all 6 v1 roadmap phases complete, 33/33 requirements validated. No next phase planned.
 Resume file: None
