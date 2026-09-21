@@ -373,6 +373,15 @@ async function dispatchSceneVideo(
     };
   }
 
+  // This block MUST stay after the result.downloadFailed check above, not
+  // before it (security audit follow-up observation): a downloadFailed
+  // result carries filePath: null, so if these two blocks were ever
+  // reordered, this one's `!result.filePath` arm would silently swallow a
+  // downloadFailed result -- losing the D-05 exemption and substituting the
+  // wrong message. (A `&& !result.downloadFailed` guard here would prevent
+  // that structurally, but also defeats TypeScript's narrowing of
+  // result.filePath below to non-null, which Step 1 depends on -- ordering
+  // plus this comment is the tradeoff made instead.)
   if (result.blocked || !result.filePath) {
     // D-01/06-RESEARCH.md Pattern 2: chosen by the failure's own real cause
     // (result.blockKind), never a single generic sentence -- a genuine RAI

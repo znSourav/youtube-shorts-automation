@@ -75,20 +75,25 @@ export interface GenerateVideoResult {
   operationName?: string;
 }
 
-// Security audit T-06-05: `ai.files.download()`'s own `httpOptions.timeout`
-// only bounds the initial request that returns the response object -- the
-// installed SDK then pipes that response's body to a file write stream and
-// awaits its completion in a separate step with no timeout of its own (see
-// provider-timeouts.ts's VIDEO_DOWNLOAD_TIMEOUT_MS comment for the exact
-// source lines). A connection that stalls mid-transfer would otherwise hang
-// this call forever -- and because it runs inside dispatchSceneVideo's
-// `serializeDispatch` callback, that hang wedges every future paid dispatch
-// app-wide (story, uniqueness, image, and video), not just this one scene.
-// This wrapper can't cancel the underlying stream (Node has no primitive for
-// that here), but it frees the dispatch queue to move on once the deadline
-// passes, exactly like POLL_TIMEOUT_MS already does for the polling loop
-// above -- the leftover write, if it ever completes, lands at the same
-// deterministic per-scene path a later retry would also write to.
+// Security audit T-06-05 (ESC-1 correction: an earlier version of this
+// comment claimed `httpOptions.timeout` doesn't cover the body-transfer
+// phase at all -- verified WRONG for the installed SDK, see
+// provider-timeouts.ts's VIDEO_DOWNLOAD_TIMEOUT_MS comment for what's
+// actually true and why that timeout is still deliberately not passed to
+// the download call below). `ai.files.download()` pipes its response body
+// to a file write stream via a bare `.pipe()` and awaits the write's
+// completion; empirically verified (not just read from source) that this
+// wait never settles on its own once the connection stalls, with or
+// without an abort in play. A connection that stalls mid-transfer would
+// otherwise hang this call forever -- and because it runs inside
+// dispatchSceneVideo's `serializeDispatch` callback, that hang wedges every
+// future paid dispatch app-wide (story, uniqueness, image, and video), not
+// just this one scene. This wrapper can't cancel the underlying stream
+// (Node has no primitive this SDK exposes for that), but it frees the
+// dispatch queue to move on once the deadline passes, exactly like
+// POLL_TIMEOUT_MS already does for the polling loop above -- the leftover
+// write, if it ever completes, lands at the same deterministic per-scene
+// path a later retry would also write to.
 export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
@@ -205,12 +210,29 @@ export async function generateVideo(params: GenerateVideoParams): Promise<Genera
   }
 
   // Don't hand-roll the download/auth-header wiring (RESEARCH.md "Don't Hand-Roll").
+  //
+  // Deliberately NOT passing `config: { httpOptions: { timeout: ... } } }`
+  // here (unlike every other call in this file) -- Phase 6 security audit
+  // follow-up, ESC-1/ESC-2: the installed SDK actually keeps that timeout's
+  // abort armed for the whole body transfer (verified against
+  // node_modules/@google/genai/dist/node/index.cjs -- see
+  // provider-timeouts.ts's VIDEO_DOWNLOAD_TIMEOUT_MS comment), but an abort
+  // firing mid-transfer errors the response body Readable that the SDK's
+  // NodeDownloader pipes into a write stream with a bare `.pipe()` and no
+  // `error` listener of its own. An unhandled `error` event on a Readable is
+  // an uncaught exception in Node -- so passing httpOptions.timeout here
+  // would trade "this call hangs" for "this call can crash the process",
+  // for zero benefit: the same source confirms `finished(writer)` never
+  // settles once that happens either way, so the abort doesn't even free
+  // this call on its own. The withTimeout wrapper below is what actually
+  // bounds this call (verified empirically, not just by reading the source);
+  // it never touches the underlying stream, so nothing here ever raises an
+  // unhandled `error` event.
   try {
     await withTimeout(
       ai.files.download({
         file: generatedVideo.video,
         downloadPath: params.outputPath,
-        config: { httpOptions: { timeout: VIDEO_HTTP_TIMEOUT_MS } },
       }),
       VIDEO_DOWNLOAD_TIMEOUT_MS,
       "video download timed out",
@@ -222,6 +244,15 @@ export async function generateVideo(params: GenerateVideoParams): Promise<Genera
     // block around the whole generateVideo() call assumes "nothing was
     // billed" for a thrown error, which would be wrong here and would let
     // this call's real cost go unrecorded against the budget.
+    //
+    // A stall past the deadline leaves the SDK's own stream dangling in the
+    // background rather than aborted (see the comment above the download
+    // call for why an explicit abort would be worse, not better) -- if it
+    // ever completes, it lands at this scene's own deterministic
+    // outputPath, which a later retry overwrites cleanly either way. A
+    // genuine network error (not a timeout) still resolves this call
+    // immediately via the normal promise-rejection path with no dangling
+    // stream at all.
     console.error("generateVideo: files.download failed or timed out", err);
     return {
       filePath: null,

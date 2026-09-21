@@ -73,19 +73,25 @@
 //    edit adding failure-type branching around the dispatch could otherwise
 //    accidentally make the increment skip on one branch and not another.
 //
-// 10. src/app/actions/generate-video.ts's `validateMp4Buffer` call must
-//     appear exactly once, and the LAST occurrence of the `READY` status
-//     constant must appear at a higher character index than that call, on
-//     comment-stripped source (Phase 6, plan 06-03; OUTPUT-02). This keeps
-//     the success-path READY write structurally unreachable without
-//     validation ever having run first -- a future edit that reorders the
-//     save-time block, or adds a new READY write before the validator call,
-//     fails the build instead of silently shipping a mislabeled file into
-//     her CapCut folder as "ready". The readback-failure branch's OWN
-//     earlier READY write (no bytes to validate, per that branch's own
-//     doc comment) is deliberately not what this invariant checks against
-//     -- only the LAST occurrence matters, which is always the
-//     validated success path's write.
+// 10. src/app/actions/generate-video.ts's `validateMp4Buffer` call and its
+//     `SceneAssetStatus.READY` status write must each appear EXACTLY ONCE,
+//     and the READY write must appear at a higher character index than the
+//     validate call, on comment-stripped source (Phase 6, plan 06-03;
+//     OUTPUT-02; hardened after the Phase 6 security audit's T-06-09
+//     finding -- ESC-4). This keeps the READY write structurally
+//     unreachable without validation ever having run first, AND -- the
+//     exact-count requirement, mirroring invariant 9's own pattern -- fails
+//     the build the moment a second, earlier READY write is reintroduced
+//     anywhere in the file, rather than only checking the position of the
+//     LAST one. A prior version of this invariant checked only the last
+//     occurrence's position, which is exactly what let T-06-09's
+//     unvalidated readback-failure READY write (since removed) go
+//     undetected: it existed earlier in the file, so the last-occurrence
+//     check still passed. This still cannot prove the single surviving
+//     write is unconditionally reached from every branch (that needs real
+//     control-flow analysis, not a text-order check -- 06-REVIEW.md WR-04,
+//     still deferred); it only closes the specific blind spot a second
+//     write anywhere in the file created.
 //
 // Run with: node src/scripts/check-boundaries.ts
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -556,12 +562,13 @@ function main(): void {
     console.log("OK: generate-video.ts's retry-cap increment is unconditional and precedes the video dispatch call");
   }
 
-  // Invariant 10 -- generate-video.ts's validateMp4Buffer call must appear
-  // exactly once, and the LAST occurrence of the READY status constant must
-  // appear at a higher character index than that call, on comment-stripped
-  // source (Phase 6, plan 06-03; OUTPUT-02). Keeps the success-path READY
-  // write structurally unreachable without validation ever having run
-  // first.
+  // Invariant 10 -- generate-video.ts's validateMp4Buffer call AND its
+  // READY status write must each appear exactly once, and that one READY
+  // write must appear at a higher character index than the validate call,
+  // on comment-stripped source (Phase 6, plan 06-03; OUTPUT-02; hardened
+  // per the Phase 6 security audit's T-06-09/ESC-4 finding -- see the
+  // header comment above for why an exact count, not just the last
+  // occurrence's position, is required).
   const VALIDATE_MP4_CALL = "validateMp4Buffer(";
   const READY_STATUS_CONSTANT = "SceneAssetStatus.READY";
   const offenders10: string[] = [];
@@ -570,16 +577,19 @@ function main(): void {
     const stripped = stripWholeLineComments(content);
     const validateMatches = stripped.split(VALIDATE_MP4_CALL).length - 1;
     const validateIndex = stripped.indexOf(VALIDATE_MP4_CALL);
-    const lastReadyIndex = stripped.lastIndexOf(READY_STATUS_CONSTANT);
+    const readyMatches = stripped.split(READY_STATUS_CONSTANT).length - 1;
+    const readyIndex = stripped.indexOf(READY_STATUS_CONSTANT);
     if (validateMatches !== 1) {
       offenders10.push(
         `${ALLOWED_VIDEO_DISPATCH_PATH} -- expected exactly one validateMp4Buffer call, found ${validateMatches}`,
       );
-    } else if (lastReadyIndex === -1) {
-      offenders10.push(`${ALLOWED_VIDEO_DISPATCH_PATH} -- no READY status write found`);
-    } else if (lastReadyIndex <= validateIndex) {
+    } else if (readyMatches !== 1) {
       offenders10.push(
-        `${ALLOWED_VIDEO_DISPATCH_PATH} -- the last READY status write does not follow the validateMp4Buffer call`,
+        `${ALLOWED_VIDEO_DISPATCH_PATH} -- expected exactly one SceneAssetStatus.READY write, found ${readyMatches}`,
+      );
+    } else if (readyIndex <= validateIndex) {
+      offenders10.push(
+        `${ALLOWED_VIDEO_DISPATCH_PATH} -- the READY status write does not follow the validateMp4Buffer call`,
       );
     }
   }

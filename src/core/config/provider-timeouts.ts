@@ -35,19 +35,32 @@ export const IMAGE_HTTP_TIMEOUT_MS = 120_000;
 // already bounds separately, per the header comment above).
 export const VIDEO_HTTP_TIMEOUT_MS = 60_000;
 
-// Phase 6 security audit (06-REVIEW.md follow-up, T-06-05): bounds the
-// generated clip's `ai.files.download()` call in veo.ts. This is NOT an
-// `httpOptions.timeout` value -- the installed SDK's own downloader
-// (node_modules/@google/genai/dist/node/index.cjs's NodeDownloader.download)
-// pipes the response body to a file write stream and awaits
-// `stream.promises.finished(writer)` AFTER the initial request already
-// resolved, so `httpOptions.timeout`'s AbortController only bounds getting
-// that initial response, never the body transfer itself -- a connection that
-// stalls mid-transfer hangs forever with no bound at all. veo.ts wraps the
-// whole `ai.files.download()` call in a manual race against this constant
-// instead. Generous relative to VIDEO_HTTP_TIMEOUT_MS because this bounds a
-// real byte transfer (the committed test fixture is ~590KB for a 4-second
-// clip; an 8-second 720p clip is still low single-digit megabytes) rather
-// than an API round-trip, so the deliberately-generous-timeout philosophy
-// above applies doubly here.
+// Phase 6 security audit (06-REVIEW.md follow-up, T-06-05, corrected by a
+// second audit pass -- ESC-1): bounds the generated clip's
+// `ai.files.download()` call in veo.ts. This is NOT an `httpOptions.timeout`
+// value, and an earlier version of this comment was wrong about why: the
+// installed SDK's own downloader
+// (node_modules/@google/genai/dist/node/index.cjs's NodeDownloader.download,
+// ~line 23867) pipes the response body to a file write stream via a bare
+// `.pipe()` and awaits `stream.promises.finished(writer)` separately from
+// the initial request. That does NOT mean `httpOptions.timeout` is inert for
+// the body phase, as this comment previously claimed -- the SDK's
+// ApiClient.apiCall deliberately keeps the abort signal armed after the
+// response returns specifically so it still covers body consumption (its
+// own source comment says as much). The real problem, confirmed
+// empirically against a faithful replica of the SDK's pipe/finished
+// sequence on this project's Node version: when that armed timeout aborts a
+// stalled transfer, the resulting error on the response body Readable does
+// not propagate through `.pipe()` to the destination writer, so
+// `finished(writer)` never settles regardless of whether the abort fired.
+// The SDK's own timeout cannot unblock this call either way, and passing it
+// to THIS specific call would only add a new failure mode (the unhandled
+// Readable `error` event is an uncaught exception -- see veo.ts's comment
+// above the download call). veo.ts wraps the whole `ai.files.download()`
+// call in a manual race against this constant instead, without ever
+// touching the underlying stream. Generous relative to VIDEO_HTTP_TIMEOUT_MS
+// because this bounds a real byte transfer (the committed test fixture is
+// ~590KB for a 4-second clip; an 8-second 720p clip is still low
+// single-digit megabytes) rather than an API round-trip, so the
+// deliberately-generous-timeout philosophy above applies doubly here.
 export const VIDEO_DOWNLOAD_TIMEOUT_MS = 120_000;
